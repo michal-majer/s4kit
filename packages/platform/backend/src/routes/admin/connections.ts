@@ -73,6 +73,95 @@ app.post('/', async (c) => {
   return c.json(safeConnection, 201);
 });
 
+// Get single connection
+app.get('/:id', async (c) => {
+  const id = c.req.param('id');
+  
+  const connection = await db.query.connections.findFirst({
+    where: eq(connections.id, id)
+  });
+  
+  if (!connection) {
+    return c.json({ error: 'Connection not found' }, 404);
+  }
+  
+  const { username, password, ...safeConnection } = connection;
+  return c.json(safeConnection);
+});
+
+// Update connection
+app.patch('/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  
+  // For partial updates, we need a more flexible schema
+  const updateSchema = z.object({
+    name: z.string().min(1).optional(),
+    baseUrl: z.string().url().optional(),
+    authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).optional(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+    environment: z.enum(['dev', 'staging', 'prod']).optional(),
+  }).refine((data) => {
+    // Only validate auth requirements if authType is being updated
+    if (data.authType === undefined) return true;
+    if (data.authType === 'none') return true;
+    // If authType is being set to something other than 'none', 
+    // username and password are required only if they're also being updated
+    if (data.username !== undefined || data.password !== undefined) {
+      return !!(data.username && data.password);
+    }
+    return true;
+  }, {
+    message: 'Username and password are required when authType is not "none"',
+    path: ['username']
+  });
+  
+  const result = updateSchema.safeParse(body);
+
+  if (!result.success) {
+    return c.json({ error: result.error }, 400);
+  }
+
+  const { username, password, authType, ...data } = result.data;
+
+  const updateData: any = {
+    ...data,
+    updatedAt: new Date(),
+  };
+
+  if (authType !== undefined) {
+    updateData.authType = authType;
+  }
+
+  // Only update credentials if provided
+  if (username !== undefined || password !== undefined) {
+    if (authType === 'none' || (result.data.authType === 'none')) {
+      updateData.username = null;
+      updateData.password = null;
+    } else {
+      if (username !== undefined) {
+        updateData.username = encryption.encrypt(username);
+      }
+      if (password !== undefined) {
+        updateData.password = encryption.encrypt(password);
+      }
+    }
+  }
+
+  const [updated] = await db.update(connections)
+    .set(updateData)
+    .where(eq(connections.id, id))
+    .returning();
+
+  if (!updated) {
+    return c.json({ error: 'Connection not found' }, 404);
+  }
+
+  const { username: _, password: __, ...safeConnection } = updated;
+  return c.json(safeConnection);
+});
+
 // Delete connection
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');

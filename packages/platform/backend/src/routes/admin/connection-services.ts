@@ -57,7 +57,7 @@ app.get('/', async (c) => {
       ...safeCs,
       hasAuthOverride: !!cs.authType,
       connection: conn ? { id: conn.id, name: conn.name, environment: conn.environment, baseUrl: conn.baseUrl } : null,
-      service: svc ? { id: svc.id, name: svc.name, alias: svc.alias, servicePath: svc.servicePath } : null
+      service: svc ? { id: svc.id, name: svc.name, alias: svc.alias, servicePath: svc.servicePath, entities: svc.entities || [] } : null
     };
   }));
   
@@ -88,7 +88,7 @@ app.get('/:id', async (c) => {
     ...safeCs,
     hasAuthOverride: !!cs.authType,
     connection: conn ? { id: conn.id, name: conn.name, environment: conn.environment, baseUrl: conn.baseUrl } : null,
-    service: svc ? { id: svc.id, name: svc.name, alias: svc.alias, servicePath: svc.servicePath } : null
+    service: svc ? { id: svc.id, name: svc.name, alias: svc.alias, servicePath: svc.servicePath, entities: svc.entities || [] } : null
   });
 });
 
@@ -159,7 +159,7 @@ app.post('/', async (c) => {
     ...safeCs,
     hasAuthOverride: !!newCs.authType,
     connection: { id: connection.id, name: connection.name, environment: connection.environment },
-    service: { id: service.id, name: service.name, alias: service.alias }
+    service: { id: service.id, name: service.name, alias: service.alias, entities: service.entities || [] }
   }, 201);
 });
 

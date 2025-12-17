@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { sql } from 'drizzle-orm'
 import { db } from './db'
 import proxyRoute from './routes/api/proxy'
@@ -9,6 +10,15 @@ import servicesRoute from './routes/admin/services'
 import connectionServicesRoute from './routes/admin/connection-services'
 
 const app = new Hono()
+
+// Enable CORS for all routes
+app.use('*', cors({
+  origin: '*', // In production, restrict this to your frontend domain
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-S4Kit-Service', 'X-S4Kit-Connection', 'X-S4Kit-Raw', 'X-S4Kit-Strip-Metadata'],
+  exposeHeaders: ['Content-Length'],
+  credentials: false,
+}))
 
 // Health check
 app.get('/health', async (c) => {

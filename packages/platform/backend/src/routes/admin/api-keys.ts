@@ -64,6 +64,44 @@ app.get('/:id', async (c) => {
   });
 });
 
+// Update API Key
+const updateApiKeySchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(1000).optional(),
+  environment: z.enum(['dev', 'staging', 'prod']).optional(),
+  rateLimitPerMinute: z.number().int().positive().max(10000).optional(),
+  rateLimitPerDay: z.number().int().positive().max(1000000).optional(),
+  expiresAt: z.string().datetime().optional().nullable(),
+});
+
+app.patch('/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const result = updateApiKeySchema.safeParse(body);
+
+  if (!result.success) {
+    return c.json({ error: result.error.flatten() }, 400);
+  }
+
+  const [updated] = await db.update(apiKeys)
+    .set({
+      ...result.data,
+      updatedAt: new Date()
+    })
+    .where(eq(apiKeys.id, id))
+    .returning();
+
+  if (!updated) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
+
+  const { keyHash, ...safeKey } = updated;
+  return c.json({
+    ...safeKey,
+    displayKey: apiKeyService.getMaskedKey(updated.keyPrefix, updated.keyLast4)
+  });
+});
+
 // Generate new API Key
 app.post('/', async (c) => {
   const body = await c.req.json();
