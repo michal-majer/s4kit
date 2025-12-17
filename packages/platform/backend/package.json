@@ -1,0 +1,26 @@
+{
+  "name": "backend",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.11.1",
+    "ioredis": "^5.8.2",
+    "ky": "^1.14.1",
+    "libsodium-wrappers": "^0.7.15",
+    "postgres": "^3.4.7",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ioredis": "^5.0.0",
+    "@types/libsodium-wrappers": "^0.7.14",
+    "@types/pg": "^8.16.0",
+    "drizzle-kit": "^0.31.8"
+  }
+}

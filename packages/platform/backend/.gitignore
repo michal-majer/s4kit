@@ -1,0 +1,10 @@
+# deps
+node_modules/
+
+# environment variables
+.env
+.env.local
+.env.*.local
+
+# drizzle
+# Keep migrations in git, but ignore generated files if any

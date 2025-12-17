@@ -1,0 +1,1 @@
+ALTER TYPE "public"."auth_type" ADD VALUE 'none' BEFORE 'basic';

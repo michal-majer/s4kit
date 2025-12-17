@@ -232,9 +232,9 @@ class S4Kit {
 ## Phase 2: Platform MVP
 
 ### 2.1 Backend Setup
-- [ ] Initialize Hono server
-- [ ] Setup environment variables (.env)
-- [ ] Database connection (Drizzle + PostgreSQL)
+- [X] Initialize Hono server
+- [X] Setup environment variables (.env)
+- [X] Database connection (Drizzle + PostgreSQL)
 - [ ] Redis connection
 - [ ] Error handling middleware
 
@@ -456,7 +456,6 @@ class S4Kit {
 {
   "dependencies": {
     "hono": "^4.0.0",
-    "@hono/node-server": "^1.0.0",
     "drizzle-orm": "^0.29.0",
     "postgres": "^3.4.0",
     "ioredis": "^5.3.0",
@@ -466,10 +465,12 @@ class S4Kit {
   "devDependencies": {
     "typescript": "^5.3.0",
     "drizzle-kit": "^0.20.0",
-    "@types/node": "^20.0.0"
+    "@types/bun": "^1.0.0"
   }
 }
 ```
+
+**Runtime**: Bun (built-in HTTP server, no adapter needed)
 
 ### Platform Frontend
 ```json
