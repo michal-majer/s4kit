@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/common/empty-state';
 import { api, ApiKey } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Pencil } from 'lucide-react';
+import { Pencil, Key, ShieldOff, Calendar } from 'lucide-react';
 import { EditApiKeyDialog } from './edit-api-key-dialog';
+import { CreateApiKeyDialog } from './create-api-key-dialog';
 
 export function ApiKeysTable({ apiKeys }: { apiKeys: ApiKey[] }) {
   const router = useRouter();
@@ -26,60 +29,99 @@ export function ApiKeysTable({ apiKeys }: { apiKeys: ApiKey[] }) {
     }
   };
 
+  if (apiKeys.length === 0) {
+    return (
+      <EmptyState
+        icon={Key}
+        title="No API keys created"
+        description="Generate your first API key to authenticate requests to your OData services."
+      >
+        <CreateApiKeyDialog />
+      </EmptyState>
+    );
+  }
+
   return (
     <>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Key</TableHead>
-          <TableHead>Environment</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {apiKeys.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={5} className="text-center text-muted-foreground">
-              No API keys found
-            </TableCell>
-          </TableRow>
-        ) : (
-          apiKeys.map((key) => (
-            <TableRow key={key.id} className={key.revoked ? 'opacity-50' : ''}>
-              <TableCell className="font-medium">{key.name}</TableCell>
-              <TableCell className="font-mono text-sm">{key.displayKey}</TableCell>
-              <TableCell>
-                <Badge variant="outline">{key.environment}</Badge>
-              </TableCell>
-              <TableCell>{format(new Date(key.createdAt), 'PPp')}</TableCell>
-              <TableCell className="text-right space-x-2">
-                {!key.revoked && (
-                  <Button variant="outline" size="sm" onClick={() => setEditingApiKey(key)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-                {key.revoked ? (
-                  <Badge variant="destructive">Revoked</Badge>
-                ) : (
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(key.id)}>
-                    Revoke
-                  </Button>
-                )}
-              </TableCell>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="font-semibold">Name</TableHead>
+              <TableHead className="font-semibold">Key</TableHead>
+              <TableHead className="font-semibold">Environment</TableHead>
+              <TableHead className="font-semibold">Created</TableHead>
+              <TableHead className="font-semibold">Status</TableHead>
+              <TableHead className="text-right font-semibold">Actions</TableHead>
             </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
-    {editingApiKey && (
-      <EditApiKeyDialog
-        apiKey={editingApiKey}
-        open={!!editingApiKey}
-        onOpenChange={(open) => !open && setEditingApiKey(null)}
-      />
-    )}
+          </TableHeader>
+          <TableBody>
+            {apiKeys.map((key) => (
+              <TableRow
+                key={key.id}
+                className={key.revoked ? 'opacity-60 bg-muted/20' : 'group'}
+              >
+                <TableCell className="font-medium">{key.name}</TableCell>
+                <TableCell>
+                  <code className="text-xs bg-muted px-2 py-1 rounded-md font-mono">
+                    {key.displayKey}
+                  </code>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={key.environment === 'production' ? 'default' : 'secondary'}
+                    className="capitalize"
+                  >
+                    {key.environment}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Calendar className="h-3.5 w-3.5" />
+                    {format(new Date(key.createdAt), 'MMM d, yyyy')}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {key.revoked ? (
+                    <Badge variant="destructive" className="gap-1">
+                      <ShieldOff className="h-3 w-3" />
+                      Revoked
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                      Active
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {!key.revoked && (
+                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="sm" onClick={() => setEditingApiKey(key)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDelete(key.id)}
+                      >
+                        Revoke
+                      </Button>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+      {editingApiKey && (
+        <EditApiKeyDialog
+          apiKey={editingApiKey}
+          open={!!editingApiKey}
+          onOpenChange={(open) => !open && setEditingApiKey(null)}
+        />
+      )}
     </>
   );
 }
