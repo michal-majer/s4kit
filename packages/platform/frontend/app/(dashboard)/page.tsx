@@ -1,5 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
+import { PageHeader } from '@/components/common/page-header';
+import { StatsCard } from '@/components/common/stats-card';
+import { Plug, Key, Activity, BarChart3 } from 'lucide-react';
 
 async function getStats() {
   try {
@@ -28,41 +30,37 @@ export default async function DashboardPage() {
   const stats = await getStats();
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Connections</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.connections}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>API Keys</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.apiKeys}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Requests Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.requestsToday}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Total Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalRequests}</div>
-          </CardContent>
-        </Card>
+    <div className="flex flex-col gap-8 p-8">
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your S4Kit platform"
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatsCard
+          title="Connections"
+          value={stats.connections}
+          description="Active SAP connections"
+          icon={Plug}
+        />
+        <StatsCard
+          title="API Keys"
+          value={stats.apiKeys}
+          description="Generated API keys"
+          icon={Key}
+        />
+        <StatsCard
+          title="Requests Today"
+          value={stats.requestsToday}
+          description="API calls in last 24h"
+          icon={Activity}
+        />
+        <StatsCard
+          title="Total Requests"
+          value={stats.totalRequests}
+          description="Lifetime API calls"
+          icon={BarChart3}
+        />
       </div>
     </div>
   );

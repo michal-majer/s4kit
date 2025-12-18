@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/common/empty-state';
 import { api, Connection } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { EditConnectionDialog } from './edit-connection-dialog';
-import { Pencil } from 'lucide-react';
+import { CreateConnectionDialog } from './create-connection-dialog';
+import { Pencil, Plug, ExternalLink, Trash2 } from 'lucide-react';
 
 export function ConnectionsTable({ connections }: { connections: Connection[] }) {
   const router = useRouter();
@@ -26,59 +29,86 @@ export function ConnectionsTable({ connections }: { connections: Connection[] })
     }
   };
 
+  if (connections.length === 0) {
+    return (
+      <EmptyState
+        icon={Plug}
+        title="No connections yet"
+        description="Connect to your first SAP system to start consuming OData services through the API."
+      >
+        <CreateConnectionDialog />
+      </EmptyState>
+    );
+  }
+
   return (
     <>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Base URL</TableHead>
-          <TableHead>Environment</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {connections.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={4} className="text-center text-muted-foreground">
-              No connections found
-            </TableCell>
-          </TableRow>
-        ) : (
-          connections.map((conn) => (
-            <TableRow key={conn.id}>
-              <TableCell className="font-medium">
-                <Link href={`/connections/${conn.id}`} className="hover:underline">
-                  {conn.name}
-                </Link>
-              </TableCell>
-              <TableCell>{conn.baseUrl}</TableCell>
-              <TableCell>
-                <Badge variant="outline">{conn.environment}</Badge>
-              </TableCell>
-              <TableCell className="text-right space-x-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/connections/${conn.id}`}>View</Link>
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setEditingConnection(conn)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => handleDelete(conn.id)}>
-                  Delete
-                </Button>
-              </TableCell>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="font-semibold">Name</TableHead>
+              <TableHead className="font-semibold">Base URL</TableHead>
+              <TableHead className="font-semibold">Environment</TableHead>
+              <TableHead className="text-right font-semibold">Actions</TableHead>
             </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
-    {editingConnection && (
-      <EditConnectionDialog
-        connection={editingConnection}
-        open={!!editingConnection}
-        onOpenChange={(open) => !open && setEditingConnection(null)}
-      />
-    )}
+          </TableHeader>
+          <TableBody>
+            {connections.map((conn) => (
+              <TableRow key={conn.id} className="group">
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/connections/${conn.id}`}
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {conn.name}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <code className="text-xs bg-muted px-2 py-1 rounded-md font-mono">
+                    {conn.baseUrl}
+                  </code>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={conn.environment === 'production' ? 'default' : 'secondary'}
+                    className="capitalize"
+                  >
+                    {conn.environment}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/connections/${conn.id}`}>
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingConnection(conn)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDelete(conn.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+      {editingConnection && (
+        <EditConnectionDialog
+          connection={editingConnection}
+          open={!!editingConnection}
+          onOpenChange={(open) => !open && setEditingConnection(null)}
+        />
+      )}
     </>
   );
 }
