@@ -25,3 +25,4 @@ export const loggingMiddleware = createMiddleware<{ Variables: Variables }>(asyn
     console.error('Failed to write request log:', err);
   });
 });
+

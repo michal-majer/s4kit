@@ -228,3 +228,4 @@ export function EditConnectionDialog({ connection, open, onOpenChange }: EditCon
     </Dialog>
   );
 }
+

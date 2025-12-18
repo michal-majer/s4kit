@@ -114,3 +114,4 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
     </Dialog>
   );
 }
+

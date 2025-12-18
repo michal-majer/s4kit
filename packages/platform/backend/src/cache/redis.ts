@@ -12,3 +12,4 @@ export const redis = new Redis(redisUrl, {
 redis.on('error', (err) => {
   console.error('Redis Error:', err);
 });
+

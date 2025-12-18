@@ -33,3 +33,4 @@ export function KeyDisplay({ secretKey, onClose }: { secretKey: string; onClose:
     </div>
   );
 }
+

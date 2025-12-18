@@ -43,3 +43,4 @@ await db.update(organizations)
 2. **Use prepared statements** for queries with user input (Drizzle handles this automatically)
 3. **Close connections gracefully** - The connection pool handles this automatically
 4. **Monitor connection pool** - Adjust max connections based on your application's needs
+

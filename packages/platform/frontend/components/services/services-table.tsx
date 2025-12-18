@@ -173,3 +173,4 @@ export function ServicesTable({ services }: { services: Service[] }) {
     </>
   );
 }
+

@@ -39,3 +39,4 @@ export const encryption = {
     return JSON.parse(encryption.decrypt(encrypted));
   }
 };
+

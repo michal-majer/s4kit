@@ -86,7 +86,9 @@ app.patch('/:id', async (c) => {
   const [updated] = await db.update(apiKeys)
     .set({
       ...result.data,
-      updatedAt: new Date()
+      expiresAt: result.data.expiresAt !== undefined 
+        ? (result.data.expiresAt ? new Date(result.data.expiresAt) : null)
+        : undefined
     })
     .where(eq(apiKeys.id, id))
     .returning();

@@ -112,3 +112,4 @@ export function ConnectionsTable({ connections }: { connections: Connection[] })
     </>
   );
 }
+

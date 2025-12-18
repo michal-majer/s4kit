@@ -17,3 +17,4 @@ export type Variables = {
   connectionService: ConnectionService;
   entityPermissions: EntityPermissions;
 };
+
