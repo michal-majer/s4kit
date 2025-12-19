@@ -4,7 +4,8 @@ import { rateLimitMiddleware } from '../../middleware/rate-limit';
 import { loggingMiddleware } from '../../middleware/logging';
 import { accessResolver } from '../../services/access-resolver';
 import { sapClient } from '../../services/sap-client';
-import type { Variables, Connection, ConnectionService } from '../../types';
+import { sanitizeHeadersFromHeaders } from '../../utils/header-sanitizer';
+import type { Variables, Instance, SystemService, InstanceService } from '../../types';
 
 const app = new Hono<{ Variables: Variables }>();
 
@@ -14,33 +15,44 @@ app.use('*', loggingMiddleware);
 
 /**
  * Resolve auth configuration with inheritance logic:
- * - If connectionService has authType set, use its auth
- * - Otherwise, inherit from connection
+ * 1. If instanceService has authType set, use its auth (highest priority)
+ * 2. Otherwise, if systemService has authType set, use service auth (service default)
+ * 3. Otherwise, inherit from instance (instance default)
  */
-function resolveAuth(connection: Connection, connectionService: ConnectionService) {
-  if (connectionService.authType) {
+function resolveAuth(instance: Instance, systemService: SystemService, instanceService: InstanceService) {
+  if (instanceService.authType) {
     return {
-      type: connectionService.authType,
-      username: connectionService.username,
-      password: connectionService.password,
-      config: connectionService.authConfig,
-      credentials: connectionService.credentials,
+      type: instanceService.authType,
+      username: instanceService.username,
+      password: instanceService.password,
+      config: instanceService.authConfig,
+      credentials: instanceService.credentials,
     };
   }
-  // Inherit from connection
+  // Check service-level auth
+  if (systemService.authType) {
+    return {
+      type: systemService.authType,
+      username: systemService.username,
+      password: systemService.password,
+      config: systemService.authConfig,
+      credentials: systemService.credentials,
+    };
+  }
+  // Inherit from instance
   return {
-    type: connection.authType,
-    username: connection.username,
-    password: connection.password,
-    config: connection.authConfig,
-    credentials: connection.credentials,
+    type: instance.authType,
+    username: instance.username,
+    password: instance.password,
+    config: instance.authConfig,
+    credentials: instance.credentials,
   };
 }
 
 app.all('/*', async (c) => {
-  const connection = c.get('connection');
-  const service = c.get('service');
-  const connectionService = c.get('connectionService');
+  const instance = c.get('instance');
+  const systemService = c.get('systemService');
+  const instanceService = c.get('instanceService');
   const entityPermissions = c.get('entityPermissions');
   
   // Extract entity path (strip /api/proxy prefix)
@@ -67,11 +79,26 @@ app.all('/*', async (c) => {
   const stripMetadata = c.req.header('X-S4Kit-Strip-Metadata') !== 'false'; // Default true
 
   // Build full SAP URL path: servicePath + entityPath
-  const servicePath = connectionService.servicePathOverride || service.servicePath;
+  const servicePath = instanceService.servicePathOverride || systemService.servicePath;
   const fullPath = `${servicePath}/${entityPath}`.replace(/\/+/g, '/');
 
   // Resolve auth with inheritance
-  const authConfig = resolveAuth(connection, connectionService);
+  const authConfig = resolveAuth(instance, systemService, instanceService);
+
+  // Capture request data for logging (sanitize sensitive headers)
+  const requestHeaders = c.req.raw.headers 
+    ? sanitizeHeadersFromHeaders(c.req.raw.headers)
+    : {};
+
+  // Capture request body (before it's consumed)
+  let requestBody: any = undefined;
+  if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
+    try {
+      requestBody = await c.req.json();
+    } catch {
+      // Body might be empty or invalid, ignore
+    }
+  }
 
   try {
     // Get query parameters and ensure all values are strings
@@ -97,17 +124,38 @@ app.all('/*', async (c) => {
     });
 
     const result = await sapClient.requestWithAuth({
-      baseUrl: connection.baseUrl,
+      baseUrl: instance.baseUrl,
       auth: authConfig,
       method: c.req.method,
       path: fullPath,
       params: queryParams,
-      body: ['POST', 'PUT', 'PATCH'].includes(c.req.method) ? await c.req.json().catch(() => undefined) : undefined,
+      body: requestBody,
       raw: wantRaw,
       stripMetadata: stripMetadata
     });
 
-    return c.json(result);
+    // Extract SAP response time from result if available
+    let sapResponseTime: number | undefined = undefined;
+    let responseBodyForLog = result;
+    if (result && typeof result === 'object' && (result as any).__sapResponseTime !== undefined) {
+      sapResponseTime = (result as any).__sapResponseTime;
+      // Remove the internal timing field from the response
+      const { __sapResponseTime, ...cleanResult } = result as any;
+      responseBodyForLog = cleanResult;
+    }
+
+    // Store logging data in context
+    // Note: Response headers will be captured in the logging middleware
+    c.set('logData', {
+      sapResponseTime,
+      // Truncate large bodies to prevent database bloat (10KB limit)
+      requestBody: requestBody ? (JSON.stringify(requestBody).length > 10000 ? { truncated: true, size: JSON.stringify(requestBody).length } : requestBody) : undefined,
+      responseBody: responseBodyForLog ? (JSON.stringify(responseBodyForLog).length > 10000 ? { truncated: true, size: JSON.stringify(responseBodyForLog).length } : responseBodyForLog) : undefined,
+      requestHeaders,
+      responseHeaders: {}, // Will be populated in middleware
+    });
+
+    return c.json(responseBodyForLog || result);
   } catch (error: any) {
     console.error('Proxy error:', {
       message: error.message,
@@ -119,6 +167,34 @@ app.all('/*', async (c) => {
         headers: Object.fromEntries(error.response.headers.entries())
       } : undefined,
       stack: error.stack
+    });
+    
+    // Extract error message for logging
+    let errorMessage: string | undefined = undefined;
+    if (error.odataError) {
+      errorMessage = error.odataError.message || error.message;
+    } else {
+      errorMessage = error.message || 'Internal Proxy Error';
+      if (error.response?.statusText) {
+        errorMessage = `${errorMessage}: ${error.response.statusText}`;
+      }
+    }
+    
+    // Store error info in context for logging
+    const errorResponseHeaders: Record<string, string> = {};
+    if (error.response) {
+      error.response.headers.forEach((value: string, key: string) => {
+        errorResponseHeaders[key] = value;
+      });
+    }
+    
+    c.set('logData', {
+      sapResponseTime: undefined, // Could track error timing too if needed
+      requestBody: requestBody ? JSON.stringify(requestBody).length > 10000 ? { truncated: true, size: JSON.stringify(requestBody).length } : requestBody : undefined,
+      responseBody: undefined, // No response body for errors
+      requestHeaders,
+      responseHeaders: errorResponseHeaders,
+      errorMessage: errorMessage.length > 2000 ? errorMessage.substring(0, 2000) : errorMessage,
     });
     
     // Return structured OData error if available

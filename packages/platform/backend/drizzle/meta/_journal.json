@@ -22,6 +22,27 @@
       "when": 1765998672258,
       "tag": "0002_damp_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1766082607155,
+      "tag": "0003_purple_wasp",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1766170000000,
+      "tag": "0004_systems_refactor",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1766250000000,
+      "tag": "0005_add_instance_service_entities",
+      "breakpoints": true
     }
   ]
 }

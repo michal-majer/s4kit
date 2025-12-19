@@ -35,3 +35,4 @@ export function TableSkeleton({ columns, rows = 5 }: TableSkeletonProps) {
   );
 }
 
+

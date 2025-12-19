@@ -1,7 +1,8 @@
 import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, unique } from 'drizzle-orm/pg-core';
 
 // Enums
-export const environmentEnum = pgEnum('environment', ['dev', 'staging', 'prod']);
+export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 'btp', 'other']);
+export const instanceEnvironmentEnum = pgEnum('instance_environment', ['dev', 'quality', 'production']);
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
 
 // Organizations table
@@ -11,98 +12,121 @@ export const organizations = pgTable('organizations', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Connections table
-export const connections = pgTable('connections', {
+// Systems table (replaces connections)
+export const systems = pgTable('systems', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
+  type: systemTypeEnum('type').notNull(),
+  description: varchar('description', { length: 1000 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Instances table - each system can have multiple instances (DEV, QUALITY, PRODUCTION)
+export const instances = pgTable('instances', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  systemId: uuid('system_id').references(() => systems.id, { onDelete: 'cascade' }).notNull(),
+  environment: instanceEnvironmentEnum('environment').notNull(),
   baseUrl: varchar('base_url', { length: 500 }).notNull(),
   
-  // Auth configuration
+  // Auth configuration for this instance
   authType: authTypeEnum('auth_type').default('basic').notNull(),
   
-  // Legacy/Basic fields - made nullable to support other auth types
-  username: varchar('username', { length: 255 }), // Will be encrypted in application layer
-  password: varchar('password', { length: 500 }), // Will be encrypted in application layer
+  // Basic auth fields
+  username: varchar('username', { length: 255 }), // encrypted
+  password: varchar('password', { length: 500 }), // encrypted
   
-  // Flexible storage for complex auth settings
-  // Stores non-sensitive config (e.g. tokenUrl, scope, headerName, clientId)
-  authConfig: jsonb('auth_config'), 
-  
-  // Stores sensitive data (e.g. clientSecret, privateKey, certificates, tokens)
-  // This column should be encrypted at the application layer
-  credentials: jsonb('credentials'),
-
-  environment: environmentEnum('environment').notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
-
-// OData services defined at organization level
-export const services = pgTable('services', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
-  
-  name: varchar('name', { length: 255 }).notNull(),           // "Business Partner API"
-  alias: varchar('alias', { length: 50 }).notNull(),          // "bp" - used in SDK
-  servicePath: varchar('service_path', { length: 500 }).notNull(), // "/sap/opu/odata/sap/API_BUSINESS_PARTNER"
-  description: varchar('description', { length: 1000 }),
-  
-  // Entity names this service exposes - for auto-resolving entity → service
-  // e.g., ["A_BusinessPartner", "A_BusinessPartnerAddress", "A_BusinessPartnerBank"]
-  entities: jsonb('entities').$type<string[]>().default([]),
-  
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
-
-// Which services are available on which connections (with optional auth override)
-export const connectionServices = pgTable('connection_services', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  connectionId: uuid('connection_id').references(() => connections.id, { onDelete: 'cascade' }).notNull(),
-  serviceId: uuid('service_id').references(() => services.id, { onDelete: 'cascade' }).notNull(),
-  
-  // Optional: override service path for this specific connection
-  servicePathOverride: varchar('service_path_override', { length: 500 }),
-  
-  // Optional: per-service authentication override
-  // If null, inherits from the connection's auth settings
-  authType: authTypeEnum('auth_type'),  // null = inherit from connection
-  
-  // Basic auth override
-  username: varchar('username', { length: 255 }),  // encrypted
-  password: varchar('password', { length: 500 }),  // encrypted
-  
-  // Flexible auth config (OAuth2 tokenUrl, scope, etc.)
+  // Flexible storage for complex auth settings (tokenUrl, scope, headerName, clientId)
   authConfig: jsonb('auth_config'),
   
-  // Sensitive credentials (clientSecret, tokens, etc.) - encrypted
+  // Sensitive credentials (clientSecret, privateKey, certificates, tokens) - encrypted
+  credentials: jsonb('credentials'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueSystemEnvironment: unique().on(table.systemId, table.environment),
+}));
+
+// Predefined services - seed table for S/4HANA APIs
+export const predefinedServices = pgTable('predefined_services', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  systemType: systemTypeEnum('system_type').notNull(), // which system types this service applies to
+  name: varchar('name', { length: 255 }).notNull(),
+  alias: varchar('alias', { length: 50 }).notNull(),
+  servicePath: varchar('service_path', { length: 500 }).notNull(),
+  description: varchar('description', { length: 1000 }),
+  defaultEntities: jsonb('default_entities').$type<string[]>().default([]),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueSystemTypeAlias: unique().on(table.systemType, table.alias),
+}));
+
+// System services - services available on a system (either from predefined or custom)
+export const systemServices = pgTable('system_services', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  systemId: uuid('system_id').references(() => systems.id, { onDelete: 'cascade' }).notNull(),
+  predefinedServiceId: uuid('predefined_service_id').references(() => predefinedServices.id, { onDelete: 'set null' }),
+  
+  name: varchar('name', { length: 255 }).notNull(),
+  alias: varchar('alias', { length: 50 }).notNull(),
+  servicePath: varchar('service_path', { length: 500 }).notNull(),
+  description: varchar('description', { length: 1000 }),
+  
+  // Entity names this service exposes
+  entities: jsonb('entities').$type<string[]>().default([]),
+  
+  // Optional service-level auth (used as default when linked to instances)
+  authType: authTypeEnum('auth_type'), // null = inherit from instance
+  username: varchar('username', { length: 255 }), // encrypted
+  password: varchar('password', { length: 500 }), // encrypted
+  authConfig: jsonb('auth_config'),
+  credentials: jsonb('credentials'),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueSystemAlias: unique().on(table.systemId, table.alias),
+}));
+
+// Instance services - links services to specific instances with optional auth override
+export const instanceServices = pgTable('instance_services', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  instanceId: uuid('instance_id').references(() => instances.id, { onDelete: 'cascade' }).notNull(),
+  systemServiceId: uuid('system_service_id').references(() => systemServices.id, { onDelete: 'cascade' }).notNull(),
+  
+  // Optional: override service path for this specific instance
+  servicePathOverride: varchar('service_path_override', { length: 500 }),
+  
+  // Optional: per-instance entity list (null = inherit from systemService)
+  entities: jsonb('entities').$type<string[] | null>(),
+  
+  // Optional: per-instance-service authentication override
+  authType: authTypeEnum('auth_type'), // null = inherit from systemService or instance
+  username: varchar('username', { length: 255 }), // encrypted
+  password: varchar('password', { length: 500 }), // encrypted
+  authConfig: jsonb('auth_config'),
   credentials: jsonb('credentials'),
   
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
-  uniqueConnectionService: unique().on(table.connectionId, table.serviceId),
+  uniqueInstanceService: unique().on(table.instanceId, table.systemServiceId),
 }));
 
 // API Keys table - Stripe-like secure key management
-// Key format: s4k_{env}_{keyId}_{random} (e.g., s4k_live_abc12345_xY7kM9pL...)
-// - Only shown once at creation, then only keyPrefix + last4 displayed
-// - keyId is embedded in the key for O(1) lookup without hash scanning
-// - SHA-256 hash stored for verification
-// Note: connectionId and permissions moved to apiKeyAccess table for multi-connection support
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   
   // Security fields
-  keyHash: varchar('key_hash', { length: 64 }).notNull().unique(), // SHA-256 hash of full key
-  keyPrefix: varchar('key_prefix', { length: 24 }).notNull(), // Visible prefix: "s4k_live_abc12345" for display
-  keyLast4: varchar('key_last_4', { length: 4 }).notNull(), // Last 4 chars for identification: "...xY7k"
+  keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
+  keyPrefix: varchar('key_prefix', { length: 24 }).notNull(),
+  keyLast4: varchar('key_last_4', { length: 4 }).notNull(),
   
   // Metadata
   name: varchar('name', { length: 255 }).notNull(),
-  description: varchar('description', { length: 1000 }), // Optional description for the key
-  environment: environmentEnum('environment').notNull(),
+  description: varchar('description', { length: 1000 }),
   
   // Rate limiting
   rateLimitPerMinute: integer('rate_limit_per_minute').default(60).notNull(),
@@ -111,39 +135,44 @@ export const apiKeys = pgTable('api_keys', {
   // Lifecycle
   expiresAt: timestamp('expires_at'),
   revoked: boolean('revoked').default(false).notNull(),
-  revokedAt: timestamp('revoked_at'), // When the key was revoked
-  revokedReason: varchar('revoked_reason', { length: 500 }), // Why the key was revoked
+  revokedAt: timestamp('revoked_at'),
+  revokedReason: varchar('revoked_reason', { length: 500 }),
   
   // Audit
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  createdBy: varchar('created_by', { length: 255 }), // Who created this key
+  createdBy: varchar('created_by', { length: 255 }),
   lastUsedAt: timestamp('last_used_at'),
-  lastUsedIp: varchar('last_used_ip', { length: 45 }), // IPv4 or IPv6
-  usageCount: integer('usage_count').default(0).notNull(), // Total number of requests
+  lastUsedIp: varchar('last_used_ip', { length: 45 }),
+  usageCount: integer('usage_count').default(0).notNull(),
 });
 
-// API key access grants - links API key to connection+service with entity-level permissions
+// API key access grants - links API key to instance+service with entity-level permissions
 export const apiKeyAccess = pgTable('api_key_access', {
   id: uuid('id').defaultRandom().primaryKey(),
   apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'cascade' }).notNull(),
-  connectionServiceId: uuid('connection_service_id').references(() => connectionServices.id, { onDelete: 'cascade' }).notNull(),
+  instanceServiceId: uuid('instance_service_id').references(() => instanceServices.id, { onDelete: 'cascade' }).notNull(),
   
   // Entity-level permissions: { "A_BusinessPartner": ["read"], "A_SalesOrder": ["create", "read", "update", "delete"] }
-  // Use ["*"] for full access to all operations
   permissions: jsonb('permissions').notNull().$type<Record<string, string[]>>(),
   
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
-  uniqueKeyConnectionService: unique().on(table.apiKeyId, table.connectionServiceId),
+  uniqueKeyInstanceService: unique().on(table.apiKeyId, table.instanceServiceId),
 }));
 
 // Request logs table
 export const requestLogs = pgTable('request_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
   apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'cascade' }).notNull(),
-  method: varchar('method', { length: 10 }).notNull(), // GET, POST, PATCH, DELETE
+  method: varchar('method', { length: 10 }).notNull(),
   path: varchar('path', { length: 500 }).notNull(),
   statusCode: integer('status_code').notNull(),
-  responseTime: integer('response_time'), // milliseconds
+  responseTime: integer('response_time'),
+  sapResponseTime: integer('sap_response_time'),
+  requestBody: jsonb('request_body'),
+  responseBody: jsonb('response_body'),
+  requestHeaders: jsonb('request_headers'),
+  responseHeaders: jsonb('response_headers'),
+  errorMessage: varchar('error_message', { length: 2000 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

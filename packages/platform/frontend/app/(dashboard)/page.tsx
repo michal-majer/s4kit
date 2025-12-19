@@ -1,12 +1,12 @@
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/common/page-header';
 import { StatsCard } from '@/components/common/stats-card';
-import { Plug, Key, Activity, BarChart3 } from 'lucide-react';
+import { Server, Key, Activity, BarChart3 } from 'lucide-react';
 
 async function getStats() {
   try {
-    const [connections, apiKeys, logs] = await Promise.all([
-      api.connections.list().catch(() => []),
+    const [systems, apiKeys, logs] = await Promise.all([
+      api.systems.list().catch(() => []),
       api.apiKeys.list().catch(() => []),
       api.logs.list({ limit: 100 }).catch(() => []),
     ]);
@@ -16,13 +16,13 @@ async function getStats() {
     const todayLogs = logs.filter((log) => new Date(log.createdAt) >= today);
 
     return {
-      connections: connections.length,
+      systems: systems.length,
       apiKeys: apiKeys.length,
       requestsToday: todayLogs.length,
       totalRequests: logs.length,
     };
   } catch {
-    return { connections: 0, apiKeys: 0, requestsToday: 0, totalRequests: 0 };
+    return { systems: 0, apiKeys: 0, requestsToday: 0, totalRequests: 0 };
   }
 }
 
@@ -38,10 +38,10 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          title="Connections"
-          value={stats.connections}
-          description="Active SAP connections"
-          icon={Plug}
+          title="Systems"
+          value={stats.systems}
+          description="Configured SAP systems"
+          icon={Server}
         />
         <StatsCard
           title="API Keys"
@@ -65,4 +65,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

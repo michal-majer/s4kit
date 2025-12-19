@@ -1,25 +1,24 @@
 import { db } from '../db';
-import { services, connections, connectionServices, apiKeyAccess } from '../db/schema';
+import { systemServices, instances, instanceServices, apiKeyAccess, systems } from '../db/schema';
 import { eq, and, sql, inArray } from 'drizzle-orm';
-import type { Connection, Service, ConnectionService, EntityPermissions } from '../types';
+import type { Instance, SystemService, InstanceService, EntityPermissions } from '../types';
 
 export interface ResolvedAccess {
-  connection: Connection;
-  service: Service;
-  connectionService: ConnectionService;
+  instance: Instance;
+  systemService: SystemService;
+  instanceService: InstanceService;
   permissions: EntityPermissions;
 }
 
 export const accessResolver = {
   /**
    * Find a service by entity name - ONLY among services the API key has access to
-   * This prevents returning a service the API key cannot use
    */
   findServiceByEntityForApiKey: async (
     apiKeyId: string,
     organizationId: string,
     entityName: string
-  ): Promise<Service | null> => {
+  ): Promise<SystemService | null> => {
     // Get all access grants for this API key
     const accessGrants = await db.query.apiKeyAccess.findMany({
       where: eq(apiKeyAccess.apiKeyId, apiKeyId)
@@ -29,25 +28,83 @@ export const accessResolver = {
       return null;
     }
 
-    // Get all connection-service records for these grants
-    const connectionServiceIds = accessGrants.map(g => g.connectionServiceId);
-    const connServices = await db.query.connectionServices.findMany({
-      where: inArray(connectionServices.id, connectionServiceIds)
+    // Get all instance-service records for these grants
+    const instanceServiceIds = accessGrants.map(g => g.instanceServiceId);
+    const instServices = await db.query.instanceServices.findMany({
+      where: inArray(instanceServices.id, instanceServiceIds)
     });
 
-    // Get unique service IDs
-    const serviceIds = [...new Set(connServices.map(cs => cs.serviceId))];
+    // Get unique system service IDs
+    const systemServiceIds = [...new Set(instServices.map(is => is.systemServiceId))];
     
-    if (serviceIds.length === 0) {
+    if (systemServiceIds.length === 0) {
       return null;
     }
 
-    // Find a service that contains this entity AND is in the allowed list
-    const result = await db.query.services.findFirst({
+    // Get the system services and their systems to verify organization
+    const sysServices = await db.query.systemServices.findMany({
+      where: inArray(systemServices.id, systemServiceIds)
+    });
+
+    // Filter to only services belonging to systems in this organization
+    const systemIds = [...new Set(sysServices.map(ss => ss.systemId))];
+    const syss = await db.query.systems.findMany({
       where: and(
-        eq(services.organizationId, organizationId),
-        inArray(services.id, serviceIds),
-        sql`${services.entities} @> ${JSON.stringify([entityName])}::jsonb`
+        inArray(systems.id, systemIds),
+        eq(systems.organizationId, organizationId)
+      )
+    });
+    const validSystemIds = new Set(syss.map(s => s.id));
+    const validServiceIds = sysServices
+      .filter(ss => validSystemIds.has(ss.systemId))
+      .map(ss => ss.id);
+
+    // Check each instance-service to see if it contains the entity
+    // Priority: instanceService.entities > systemService.entities
+    for (const instService of instServices) {
+      // Skip if this instance-service's system service is not in valid list
+      if (!validServiceIds.includes(instService.systemServiceId)) {
+        continue;
+      }
+      
+      // Get the system service
+      const sysService = sysServices.find(ss => ss.id === instService.systemServiceId);
+      if (!sysService) {
+        continue;
+      }
+      
+      // Check entities: instanceService.entities first, then fall back to systemService.entities
+      const entitiesToCheck = instService.entities !== null 
+        ? instService.entities 
+        : (sysService.entities || []);
+      
+      if (entitiesToCheck.includes(entityName)) {
+        return sysService;
+      }
+    }
+    
+    return null;
+  },
+
+  /**
+   * Find a service by alias within an organization
+   */
+  findServiceByAlias: async (organizationId: string, alias: string): Promise<SystemService | null> => {
+    // Get all systems for this organization
+    const syss = await db.query.systems.findMany({
+      where: eq(systems.organizationId, organizationId)
+    });
+
+    if (syss.length === 0) {
+      return null;
+    }
+
+    const systemIds = syss.map(s => s.id);
+
+    const result = await db.query.systemServices.findFirst({
+      where: and(
+        inArray(systemServices.systemId, systemIds),
+        eq(systemServices.alias, alias)
       )
     });
     
@@ -55,61 +112,16 @@ export const accessResolver = {
   },
 
   /**
-   * Find a service by entity name (legacy - searches all services in org)
-   * @deprecated Use findServiceByEntityForApiKey instead
+   * Get all instances that an API key has access to, optionally filtered by service
    */
-  findServiceByEntity: async (organizationId: string, entityName: string): Promise<Service | null> => {
-    // Query services where entities jsonb array contains the entity name
-    const result = await db.query.services.findFirst({
-      where: and(
-        eq(services.organizationId, organizationId),
-        sql`${services.entities} @> ${JSON.stringify([entityName])}::jsonb`
-      )
-    });
-    
-    return result ?? null;
-  },
-
-  /**
-   * Find a service by alias
-   */
-  findServiceByAlias: async (organizationId: string, alias: string): Promise<Service | null> => {
-    const result = await db.query.services.findFirst({
-      where: and(
-        eq(services.organizationId, organizationId),
-        eq(services.alias, alias)
-      )
-    });
-    
-    return result ?? null;
-  },
-
-  /**
-   * Find a connection by name (used as alias in SDK)
-   */
-  findConnectionByName: async (organizationId: string, name: string): Promise<Connection | null> => {
-    const result = await db.query.connections.findFirst({
-      where: and(
-        eq(connections.organizationId, organizationId),
-        eq(connections.name, name)
-      )
-    });
-    
-    return result ?? null;
-  },
-
-  /**
-   * Get all connections that an API key has access to, optionally filtered by service
-   * Returns array of { connection, service, connectionService, permissions }
-   */
-  getConnectionsForApiKey: async (
+  getInstancesForApiKey: async (
     apiKeyId: string,
     organizationId: string,
-    serviceId?: string
+    systemServiceId?: string
   ): Promise<Array<{
-    connection: Connection;
-    service: Service;
-    connectionService: ConnectionService;
+    instance: Instance;
+    systemService: SystemService;
+    instanceService: InstanceService;
     permissions: EntityPermissions;
   }>> => {
     // Get all access grants for this API key
@@ -121,42 +133,48 @@ export const accessResolver = {
       return [];
     }
 
-    // Get all connection-service records
-    const connectionServiceIds = accessGrants.map(g => g.connectionServiceId);
-    const connServices = await db.query.connectionServices.findMany({
-      where: inArray(connectionServices.id, connectionServiceIds)
+    // Get all instance-service records
+    const instanceServiceIds = accessGrants.map(g => g.instanceServiceId);
+    const instServices = await db.query.instanceServices.findMany({
+      where: inArray(instanceServices.id, instanceServiceIds)
     });
 
     // Filter by service if provided
-    const filteredConnServices = serviceId
-      ? connServices.filter(cs => cs.serviceId === serviceId)
-      : connServices;
+    const filteredInstServices = systemServiceId
+      ? instServices.filter(is => is.systemServiceId === systemServiceId)
+      : instServices;
 
-    // Enrich with connection and service details
+    // Enrich with instance and service details
     const results = await Promise.all(
-      filteredConnServices.map(async (connService) => {
-        const [connection, service] = await Promise.all([
-          db.query.connections.findFirst({
-            where: and(
-              eq(connections.id, connService.connectionId),
-              eq(connections.organizationId, organizationId)
-            )
+      filteredInstServices.map(async (instService) => {
+        const [instance, sysService] = await Promise.all([
+          db.query.instances.findFirst({
+            where: eq(instances.id, instService.instanceId)
           }),
-          db.query.services.findFirst({
-            where: and(
-              eq(services.id, connService.serviceId),
-              eq(services.organizationId, organizationId)
-            )
+          db.query.systemServices.findFirst({
+            where: eq(systemServices.id, instService.systemServiceId)
           })
         ]);
 
-        if (!connection || !service) {
+        if (!instance || !sysService) {
+          return null;
+        }
+
+        // Verify system belongs to organization
+        const system = await db.query.systems.findFirst({
+          where: and(
+            eq(systems.id, sysService.systemId),
+            eq(systems.organizationId, organizationId)
+          )
+        });
+
+        if (!system) {
           return null;
         }
 
         // Find the matching access grant
         const accessGrant = accessGrants.find(
-          ag => ag.connectionServiceId === connService.id
+          ag => ag.instanceServiceId === instService.id
         );
 
         if (!accessGrant) {
@@ -164,9 +182,9 @@ export const accessResolver = {
         }
 
         return {
-          connection,
-          service,
-          connectionService: connService,
+          instance,
+          systemService: sysService,
+          instanceService: instService,
           permissions: accessGrant.permissions as EntityPermissions
         };
       })
@@ -177,105 +195,50 @@ export const accessResolver = {
 
   /**
    * Resolve full access grant for an API key + service combination
-   * If multiple connections exist, returns the first one (or use connectionName to specify)
-   * Returns the connection, service, connectionService (with auth), and permissions
+   * If multiple instances exist, returns null unless instanceId is specified
    */
   resolveAccessGrantByService: async (
     apiKeyId: string,
     organizationId: string,
     serviceAlias: string,
-    connectionName?: string
+    instanceEnvironment?: string
   ): Promise<ResolvedAccess | null> => {
     // Find the service by alias
-    const service = await accessResolver.findServiceByAlias(organizationId, serviceAlias);
-    if (!service) {
+    const sysService = await accessResolver.findServiceByAlias(organizationId, serviceAlias);
+    if (!sysService) {
       return null;
     }
 
-    // Get all connections for this API key and service
-    const connections = await accessResolver.getConnectionsForApiKey(
+    // Get all instances for this API key and service
+    const instAccess = await accessResolver.getInstancesForApiKey(
       apiKeyId,
       organizationId,
-      service.id
+      sysService.id
     );
 
-    if (connections.length === 0) {
+    if (instAccess.length === 0) {
       return null;
     }
 
-    // If connectionName is provided, use it to filter
-    if (connectionName) {
-      const matching = connections.find(c => c.connection.name === connectionName);
+    // If instanceEnvironment is provided, use it to filter
+    if (instanceEnvironment) {
+      const matching = instAccess.find(ia => ia.instance.environment === instanceEnvironment);
       if (matching) {
         return matching;
       }
       return null;
     }
 
-    // If exactly one connection, use it
-    if (connections.length === 1) {
-      const result = connections[0];
+    // If exactly one instance, use it
+    if (instAccess.length === 1) {
+      const result = instAccess[0];
       if (result) {
         return result;
       }
     }
 
-    // Multiple connections but no name specified - return null (caller should handle)
+    // Multiple instances but no environment specified - return null (caller should handle)
     return null;
-  },
-
-  /**
-   * Resolve full access grant for an API key + connection + service combination
-   * Returns the connection, service, connectionService (with auth), and permissions
-   */
-  resolveAccessGrant: async (
-    apiKeyId: string,
-    organizationId: string,
-    connectionName: string,
-    serviceAlias: string
-  ): Promise<ResolvedAccess | null> => {
-    // Find the connection by name
-    const connection = await accessResolver.findConnectionByName(organizationId, connectionName);
-    if (!connection) {
-      return null;
-    }
-
-    // Find the service by alias
-    const service = await accessResolver.findServiceByAlias(organizationId, serviceAlias);
-    if (!service) {
-      return null;
-    }
-
-    // Find the connectionService junction record
-    const connService = await db.query.connectionServices.findFirst({
-      where: and(
-        eq(connectionServices.connectionId, connection.id),
-        eq(connectionServices.serviceId, service.id)
-      )
-    });
-
-    if (!connService) {
-      return null;
-    }
-
-    // Find the API key access grant for this connection+service
-    const accessGrant = await db.query.apiKeyAccess.findFirst({
-      where: and(
-        eq(apiKeyAccess.apiKeyId, apiKeyId),
-        eq(apiKeyAccess.connectionServiceId, connService.id)
-      )
-    });
-
-    if (!accessGrant) {
-      return null;
-    }
-
-    return {
-      connection,
-      service,
-      connectionService: connService,
-      permissions: accessGrant.permissions as EntityPermissions
-    };
   },
 
   /**

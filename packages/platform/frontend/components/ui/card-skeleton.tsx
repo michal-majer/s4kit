@@ -2,10 +2,15 @@
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
-export function CardSkeleton() {
+interface CardSkeletonProps {
+  className?: string;
+}
+
+export function CardSkeleton({ className }: CardSkeletonProps) {
   return (
-    <Card>
+    <Card className={cn(className)}>
       <CardHeader>
         <Skeleton className="h-4 w-24" />
       </CardHeader>
@@ -26,4 +31,5 @@ export function StatsCardsSkeleton() {
     </div>
   );
 }
+
 

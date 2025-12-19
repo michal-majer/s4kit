@@ -5,8 +5,13 @@ export interface S4KitConfig {
   service?: string;           // Default service alias - OPTIONAL (auto-resolved from entity)
 }
 
-export interface QueryOptions {
-  select?: string[];
+/**
+ * Query options for OData requests
+ * @template T - Entity type for type-safe field selection
+ */
+export interface QueryOptions<T = any> {
+  /** Select specific fields - type-safe when T is provided */
+  select?: Array<keyof T>;
   filter?: string;
   top?: number;
   skip?: number;
@@ -17,9 +22,9 @@ export interface QueryOptions {
 }
 
 export interface EntityHandler<T = any> {
-  list(options?: QueryOptions): Promise<T[]>;
-  get(id: string | number, options?: QueryOptions): Promise<T>;
-  create(data: T, options?: QueryOptions): Promise<T>;
-  update(id: string | number, data: Partial<T>, options?: QueryOptions): Promise<T>;
-  delete(id: string | number, options?: QueryOptions): Promise<void>;
+  list(options?: QueryOptions<T>): Promise<T[]>;
+  get(id: string | number, options?: QueryOptions<T>): Promise<T>;
+  create(data: T, options?: QueryOptions<T>): Promise<T>;
+  update(id: string | number, data: Partial<T>, options?: QueryOptions<T>): Promise<T>;
+  delete(id: string | number, options?: QueryOptions<T>): Promise<void>;
 }

@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Plug, Key, FileText, Layers, Zap, Settings } from 'lucide-react';
+import { LayoutDashboard, Server, Key, FileText, Layers, Zap, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
 const mainNavItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/connections', label: 'Connections', icon: Plug },
+  { href: '/systems', label: 'Systems', icon: Server },
   { href: '/services', label: 'Services', icon: Layers },
   { href: '/api-keys', label: 'API Keys', icon: Key },
   { href: '/logs', label: 'Logs', icon: FileText },
@@ -92,4 +92,5 @@ export function Sidebar() {
     </aside>
   );
 }
+
 

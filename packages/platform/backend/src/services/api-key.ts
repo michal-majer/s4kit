@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { apiKeys } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
 /**
@@ -11,7 +11,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'crypto';
  * 
  * Components:
  * - s4k: s4kit identifier (prevents key confusion with other services)
- * - env: environment (live/test/dev) - visible and parseable
+ * - env: environment prefix (always 'live' - instance environment determines actual env)
  * - keyId: first 8 chars of UUID (base62) - enables O(1) lookup
  * - random: 32 bytes of cryptographic random (base62 encoded)
  * 
@@ -19,26 +19,11 @@ import { randomBytes, createHash, timingSafeEqual } from 'crypto';
  * - Full key shown only once at creation
  * - Only SHA-256 hash stored in database
  * - Timing-safe comparison to prevent timing attacks
- * - Environment encoded in key prevents cross-env usage
  */
 
 // Base62 alphabet (URL-safe, no ambiguous chars like 0/O, 1/l)
 const BASE62_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
-// Environment mapping for key prefix
-const ENV_MAP = {
-  prod: 'live',
-  staging: 'test', 
-  dev: 'dev'
-} as const;
-
-const ENV_REVERSE_MAP = {
-  live: 'prod',
-  test: 'staging',
-  dev: 'dev'
-} as const;
-
-type Environment = 'prod' | 'staging' | 'dev';
 type KeyEnvironment = 'live' | 'test' | 'dev';
 
 /**
@@ -117,19 +102,16 @@ export const apiKeyService = {
    * Generate a new Stripe-like API key
    * 
    * @param apiKeyId - The UUID of the API key record (must be created first)
-   * @param environment - The environment (prod/staging/dev)
+   * @param envPrefix - The environment prefix (live/test/dev) - defaults to 'live'
    * @returns Generated key components for storage and display
    */
-  generateKey: (apiKeyId: string, environment: Environment): GeneratedApiKey => {
+  generateKey: (apiKeyId: string, envPrefix: KeyEnvironment = 'live'): GeneratedApiKey => {
     // Generate 32 bytes of cryptographic random data
     const randomBuffer = randomBytes(32);
     const randomPart = encodeBase62(randomBuffer);
     
     // Create short ID from the API key UUID
     const keyId = uuidToShortId(apiKeyId);
-    
-    // Map environment to key format
-    const envPrefix = ENV_MAP[environment];
     
     // Construct the full key
     const fullKey = `s4k_${envPrefix}_${keyId}_${randomPart}`;
@@ -166,20 +148,14 @@ export const apiKeyService = {
     // Parse the key to extract components
     const parsed = parseApiKey(key);
     
-    if (!parsed.valid || !parsed.env || !parsed.prefix) {
+    if (!parsed.valid || !parsed.prefix) {
       return { valid: false, error: 'Invalid key format' };
     }
-    
-    // Map key environment back to DB environment
-    const dbEnvironment = ENV_REVERSE_MAP[parsed.env];
     
     // Look up by prefix (O(1) lookup using index)
     // The prefix contains the keyId which maps to a specific API key
     const result = await db.query.apiKeys.findFirst({
-      where: and(
-        eq(apiKeys.keyPrefix, parsed.prefix),
-        eq(apiKeys.environment, dbEnvironment)
-      ),
+      where: eq(apiKeys.keyPrefix, parsed.prefix),
     });
 
     if (!result) {
@@ -206,7 +182,6 @@ export const apiKeyService = {
     }
     
     // Update last used timestamp and IP (fire and forget)
-    // Connection/service resolution is now done separately via apiKeyAccess
     db.update(apiKeys)
       .set({ 
         lastUsedAt: new Date(),
@@ -268,15 +243,5 @@ export const apiKeyService = {
    */
   getMaskedKey: (keyPrefix: string, keyLast4: string): string => {
     return `${keyPrefix}...${keyLast4}`;
-  },
-
-  /**
-   * Parse key to check environment without full validation
-   * Useful for quick filtering or routing
-   */
-  getKeyEnvironment: (key: string): Environment | null => {
-    const parsed = parseApiKey(key);
-    if (!parsed.valid || !parsed.env) return null;
-    return ENV_REVERSE_MAP[parsed.env];
   }
 };

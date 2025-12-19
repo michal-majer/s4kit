@@ -25,16 +25,16 @@ export function createProxy(client: HttpClient) {
       // Entity name becomes the path - platform will resolve to correct service
       const basePath = entityName; 
 
-      const handler: EntityHandler = {
-        list: (options?: QueryOptions) => 
-          client.get(basePath, buildQuery(options), extractRequestOptions(options)),
-        get: (id: string | number, options?: QueryOptions) => 
-          client.get(`${basePath}(${formatId(id)})`, buildQuery(options), extractRequestOptions(options)),
-        create: (data: any, options?: QueryOptions) => 
+      const handler: EntityHandler<any> = {
+        list: (options?: QueryOptions<any>) => 
+          client.get(basePath, buildQuery(options as any), extractRequestOptions(options)),
+        get: (id: string | number, options?: QueryOptions<any>) => 
+          client.get(`${basePath}(${formatId(id)})`, buildQuery(options as any), extractRequestOptions(options)),
+        create: (data: any, options?: QueryOptions<any>) => 
           client.post(basePath, data, extractRequestOptions(options)),
-        update: (id: string | number, data: any, options?: QueryOptions) => 
+        update: (id: string | number, data: any, options?: QueryOptions<any>) => 
           client.patch(`${basePath}(${formatId(id)})`, data, extractRequestOptions(options)),
-        delete: (id: string | number, options?: QueryOptions) => 
+        delete: (id: string | number, options?: QueryOptions<any>) => 
           client.delete(`${basePath}(${formatId(id)})`, extractRequestOptions(options)),
       };
 

@@ -44,3 +44,4 @@ await db.update(organizations)
 3. **Close connections gracefully** - The connection pool handles this automatically
 4. **Monitor connection pool** - Adjust max connections based on your application's needs
 
+

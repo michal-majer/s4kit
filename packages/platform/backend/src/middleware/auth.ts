@@ -63,51 +63,40 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     serviceAlias = service.alias;
   }
 
-  // 3. Get connection from header (optional - used as override if API key has multiple connections)
-  const connectionNameOverride = c.req.header('X-S4Kit-Connection');
+  // 3. Get instance environment from header (optional - used as override if API key has multiple instances)
+  const instanceEnvironment = c.req.header('X-S4Kit-Instance');
 
-  // 4. Resolve connection + service + access grant from API key
-  // This will auto-select the connection if the API key has access to only one connection for this service
-  let accessGrant = await accessResolver.resolveAccessGrantByService(
+  // 4. Resolve instance + service + access grant from API key
+  const accessGrant = await accessResolver.resolveAccessGrantByService(
     apiKey.id,
     apiKey.organizationId,
     serviceAlias,
-    connectionNameOverride
+    instanceEnvironment
   );
-
-  // If no access grant found and connection name was provided, try the old method for backwards compatibility
-  if (!accessGrant && connectionNameOverride) {
-    accessGrant = await accessResolver.resolveAccessGrant(
-      apiKey.id,
-      apiKey.organizationId,
-      connectionNameOverride,
-      serviceAlias
-    );
-  }
   
   if (!accessGrant) {
-    if (connectionNameOverride) {
+    if (instanceEnvironment) {
       return c.json({ 
-        error: `No access to connection '${connectionNameOverride}' + service '${serviceAlias}'` 
+        error: `No access to instance '${instanceEnvironment}' + service '${serviceAlias}'` 
       }, 403);
     } else {
-      // Get all connections for this API key and service to provide a helpful error
+      // Get all instances for this API key and service to provide a helpful error
       const service = await accessResolver.findServiceByAlias(apiKey.organizationId, serviceAlias);
       if (service) {
-        const connections = await accessResolver.getConnectionsForApiKey(
+        const instances = await accessResolver.getInstancesForApiKey(
           apiKey.id,
           apiKey.organizationId,
           service.id
         );
         
-        if (connections.length === 0) {
+        if (instances.length === 0) {
           return c.json({ 
             error: `No access to service '${serviceAlias}' for this API key` 
           }, 403);
-        } else if (connections.length > 1) {
-          const connectionNames = connections.map(c => c.connection.name).join(', ');
+        } else if (instances.length > 1) {
+          const envs = instances.map(i => i.instance.environment).join(', ');
           return c.json({ 
-            error: `Multiple connections available for service '${serviceAlias}'. Please specify X-S4Kit-Connection header. Available: ${connectionNames}` 
+            error: `Multiple instances available for service '${serviceAlias}'. Please specify X-S4Kit-Instance header. Available: ${envs}` 
           }, 400);
         }
       }
@@ -120,9 +109,9 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 
   // Attach validated data to context
   c.set('apiKey', apiKey);
-  c.set('connection', accessGrant.connection);
-  c.set('service', accessGrant.service);
-  c.set('connectionService', accessGrant.connectionService);
+  c.set('instance', accessGrant.instance);
+  c.set('systemService', accessGrant.systemService);
+  c.set('instanceService', accessGrant.instanceService);
   c.set('entityPermissions', accessGrant.permissions);
   
   await next();
