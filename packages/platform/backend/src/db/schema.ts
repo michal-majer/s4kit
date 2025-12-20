@@ -2,7 +2,7 @@ import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, uni
 
 // Enums
 export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 'btp', 'other']);
-export const instanceEnvironmentEnum = pgEnum('instance_environment', ['dev', 'quality', 'production']);
+export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox', 'dev', 'quality', 'preprod', 'production']);
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
 
 // Organizations table
@@ -108,7 +108,13 @@ export const instanceServices = pgTable('instance_services', {
   password: varchar('password', { length: 500 }), // encrypted
   authConfig: jsonb('auth_config'),
   credentials: jsonb('credentials'),
-  
+
+  // Verification status fields
+  verificationStatus: varchar('verification_status', { length: 20 }), // 'pending', 'verified', 'failed'
+  lastVerifiedAt: timestamp('last_verified_at'),
+  verificationError: varchar('verification_error', { length: 500 }),
+  entityCount: integer('entity_count'), // cached count for quick display
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueInstanceService: unique().on(table.instanceId, table.systemServiceId),

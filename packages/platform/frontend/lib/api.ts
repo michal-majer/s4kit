@@ -20,7 +20,7 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
 
 // Types
 export type SystemType = 's4_public' | 's4_private' | 'btp' | 'other';
-export type InstanceEnvironment = 'dev' | 'quality' | 'production';
+export type InstanceEnvironment = 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production';
 
 export interface System {
   id: string;
@@ -81,6 +81,11 @@ export interface InstanceService {
   hasEntityOverride?: boolean; // True if instanceService.entities is set (not null)
   authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
   hasAuthOverride?: boolean;
+  // Verification status fields
+  verificationStatus?: 'pending' | 'verified' | 'failed' | null;
+  lastVerifiedAt?: string | null;
+  verificationError?: string | null;
+  entityCount?: number | null;
   createdAt: string;
   instance?: { id: string; environment: InstanceEnvironment };
   systemService?: { id: string; name: string; alias: string; entities?: string[] };
@@ -199,6 +204,13 @@ export const api = {
       customHeaderValue?: string;
     }>) => fetchAPI<Instance>(`/admin/instances/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/instances/${id}`, { method: 'DELETE' }),
+    refreshAllServices: (id: string) => fetchAPI<{
+      success: boolean;
+      verified: number;
+      failed: number;
+      total: number;
+      results: Array<{ serviceId: string; status: 'verified' | 'failed'; entityCount?: number; error?: string }>;
+    }>(`/admin/instances/${id}/refresh-all-services`, { method: 'POST' }),
   },
 
   systemServices: {

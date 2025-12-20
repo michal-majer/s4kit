@@ -1,16 +1,17 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { instances } from '../../db/schema';
+import { instances, systems, systemServices, instanceServices } from '../../db/schema';
 import { encryption } from '../../services/encryption';
+import { metadataParser } from '../../services/metadata-parser';
 import { z } from 'zod';
-import { desc, eq, and } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 
 const app = new Hono();
 
 const instanceSchema = z.object({
-  systemId: z.string().uuid(),
-  environment: z.enum(['dev', 'quality', 'production']),
-  baseUrl: z.string().url(),
+  systemId: z.uuidv4(),
+  environment: z.enum(['sandbox', 'dev', 'quality', 'preprod', 'production']),
+  baseUrl: z.url(),
   authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).default('basic'),
   
   // Basic auth fields
@@ -24,9 +25,9 @@ const instanceSchema = z.object({
   // OAuth2 auth fields
   oauth2ClientId: z.string().min(1).optional(),
   oauth2ClientSecret: z.string().min(1).optional(),
-  oauth2TokenUrl: z.string().url().optional(),
+  oauth2TokenUrl: z.url().optional(),
   oauth2Scope: z.string().optional(),
-  oauth2AuthorizationUrl: z.string().url().optional(),
+  oauth2AuthorizationUrl: z.url().optional(),
   
   // Custom auth fields
   customHeaderName: z.string().min(1).optional(),
@@ -142,6 +143,34 @@ app.post('/', async (c) => {
     return c.json({ error: 'Failed to create instance' }, 500);
   }
 
+  // For S4HANA systems, auto-link all system services and trigger verification
+  const system = await db.query.systems.findFirst({
+    where: eq(systems.id, data.systemId)
+  });
+
+  if (system && (system.type === 's4_public' || system.type === 's4_private')) {
+    const systemServicesForSystem = await db.query.systemServices.findMany({
+      where: eq(systemServices.systemId, data.systemId)
+    });
+
+    // Create instance services with pending verification
+    for (const svc of systemServicesForSystem) {
+      try {
+        await db.insert(instanceServices).values({
+          instanceId: newInstance.id,
+          systemServiceId: svc.id,
+          verificationStatus: 'pending',
+        });
+      } catch (err) {
+        // Ignore duplicate key errors (service already linked)
+        console.error('Failed to auto-link service:', err);
+      }
+    }
+
+    // Trigger async refresh for all services (non-blocking)
+    refreshAllServicesForInstance(newInstance.id, newInstance, systemServicesForSystem).catch(console.error);
+  }
+
   const { username: _, password: __, credentials: ___, ...safeInstance } = newInstance;
   return c.json(safeInstance, 201);
 });
@@ -168,7 +197,7 @@ app.patch('/:id', async (c) => {
   const body = await c.req.json();
   
   const updateSchema = z.object({
-    baseUrl: z.string().url().optional(),
+    baseUrl: z.url().optional(),
     authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).optional(),
     username: z.string().min(1).optional(),
     password: z.string().min(1).optional(),
@@ -176,9 +205,9 @@ app.patch('/:id', async (c) => {
     apiKeyHeaderName: z.string().optional(),
     oauth2ClientId: z.string().min(1).optional(),
     oauth2ClientSecret: z.string().min(1).optional(),
-    oauth2TokenUrl: z.string().url().optional(),
+    oauth2TokenUrl: z.url().optional(),
     oauth2Scope: z.string().optional(),
-    oauth2AuthorizationUrl: z.string().url().optional(),
+    oauth2AuthorizationUrl: z.url().optional(),
     customHeaderName: z.string().min(1).optional(),
     customHeaderValue: z.string().min(1).optional(),
     authConfig: z.any().optional(),
@@ -308,6 +337,141 @@ app.delete('/:id', async (c) => {
   }
 
   return c.json({ success: true });
+});
+
+// Helper function to refresh all services for an instance
+async function refreshAllServicesForInstance(
+  instanceId: string,
+  instance: typeof instances.$inferSelect,
+  systemServicesForSystem?: typeof systemServices.$inferSelect[]
+) {
+  // Get all instance services for this instance
+  const instServices = await db.query.instanceServices.findMany({
+    where: eq(instanceServices.instanceId, instanceId)
+  });
+
+  // Get system services if not provided
+  let sysServices = systemServicesForSystem;
+  if (!sysServices) {
+    const sysServiceIds = instServices.map(is => is.systemServiceId);
+    sysServices = [];
+    for (const id of sysServiceIds) {
+      const svc = await db.query.systemServices.findFirst({
+        where: eq(systemServices.id, id)
+      });
+      if (svc) sysServices.push(svc);
+    }
+  }
+
+  const results: { serviceId: string; status: 'verified' | 'failed'; entityCount?: number; error?: string }[] = [];
+
+  for (const instService of instServices) {
+    const systemService = sysServices.find(s => s.id === instService.systemServiceId);
+    if (!systemService) continue;
+
+    try {
+      // Resolve auth with inheritance: instanceService > systemService > instance
+      let auth: any = null;
+
+      if (instService.authType && instService.authType !== 'none') {
+        auth = {
+          type: instService.authType,
+          username: instService.username,
+          password: instService.password,
+          config: instService.authConfig,
+          credentials: instService.credentials,
+        };
+      } else if (systemService.authType && systemService.authType !== 'none') {
+        auth = {
+          type: systemService.authType,
+          username: systemService.username,
+          password: systemService.password,
+          config: systemService.authConfig,
+          credentials: systemService.credentials,
+        };
+      } else {
+        auth = {
+          type: instance.authType,
+          username: instance.username,
+          password: instance.password,
+          config: instance.authConfig,
+          credentials: instance.credentials,
+        };
+      }
+
+      const servicePath = instService.servicePathOverride || systemService.servicePath;
+
+      const metadataResult = await metadataParser.fetchMetadata({
+        baseUrl: instance.baseUrl,
+        servicePath,
+        auth,
+      });
+
+      if (metadataResult.error) {
+        await db.update(instanceServices)
+          .set({
+            verificationStatus: 'failed',
+            lastVerifiedAt: new Date(),
+            verificationError: metadataResult.error,
+          })
+          .where(eq(instanceServices.id, instService.id));
+
+        results.push({ serviceId: instService.id, status: 'failed', error: metadataResult.error });
+      } else {
+        const entityNames = metadataResult.entities.map(e => e.name);
+
+        await db.update(instanceServices)
+          .set({
+            entities: entityNames,
+            verificationStatus: 'verified',
+            lastVerifiedAt: new Date(),
+            entityCount: entityNames.length,
+            verificationError: null,
+          })
+          .where(eq(instanceServices.id, instService.id));
+
+        results.push({ serviceId: instService.id, status: 'verified', entityCount: entityNames.length });
+      }
+    } catch (error: any) {
+      await db.update(instanceServices)
+        .set({
+          verificationStatus: 'failed',
+          lastVerifiedAt: new Date(),
+          verificationError: error.message || 'Failed to refresh entities',
+        })
+        .where(eq(instanceServices.id, instService.id));
+
+      results.push({ serviceId: instService.id, status: 'failed', error: error.message });
+    }
+  }
+
+  return results;
+}
+
+// Refresh all services for an instance
+app.post('/:id/refresh-all-services', async (c) => {
+  const id = c.req.param('id');
+
+  const instance = await db.query.instances.findFirst({
+    where: eq(instances.id, id)
+  });
+
+  if (!instance) {
+    return c.json({ error: 'Instance not found' }, 404);
+  }
+
+  const results = await refreshAllServicesForInstance(id, instance);
+
+  const verified = results.filter(r => r.status === 'verified').length;
+  const failed = results.filter(r => r.status === 'failed').length;
+
+  return c.json({
+    success: true,
+    verified,
+    failed,
+    total: results.length,
+    results,
+  });
 });
 
 export default app;

@@ -28,11 +28,14 @@ interface CreateInstanceDialogProps {
   existingEnvironments: InstanceEnvironment[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: (instance: Awaited<ReturnType<typeof api.instances.create>>) => void;
 }
 
 const environments: { value: InstanceEnvironment; label: string }[] = [
+  { value: 'sandbox', label: 'Sandbox' },
   { value: 'dev', label: 'Development' },
   { value: 'quality', label: 'Quality' },
+  { value: 'preprod', label: 'Pre-Production' },
   { value: 'production', label: 'Production' },
 ];
 
@@ -41,6 +44,7 @@ export function CreateInstanceDialog({
   existingEnvironments,
   open,
   onOpenChange,
+  onCreated,
 }: CreateInstanceDialogProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -68,7 +72,7 @@ export function CreateInstanceDialog({
 
     setLoading(true);
     try {
-      await api.instances.create({
+      const newInstance = await api.instances.create({
         systemId,
         environment: formData.environment as InstanceEnvironment,
         baseUrl: formData.baseUrl,
@@ -82,9 +86,9 @@ export function CreateInstanceDialog({
         customHeaderName: formData.authType === 'custom' ? formData.customHeaderName : undefined,
         customHeaderValue: formData.authType === 'custom' ? formData.customHeaderValue : undefined,
       });
-      toast.success('Instance created');
+      toast.success('Instance created. Services are being verified...');
       onOpenChange(false);
-      router.refresh();
+      onCreated?.(newInstance);
     } catch (error) {
       toast.error('Failed to create instance');
     } finally {

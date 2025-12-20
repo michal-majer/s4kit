@@ -8,6 +8,96 @@ import { desc, eq } from 'drizzle-orm';
 
 const app = new Hono();
 
+// Helper function to refresh entities for an instance service (can be called async)
+async function refreshInstanceServiceEntities(instanceServiceId: string): Promise<void> {
+  const instanceService = await db.query.instanceServices.findFirst({
+    where: eq(instanceServices.id, instanceServiceId)
+  });
+
+  if (!instanceService) return;
+
+  const [instance, systemService] = await Promise.all([
+    db.query.instances.findFirst({
+      where: eq(instances.id, instanceService.instanceId)
+    }),
+    db.query.systemServices.findFirst({
+      where: eq(systemServices.id, instanceService.systemServiceId)
+    })
+  ]);
+
+  if (!instance || !systemService) return;
+
+  try {
+    // Resolve auth with inheritance: instanceService > systemService > instance
+    let auth: any = null;
+
+    if (instanceService.authType && instanceService.authType !== 'none') {
+      auth = {
+        type: instanceService.authType,
+        username: instanceService.username,
+        password: instanceService.password,
+        config: instanceService.authConfig,
+        credentials: instanceService.credentials,
+      };
+    } else if (systemService.authType && systemService.authType !== 'none') {
+      auth = {
+        type: systemService.authType,
+        username: systemService.username,
+        password: systemService.password,
+        config: systemService.authConfig,
+        credentials: systemService.credentials,
+      };
+    } else {
+      auth = {
+        type: instance.authType,
+        username: instance.username,
+        password: instance.password,
+        config: instance.authConfig,
+        credentials: instance.credentials,
+      };
+    }
+
+    const servicePath = instanceService.servicePathOverride || systemService.servicePath;
+
+    const metadataResult = await metadataParser.fetchMetadata({
+      baseUrl: instance.baseUrl,
+      servicePath,
+      auth,
+    });
+
+    if (metadataResult.error) {
+      await db.update(instanceServices)
+        .set({
+          verificationStatus: 'failed',
+          lastVerifiedAt: new Date(),
+          verificationError: metadataResult.error,
+        })
+        .where(eq(instanceServices.id, instanceServiceId));
+      return;
+    }
+
+    const entityNames = metadataResult.entities.map(e => e.name);
+
+    await db.update(instanceServices)
+      .set({
+        entities: entityNames,
+        verificationStatus: 'verified',
+        lastVerifiedAt: new Date(),
+        entityCount: entityNames.length,
+        verificationError: null,
+      })
+      .where(eq(instanceServices.id, instanceServiceId));
+  } catch (error: any) {
+    await db.update(instanceServices)
+      .set({
+        verificationStatus: 'failed',
+        lastVerifiedAt: new Date(),
+        verificationError: error.message || 'Failed to refresh entities',
+      })
+      .where(eq(instanceServices.id, instanceServiceId));
+  }
+}
+
 const instanceServiceSchema = z.object({
   instanceId: z.string().uuid(),
   systemServiceId: z.string().uuid(),
@@ -98,9 +188,10 @@ app.post('/', async (c) => {
     ...data 
   } = result.data;
 
-  const serviceData: any = { 
+  const serviceData: any = {
     ...data,
     entities: entities !== undefined ? entities : null,
+    verificationStatus: 'pending',
   };
 
   if (authType) {
@@ -143,6 +234,11 @@ app.post('/', async (c) => {
   if (!newService) {
     return c.json({ error: 'Failed to create instance service' }, 500);
   }
+
+  // Trigger async verification (non-blocking)
+  refreshInstanceServiceEntities(newService.id).catch((err) => {
+    console.error('Auto-verification failed for instance service:', newService.id, err);
+  });
 
   const { username: _, password: __, credentials: ___, ...safeService } = newService;
   return c.json(safeService, 201);
@@ -384,32 +480,46 @@ app.post('/:id/refresh-entities', async (c) => {
     });
     
     if (metadataResult.error) {
-      return c.json({ 
+      // Update verification status to failed
+      await db.update(instanceServices)
+        .set({
+          verificationStatus: 'failed',
+          lastVerifiedAt: new Date(),
+          verificationError: metadataResult.error,
+        })
+        .where(eq(instanceServices.id, id));
+
+      return c.json({
         error: metadataResult.error,
-        entities: []
+        entities: [],
+        verificationStatus: 'failed',
       }, 400);
     }
-    
+
     // Extract entity names
     const entityNames = metadataResult.entities.map(e => e.name);
-    
-    // Update the instance service with new entities
+
+    // Update the instance service with new entities and verification status
     const [updated] = await db.update(instanceServices)
-      .set({ 
+      .set({
         entities: entityNames,
+        verificationStatus: 'verified',
+        lastVerifiedAt: new Date(),
+        entityCount: entityNames.length,
+        verificationError: null,
       })
       .where(eq(instanceServices.id, id))
       .returning();
-    
+
     if (!updated) {
       return c.json({ error: 'Failed to update instance service' }, 500);
     }
-    
+
     const { username: _, password: __, credentials: ___, ...safeService } = updated;
-    
+
     // Resolve entities for response
     const resolvedEntities = updated.entities !== null ? updated.entities : (systemService.entities || []);
-    
+
     return c.json({
       ...safeService,
       entities: resolvedEntities,
@@ -417,9 +527,20 @@ app.post('/:id/refresh-entities', async (c) => {
     });
   } catch (error: any) {
     console.error('Failed to refresh entities:', error);
-    return c.json({ 
+
+    // Update verification status to failed
+    await db.update(instanceServices)
+      .set({
+        verificationStatus: 'failed',
+        lastVerifiedAt: new Date(),
+        verificationError: error.message || 'Failed to refresh entities',
+      })
+      .where(eq(instanceServices.id, id));
+
+    return c.json({
       error: error.message || 'Failed to refresh entities',
-      entities: []
+      entities: [],
+      verificationStatus: 'failed',
     }, 500);
   }
 });

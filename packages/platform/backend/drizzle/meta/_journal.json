@@ -43,6 +43,20 @@
       "when": 1766250000000,
       "tag": "0005_add_instance_service_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1766350000000,
+      "tag": "0006_service_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1766450000000,
+      "tag": "0007_add_environments",
+      "breakpoints": true
     }
   ]
 }

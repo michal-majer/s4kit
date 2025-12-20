@@ -41,7 +41,6 @@ export function CreateServiceDialog({ systems, trigger }: CreateServiceDialogPro
     alias: '',
     servicePath: '',
     description: '',
-    entities: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,13 +58,10 @@ export function CreateServiceDialog({ systems, trigger }: CreateServiceDialogPro
         alias: formData.alias.toLowerCase().replace(/[^a-z0-9_-]/g, '_'),
         servicePath: formData.servicePath,
         description: formData.description || undefined,
-        entities: formData.entities
-          ? formData.entities.split(',').map((e) => e.trim()).filter(Boolean)
-          : [],
       });
-      toast.success('Service created');
+      toast.success('Service created. Entities will be auto-detected when linked to an instance.');
       setOpen(false);
-      setFormData({ systemId: '', name: '', alias: '', servicePath: '', description: '', entities: '' });
+      setFormData({ systemId: '', name: '', alias: '', servicePath: '', description: '' });
       router.refresh();
     } catch (error: any) {
       toast.error(error.message || 'Failed to create service');
@@ -161,18 +157,9 @@ export function CreateServiceDialog({ systems, trigger }: CreateServiceDialogPro
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="entities">Entities (comma-separated)</Label>
-              <Input
-                id="entities"
-                placeholder="Entity1, Entity2, Entity3"
-                value={formData.entities}
-                onChange={(e) => setFormData({ ...formData, entities: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                List of OData entity names this service exposes
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Entities will be automatically detected when this service is linked to an instance.
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

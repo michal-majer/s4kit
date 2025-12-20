@@ -13,11 +13,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { api, InstanceService, SystemService } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { RefreshCw } from 'lucide-react';
 
 interface InstanceServiceConfigDialogProps {
   instanceService: InstanceService;
@@ -34,7 +32,6 @@ export function InstanceServiceConfigDialog({
 }: InstanceServiceConfigDialogProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [refreshingEntities, setRefreshingEntities] = useState(false);
   const [formData, setFormData] = useState({
     servicePathOverride: instanceService.servicePathOverride || '',
     useServicePathOverride: !!instanceService.servicePathOverride,
@@ -70,20 +67,6 @@ export function InstanceServiceConfigDialog({
       });
     }
   }, [instanceService, open]);
-
-  const handleRefreshEntities = async () => {
-    setRefreshingEntities(true);
-    try {
-      const result = await api.instanceServices.refreshEntities(instanceService.id);
-      toast.success(`Refreshed ${result.refreshedCount || result.entities?.length || 0} entities`);
-      router.refresh();
-      onOpenChange(false);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to refresh entities');
-    } finally {
-      setRefreshingEntities(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -132,9 +115,6 @@ export function InstanceServiceConfigDialog({
       setLoading(false);
     }
   };
-
-  const resolvedEntities = instanceService.entities || systemService.entities || [];
-  const entityCount = resolvedEntities.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -317,37 +297,6 @@ export function InstanceServiceConfigDialog({
                 )}
               </div>
             )}
-          </div>
-
-          {/* Entities */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Entities</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline">{entityCount} entities</Badge>
-                  {instanceService.hasEntityOverride && (
-                    <Badge variant="secondary">Instance Override</Badge>
-                  )}
-                  {!instanceService.hasEntityOverride && (
-                    <span className="text-xs text-muted-foreground">Inherited from service</span>
-                  )}
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleRefreshEntities}
-                disabled={refreshingEntities}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${refreshingEntities ? 'animate-spin' : ''}`} />
-                {refreshingEntities ? 'Syncing...' : 'Sync from Instance'}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Sync entities from the instance metadata. This will create an entity override for this instance.
-            </p>
           </div>
 
           <DialogFooter>
