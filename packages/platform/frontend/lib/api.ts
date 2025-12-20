@@ -262,9 +262,12 @@ export const api = {
   },
 
   instanceServices: {
-    list: (instanceId?: string) => {
-      const params = instanceId ? `?instanceId=${instanceId}` : '';
-      return fetchAPI<InstanceService[]>(`/admin/instance-services${params}`);
+    list: (params?: { instanceId?: string; systemServiceId?: string }) => {
+      const searchParams = new URLSearchParams();
+      if (params?.instanceId) searchParams.set('instanceId', params.instanceId);
+      if (params?.systemServiceId) searchParams.set('systemServiceId', params.systemServiceId);
+      const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+      return fetchAPI<InstanceService[]>(`/admin/instance-services${query}`);
     },
     get: (id: string) => fetchAPI<InstanceService>(`/admin/instance-services/${id}`),
     create: (data: {

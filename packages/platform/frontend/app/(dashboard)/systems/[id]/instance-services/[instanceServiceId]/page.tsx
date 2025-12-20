@@ -17,10 +17,11 @@ export default async function InstanceServicePage({ params, searchParams }: Page
       api.instanceServices.get(instanceServiceId),
     ]);
 
-    // Get related data
-    const [instance, systemService] = await Promise.all([
+    // Get related data and sibling services (same system service across environments)
+    const [instance, systemService, siblingServices] = await Promise.all([
       api.instances.get(instanceService.instanceId),
       api.systemServices.get(instanceService.systemServiceId),
+      api.instanceServices.list({ systemServiceId: instanceService.systemServiceId }),
     ]);
 
     // Verify the service belongs to this system
@@ -35,6 +36,7 @@ export default async function InstanceServicePage({ params, searchParams }: Page
           systemService={systemService}
           instance={instance}
           system={system}
+          siblingServices={siblingServices}
         />
       </div>
     );

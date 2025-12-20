@@ -4,7 +4,7 @@ import { instanceServices, systemServices, instances } from '../../db/schema';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 const app = new Hono();
 
@@ -119,12 +119,22 @@ const instanceServiceSchema = z.object({
   credentials: z.any().optional(),
 });
 
-// List instance services (optionally by instanceId)
+// List instance services (optionally by instanceId or systemServiceId)
 app.get('/', async (c) => {
   const instanceId = c.req.query('instanceId');
-  
+  const systemServiceId = c.req.query('systemServiceId');
+
+  // Build where clause based on provided filters
+  const whereConditions = [];
+  if (instanceId) {
+    whereConditions.push(eq(instanceServices.instanceId, instanceId));
+  }
+  if (systemServiceId) {
+    whereConditions.push(eq(instanceServices.systemServiceId, systemServiceId));
+  }
+
   const services = await db.query.instanceServices.findMany({
-    where: instanceId ? eq(instanceServices.instanceId, instanceId) : undefined,
+    where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
     orderBy: [desc(instanceServices.createdAt)]
   });
   
