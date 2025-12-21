@@ -1,111 +1,210 @@
----
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
----
+# S4Kit SDK - AI Assistant Guide
 
-Default to using Bun instead of Node.js.
+## Package Overview
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+The S4Kit SDK (`s4kit`) is a lightweight, type-safe TypeScript client for SAP S/4HANA integration via the S4Kit platform. It provides a clean API for CRUD operations on SAP OData entities.
 
-## APIs
+## Architecture
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+```
+S4Kit (client.ts)
+    ├── HttpClient (http-client.ts)  - HTTP requests via ky
+    ├── Proxy (proxy.ts)             - Dynamic entity handlers
+    └── QueryBuilder (query-builder.ts) - OData query params
+```
 
-## Testing
+### Key Design Patterns
 
-Use `bun test` to run tests.
+**Dynamic Proxy Pattern**: Entity handlers are created dynamically at runtime using JavaScript Proxy. This allows `client.sap.AnyEntity.list()` to work without pre-defining entity types.
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+```typescript
+// proxy.ts creates handlers dynamically
+client.sap.A_BusinessPartner.list()  // Works without defining A_BusinessPartner
+client.sap.SalesOrder.get('12345')   // Any entity name works
+```
 
-test("hello world", () => {
-  expect(1).toBe(1);
+**Connection/Service Headers**: The SDK uses custom headers to route requests:
+- `X-S4Kit-Connection` - Target SAP instance
+- `X-S4Kit-Service` - OData service (optional, auto-resolved)
+
+## File Structure
+
+```
+src/
+├── index.ts          # Public exports
+├── client.ts         # S4Kit main class
+├── http-client.ts    # HTTP client wrapper (ky)
+├── proxy.ts          # Dynamic entity proxy
+├── query-builder.ts  # OData query string builder
+├── types.ts          # TypeScript interfaces
+├── typed-helpers.ts  # Type-safe helper functions
+└── errors.ts         # Error handling
+test/
+└── integration.test.ts  # Integration tests
+examples/
+└── usage.ts          # Example code
+```
+
+## Development Commands
+
+```bash
+bun install           # Install dependencies
+bun run dev           # Watch mode (build on change)
+bun run build         # Build distribution (CJS + ESM + types)
+bun test              # Run tests
+bun test --watch      # Watch mode tests
+```
+
+## Build Output
+
+The SDK builds to `dist/` with dual format:
+- `dist/index.js` - CommonJS
+- `dist/index.mjs` - ES Module
+- `dist/index.d.ts` - TypeScript declarations
+
+## Core Interfaces
+
+### S4KitConfig
+```typescript
+interface S4KitConfig {
+  apiKey: string;           // Required: Platform API key
+  baseUrl?: string;         // Default: https://api.s4kit.com
+  connection?: string;      // Default SAP instance alias
+  service?: string;         // Default OData service (optional)
+}
+```
+
+### QueryOptions
+```typescript
+interface QueryOptions<T = any> {
+  select?: Array<keyof T>;  // $select
+  filter?: string;          // $filter
+  top?: number;             // $top
+  skip?: number;            // $skip
+  orderBy?: string;         // $orderby
+  expand?: string[];        // $expand
+  connection?: string;      // Override instance
+  service?: string;         // Override service
+}
+```
+
+### EntityHandler
+```typescript
+interface EntityHandler<T = any> {
+  list(options?: QueryOptions<T>): Promise<T[]>;
+  get(id: string | number, options?: QueryOptions<T>): Promise<T>;
+  create(data: T, options?: QueryOptions<T>): Promise<T>;
+  update(id: string | number, data: Partial<T>, options?: QueryOptions<T>): Promise<T>;
+  delete(id: string | number, options?: QueryOptions<T>): Promise<void>;
+}
+```
+
+## Usage Examples
+
+```typescript
+import { S4Kit } from 's4kit';
+
+const client = new S4Kit({
+  apiKey: 'sk_live_...',
+  connection: 'erp-prod'
+});
+
+// List entities with filtering
+const partners = await client.sap.A_BusinessPartner.list({
+  select: ['BusinessPartner', 'BusinessPartnerName'],
+  filter: "BusinessPartnerCategory eq '1'",
+  top: 10
+});
+
+// Get single entity
+const partner = await client.sap.A_BusinessPartner.get('12345');
+
+// Create entity
+const newPartner = await client.sap.A_BusinessPartner.create({
+  BusinessPartnerCategory: '1',
+  BusinessPartnerName: 'New Company'
+});
+
+// Update entity
+await client.sap.A_BusinessPartner.update('12345', {
+  BusinessPartnerName: 'Updated Name'
+});
+
+// Delete entity
+await client.sap.A_BusinessPartner.delete('12345');
+
+// Override connection per request
+await client.sap.A_SalesOrder.list({
+  connection: 'erp-dev',  // Use different instance
+  top: 5
 });
 ```
 
-## Frontend
+## Testing
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+Tests use the public Northwind OData service for integration testing:
 
-Server:
+```typescript
+import { describe, test, expect } from 'bun:test';
 
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
+describe('S4Kit', () => {
+  test('should list entities', async () => {
+    const client = new S4Kit({ apiKey: 'test', baseUrl: '...' });
+    const results = await client.sap.Products.list({ top: 5 });
+    expect(results.length).toBeLessThanOrEqual(5);
+  });
+});
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+## Code Conventions
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
+### TypeScript
+- Use `import type` for type-only imports
+- Generic type `T` for entity types
+- Explicit return types on public methods
+
+### Error Handling
+- HTTP errors wrapped in custom error classes
+- OData error responses parsed and re-thrown
+
+### ID Formatting
+```typescript
+// String IDs wrapped in quotes
+formatId('ABC123') → "'ABC123'"
+// Numeric IDs passed as-is
+formatId(12345) → "12345"
 ```
 
-With the following `frontend.tsx`:
+## Bun-Specific Notes
 
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
+- Use `bun test` for running tests (not jest/vitest)
+- Use `bun run build` for production builds
+- Bun auto-loads `.env` - no dotenv needed
+- Use `bun:test` imports for test utilities
 
-// import .css files directly and it works
-import './index.css';
+## Adding New Features
 
-const root = createRoot(document.body);
+### Adding a new query option
+1. Add field to `QueryOptions` in `types.ts`
+2. Handle in `buildQuery()` in `query-builder.ts`
+3. Add tests for the new option
 
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
+### Adding a new HTTP method
+1. Add method to `HttpClient` in `http-client.ts`
+2. Add corresponding method to handler in `proxy.ts`
+3. Update `EntityHandler` interface in `types.ts`
 
-root.render(<Frontend />);
-```
+## Dependencies
 
-Then, run index.ts
+| Package | Purpose |
+|---------|---------|
+| ky | HTTP client (lightweight fetch wrapper) |
+| tsup | Build tool (bundler) |
+| typescript | Type checking |
 
-```sh
-bun --hot ./index.ts
-```
+## Important Considerations
 
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+- The `sap` property uses `any` type because entities are dynamic
+- For type safety, use typed helpers or generate types from metadata
+- Connection is required for requests (either in config or per-request)
+- Service is optional - platform auto-resolves from entity name

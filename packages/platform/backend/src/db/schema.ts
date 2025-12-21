@@ -4,11 +4,17 @@ import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, uni
 export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 'btp', 'other']);
 export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox', 'dev', 'quality', 'preprod', 'production']);
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
+export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extended']);
 
 // Organizations table
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+
+  // Logging configuration (organization defaults)
+  defaultLogLevel: logLevelEnum('default_log_level').default('standard').notNull(),
+  logRetentionDays: integer('log_retention_days').default(90).notNull(),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -124,26 +130,29 @@ export const instanceServices = pgTable('instance_services', {
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
-  
+
   // Security fields
   keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
   keyPrefix: varchar('key_prefix', { length: 24 }).notNull(),
   keyLast4: varchar('key_last_4', { length: 4 }).notNull(),
-  
+
   // Metadata
   name: varchar('name', { length: 255 }).notNull(),
   description: varchar('description', { length: 1000 }),
-  
+
   // Rate limiting
   rateLimitPerMinute: integer('rate_limit_per_minute').default(60).notNull(),
   rateLimitPerDay: integer('rate_limit_per_day').default(10000).notNull(),
-  
+
+  // Logging configuration (null = inherit from organization)
+  logLevel: logLevelEnum('log_level'),  // null = use org default
+
   // Lifecycle
   expiresAt: timestamp('expires_at'),
   revoked: boolean('revoked').default(false).notNull(),
   revokedAt: timestamp('revoked_at'),
   revokedReason: varchar('revoked_reason', { length: 500 }),
-  
+
   // Audit
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: varchar('created_by', { length: 255 }),
@@ -166,19 +175,39 @@ export const apiKeyAccess = pgTable('api_key_access', {
   uniqueKeyInstanceService: unique().on(table.apiKeyId, table.instanceServiceId),
 }));
 
-// Request logs table
+// Request logs table - secure metadata-only logging (no body storage)
 export const requestLogs = pgTable('request_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
   apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'cascade' }).notNull(),
+
+  // Request metadata
   method: varchar('method', { length: 10 }).notNull(),
   path: varchar('path', { length: 500 }).notNull(),
+  entity: varchar('entity', { length: 100 }),  // Parsed entity name (e.g., A_BusinessPartner)
+  operation: varchar('operation', { length: 20 }),  // 'read' | 'create' | 'update' | 'delete'
+
+  // Response metadata
   statusCode: integer('status_code').notNull(),
-  responseTime: integer('response_time'),
-  sapResponseTime: integer('sap_response_time'),
-  requestBody: jsonb('request_body'),
-  responseBody: jsonb('response_body'),
-  requestHeaders: jsonb('request_headers'),
-  responseHeaders: jsonb('response_headers'),
-  errorMessage: varchar('error_message', { length: 2000 }),
+  success: boolean('success').default(true).notNull(),
+
+  // Performance metrics
+  responseTime: integer('response_time'),  // Total latency in ms
+  sapResponseTime: integer('sap_response_time'),  // SAP backend time in ms
+
+  // Size metrics (instead of storing bodies)
+  requestSize: integer('request_size'),  // Request body size in bytes
+  responseSize: integer('response_size'),  // Response body size in bytes
+  recordCount: integer('record_count'),  // Number of records returned
+
+  // Error handling (structured, no sensitive data)
+  errorCode: varchar('error_code', { length: 50 }),  // OData error code
+  errorCategory: varchar('error_category', { length: 20 }),  // 'auth' | 'permission' | 'validation' | 'server' | 'network'
+  errorMessage: varchar('error_message', { length: 500 }),  // Truncated, sanitized message
+
+  // Audit trail
+  requestId: varchar('request_id', { length: 36 }),  // Correlation ID for tracing
+  clientIpHash: varchar('client_ip_hash', { length: 64 }),  // SHA-256 of client IP (privacy-preserving)
+  userAgent: varchar('user_agent', { length: 255 }),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
