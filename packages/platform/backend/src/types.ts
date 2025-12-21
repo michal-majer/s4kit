@@ -12,19 +12,40 @@ export type PredefinedService = InferSelectModel<typeof predefinedServices>;
 // Entity-level permissions: { "A_BusinessPartner": ["read"], "A_SalesOrder": ["create", "read", "update", "delete"] }
 export type EntityPermissions = Record<string, string[]>;
 
+// Error categories for structured error logging
+export type ErrorCategory = 'auth' | 'permission' | 'validation' | 'server' | 'network' | 'timeout';
+
+// Secure log data - metadata only, no body content
+export type SecureLogData = {
+  // Entity context
+  entity?: string;
+  operation?: 'read' | 'create' | 'update' | 'delete';
+
+  // Performance
+  sapResponseTime?: number;
+
+  // Size metrics (instead of body content)
+  requestSize?: number;
+  responseSize?: number;
+  recordCount?: number;
+
+  // Error handling (structured)
+  errorCode?: string;
+  errorCategory?: ErrorCategory;
+  errorMessage?: string;
+
+  // Audit
+  requestId: string;
+  clientIpHash?: string;
+  userAgent?: string;
+};
+
 export type Variables = {
   apiKey: ApiKey;
   instance: Instance;
   systemService: SystemService;
   instanceService: InstanceService;
   entityPermissions: EntityPermissions;
-  // Request logging data
-  logData?: {
-    sapResponseTime?: number;
-    requestBody?: any;
-    responseBody?: any;
-    requestHeaders?: Record<string, string>;
-    responseHeaders?: Record<string, string>;
-    errorMessage?: string;
-  };
+  // Secure request logging data - no body storage
+  logData?: SecureLogData;
 };

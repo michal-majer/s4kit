@@ -4,8 +4,17 @@ import { rateLimitMiddleware } from '../../middleware/rate-limit';
 import { loggingMiddleware } from '../../middleware/logging';
 import { accessResolver } from '../../services/access-resolver';
 import { sapClient } from '../../services/sap-client';
-import { sanitizeHeadersFromHeaders } from '../../utils/header-sanitizer';
-import type { Variables, Instance, SystemService, InstanceService } from '../../types';
+import {
+  generateRequestId,
+  hashClientIp,
+  extractEntity,
+  methodToOperation,
+  categorizeError,
+  calculateSize,
+  countRecords,
+  sanitizeErrorMessage,
+} from '../../utils/log-helpers';
+import type { Variables, Instance, SystemService, InstanceService, SecureLogData } from '../../types';
 
 const app = new Hono<{ Variables: Variables }>();
 
@@ -49,27 +58,59 @@ function resolveAuth(instance: Instance, systemService: SystemService, instanceS
   };
 }
 
+/**
+ * Get client IP from request headers (handles proxies)
+ */
+function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
+  // Check common proxy headers
+  const forwarded = c.req.header('x-forwarded-for');
+  if (forwarded) {
+    // Take the first IP in the chain (original client)
+    return forwarded.split(',')[0].trim();
+  }
+
+  const realIp = c.req.header('x-real-ip');
+  if (realIp) return realIp;
+
+  return undefined;
+}
+
 app.all('/*', async (c) => {
+  // Generate request ID for correlation
+  const requestId = generateRequestId();
+
+  // Initialize log data with audit info
+  const logData: SecureLogData = {
+    requestId,
+    clientIpHash: hashClientIp(getClientIp(c)),
+    userAgent: c.req.header('user-agent')?.substring(0, 255),
+  };
+
   const instance = c.get('instance');
   const systemService = c.get('systemService');
   const instanceService = c.get('instanceService');
   const entityPermissions = c.get('entityPermissions');
-  
+
   // Extract entity path (strip /api/proxy prefix)
   const entityPath = c.req.path.replace(/^\/api\/proxy\/?/, '');
-  
-  // Extract entity name (first segment)
-  // e.g. A_BusinessPartner('123') -> A_BusinessPartner
-  const entityMatch = entityPath.match(/^([A-Za-z0-9_]+)/);
-  const entity: string = entityMatch?.[1] ?? '';
+
+  // Extract entity name and operation
+  const entity = extractEntity(c.req.path);
+  const method = c.req.method || 'GET';
+  const operation = methodToOperation(method);
+
+  logData.entity = entity;
+  logData.operation = operation;
 
   // Check entity-level permissions
-  const method = c.req.method || 'GET';
-  const operation = accessResolver.methodToOperation(method);
-  
-  if (!accessResolver.checkEntityPermission(entityPermissions, entity, operation)) {
-    return c.json({ 
-      error: `Operation '${operation}' not allowed on entity '${entity}'` 
+  if (!accessResolver.checkEntityPermission(entityPermissions, entity || '', operation || 'read')) {
+    logData.errorCode = 'FORBIDDEN';
+    logData.errorCategory = 'permission';
+    logData.errorMessage = `Operation '${operation}' not allowed on entity '${entity}'`;
+    c.set('logData', logData);
+
+    return c.json({
+      error: `Operation '${operation}' not allowed on entity '${entity}'`
     }, 403);
   }
 
@@ -85,18 +126,15 @@ app.all('/*', async (c) => {
   // Resolve auth with inheritance
   const authConfig = resolveAuth(instance, systemService, instanceService);
 
-  // Capture request data for logging (sanitize sensitive headers)
-  const requestHeaders = c.req.raw.headers 
-    ? sanitizeHeadersFromHeaders(c.req.raw.headers)
-    : {};
-
-  // Capture request body (before it's consumed)
-  let requestBody: any = undefined;
+  // Capture request body size (not content)
+  let requestBody: unknown = undefined;
   if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
     try {
       requestBody = await c.req.json();
+      logData.requestSize = calculateSize(requestBody);
     } catch {
-      // Body might be empty or invalid, ignore
+      // Body might be empty or invalid
+      logData.requestSize = 0;
     }
   }
 
@@ -104,7 +142,7 @@ app.all('/*', async (c) => {
     // Get query parameters and ensure all values are strings
     const rawQueryParams = c.req.query();
     const queryParams: Record<string, string> = {};
-    
+
     // Convert all query params to strings (Hono may return string | string[])
     for (const [key, value] of Object.entries(rawQueryParams)) {
       if (Array.isArray(value)) {
@@ -114,13 +152,12 @@ app.all('/*', async (c) => {
         queryParams[key] = String(value);
       }
     }
-    
+
     console.log('Proxy request:', {
+      requestId,
       method: c.req.method,
       path: fullPath,
-      queryParams,
-      entityPath,
-      rawQueryString: c.req.url.split('?')[1] || ''
+      entity,
     });
 
     const result = await sapClient.requestWithAuth({
@@ -136,88 +173,72 @@ app.all('/*', async (c) => {
 
     // Extract SAP response time from result if available
     let sapResponseTime: number | undefined = undefined;
-    let responseBodyForLog = result;
-    if (result && typeof result === 'object' && (result as any).__sapResponseTime !== undefined) {
-      sapResponseTime = (result as any).__sapResponseTime;
+    let responseData = result;
+    if (result && typeof result === 'object' && (result as Record<string, unknown>).__sapResponseTime !== undefined) {
+      sapResponseTime = (result as Record<string, unknown>).__sapResponseTime as number;
       // Remove the internal timing field from the response
-      const { __sapResponseTime, ...cleanResult } = result as any;
-      responseBodyForLog = cleanResult;
+      const { __sapResponseTime, ...cleanResult } = result as Record<string, unknown>;
+      responseData = cleanResult;
     }
 
-    // Store logging data in context
-    // Note: Response headers will be captured in the logging middleware
-    c.set('logData', {
-      sapResponseTime,
-      // Truncate large bodies to prevent database bloat (10KB limit)
-      requestBody: requestBody ? (JSON.stringify(requestBody).length > 10000 ? { truncated: true, size: JSON.stringify(requestBody).length } : requestBody) : undefined,
-      responseBody: responseBodyForLog ? (JSON.stringify(responseBodyForLog).length > 10000 ? { truncated: true, size: JSON.stringify(responseBodyForLog).length } : responseBodyForLog) : undefined,
-      requestHeaders,
-      responseHeaders: {}, // Will be populated in middleware
-    });
+    // Capture response metadata (not content)
+    logData.sapResponseTime = sapResponseTime;
+    logData.responseSize = calculateSize(responseData);
+    logData.recordCount = countRecords(responseData);
 
-    return c.json(responseBodyForLog || result);
-  } catch (error: any) {
+    // Set log data in context
+    c.set('logData', logData);
+
+    return c.json(responseData || result);
+  } catch (error: unknown) {
+    const err = error as {
+      message?: string;
+      status?: number;
+      odataError?: { code?: string; message?: string; details?: unknown; innererror?: unknown };
+      response?: Response & { status: number; statusText: string; headers: Headers };
+      code?: string;
+    };
+
     console.error('Proxy error:', {
-      message: error.message,
-      status: error.status || error.response?.status,
-      odataError: error.odataError,
-      response: error.response ? {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        headers: Object.fromEntries(error.response.headers.entries())
-      } : undefined,
-      stack: error.stack
+      requestId,
+      message: err.message,
+      status: err.status || err.response?.status,
+      odataError: err.odataError,
     });
-    
-    // Extract error message for logging
-    let errorMessage: string | undefined = undefined;
-    if (error.odataError) {
-      errorMessage = error.odataError.message || error.message;
-    } else {
-      errorMessage = error.message || 'Internal Proxy Error';
-      if (error.response?.statusText) {
-        errorMessage = `${errorMessage}: ${error.response.statusText}`;
-      }
-    }
-    
-    // Store error info in context for logging
-    const errorResponseHeaders: Record<string, string> = {};
-    if (error.response) {
-      error.response.headers.forEach((value: string, key: string) => {
-        errorResponseHeaders[key] = value;
-      });
-    }
-    
-    c.set('logData', {
-      sapResponseTime: undefined, // Could track error timing too if needed
-      requestBody: requestBody ? JSON.stringify(requestBody).length > 10000 ? { truncated: true, size: JSON.stringify(requestBody).length } : requestBody : undefined,
-      responseBody: undefined, // No response body for errors
-      requestHeaders,
-      responseHeaders: errorResponseHeaders,
-      errorMessage: errorMessage.length > 2000 ? errorMessage.substring(0, 2000) : errorMessage,
-    });
-    
+
+    // Extract error info for structured logging
+    const statusCode = err.status || err.response?.status || 500;
+    const errorCode = err.odataError?.code || err.code || 'PROXY_ERROR';
+    const errorMessage = err.odataError?.message || err.message || 'Internal Proxy Error';
+
+    // Set error log data (no body content)
+    logData.errorCode = errorCode;
+    logData.errorCategory = categorizeError(statusCode, errorCode, errorMessage);
+    logData.errorMessage = sanitizeErrorMessage(errorMessage);
+    logData.sapResponseTime = undefined;
+
+    c.set('logData', logData);
+
     // Return structured OData error if available
-    if (error.odataError) {
+    if (err.odataError) {
       return c.json({
         error: {
-          code: error.odataError.code,
-          message: error.odataError.message,
-          details: error.odataError.details,
-          innererror: error.odataError.innererror,
+          code: err.odataError.code,
+          message: err.odataError.message,
+          details: err.odataError.details,
+          innererror: err.odataError.innererror,
         }
-      }, error.status || 500);
+      }, statusCode);
     }
-    
+
     // Pass through SAP errors or generic error
-    const status = error.status || error.response?.status || 500;
-    const message = error.message || 'Internal Proxy Error';
-    
+    const message = err.message || 'Internal Proxy Error';
+
     // Try to extract more error details
-    let errorDetails: any = error.response?.statusText;
-    if (error.response) {
+    let errorDetails: unknown = err.response?.statusText;
+    if (err.response) {
       try {
-        const errorText = await error.response.text();
+        const errorText = await err.response.text();
         if (errorText) {
           try {
             errorDetails = JSON.parse(errorText);
@@ -229,15 +250,15 @@ app.all('/*', async (c) => {
         // Ignore errors when trying to read response
       }
     }
-    
-    return c.json({ 
-      error: { 
-        code: 'PROXY_ERROR', 
-        message, 
+
+    return c.json({
+      error: {
+        code: 'PROXY_ERROR',
+        message,
         details: errorDetails,
-        originalError: process.env.NODE_ENV === 'development' ? error.message : undefined
-      } 
-    }, status);
+        requestId, // Include for support correlation
+      }
+    }, statusCode);
   }
 });
 

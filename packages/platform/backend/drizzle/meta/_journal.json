@@ -57,6 +57,13 @@
       "when": 1766450000000,
       "tag": "0007_add_environments",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1766550000000,
+      "tag": "0008_secure_logging",
+      "breakpoints": true
     }
   ]
 }

@@ -5,12 +5,13 @@ import { Server, Key, Activity, BarChart3 } from 'lucide-react';
 
 async function getStats() {
   try {
-    const [systems, apiKeys, logs] = await Promise.all([
+    const [systems, apiKeys, logsResponse] = await Promise.all([
       api.systems.list().catch(() => []),
       api.apiKeys.list().catch(() => []),
-      api.logs.list({ limit: 100 }).catch(() => []),
+      api.logs.list({ limit: 100 }).catch(() => ({ data: [], pagination: { limit: 100, offset: 0, hasMore: false } })),
     ]);
 
+    const logs = logsResponse.data;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayLogs = logs.filter((log) => new Date(log.createdAt) >= today);
