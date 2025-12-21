@@ -64,6 +64,13 @@
       "when": 1766550000000,
       "tag": "0008_secure_logging",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1766650000000,
+      "tag": "0009_logging_config",
+      "breakpoints": true
     }
   ]
 }

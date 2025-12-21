@@ -4,11 +4,17 @@ import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, uni
 export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 'btp', 'other']);
 export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox', 'dev', 'quality', 'preprod', 'production']);
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
+export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extended']);
 
 // Organizations table
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+
+  // Logging configuration (organization defaults)
+  defaultLogLevel: logLevelEnum('default_log_level').default('standard').notNull(),
+  logRetentionDays: integer('log_retention_days').default(90).notNull(),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -124,26 +130,29 @@ export const instanceServices = pgTable('instance_services', {
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
-  
+
   // Security fields
   keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
   keyPrefix: varchar('key_prefix', { length: 24 }).notNull(),
   keyLast4: varchar('key_last_4', { length: 4 }).notNull(),
-  
+
   // Metadata
   name: varchar('name', { length: 255 }).notNull(),
   description: varchar('description', { length: 1000 }),
-  
+
   // Rate limiting
   rateLimitPerMinute: integer('rate_limit_per_minute').default(60).notNull(),
   rateLimitPerDay: integer('rate_limit_per_day').default(10000).notNull(),
-  
+
+  // Logging configuration (null = inherit from organization)
+  logLevel: logLevelEnum('log_level'),  // null = use org default
+
   // Lifecycle
   expiresAt: timestamp('expires_at'),
   revoked: boolean('revoked').default(false).notNull(),
   revokedAt: timestamp('revoked_at'),
   revokedReason: varchar('revoked_reason', { length: 500 }),
-  
+
   // Audit
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: varchar('created_by', { length: 255 }),

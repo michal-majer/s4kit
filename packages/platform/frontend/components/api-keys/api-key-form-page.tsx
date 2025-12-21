@@ -5,8 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { InstanceServiceSelector } from './instance-service-selector';
-import { ApiKey, InstanceService, System, Instance, SystemService } from '@/lib/api';
+import { ApiKey, InstanceService, System, Instance, SystemService, LogLevel } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { KeyDisplay } from './key-display';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -45,6 +52,7 @@ export function ApiKeyFormPage({
     description,
     rateLimitPerMinute,
     rateLimitPerDay,
+    logLevel,
     expiresAt,
     accessGrants,
     aliasConflicts,
@@ -55,6 +63,7 @@ export function ApiKeyFormPage({
     setDescription,
     setRateLimitPerMinute,
     setRateLimitPerDay,
+    setLogLevel,
     setExpiresAt,
     handleMultiSelectChange,
     setPermissionPreset,
@@ -253,6 +262,26 @@ export function ApiKeyFormPage({
                 value={rateLimitPerDay}
                 onChange={(e) => setRateLimitPerDay(parseInt(e.target.value) || 10000)}
               />
+            </div>
+            <div>
+              <Label htmlFor="logLevel">Logging Level</Label>
+              <Select
+                value={logLevel || 'inherit'}
+                onValueChange={(v) => setLogLevel(v === 'inherit' ? '' : v as LogLevel)}
+              >
+                <SelectTrigger id="logLevel">
+                  <SelectValue placeholder="Inherit from organization" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">Inherit from organization</SelectItem>
+                  <SelectItem value="minimal">Minimal (method, path, status only)</SelectItem>
+                  <SelectItem value="standard">Standard (+ timing, sizes)</SelectItem>
+                  <SelectItem value="extended">Extended (+ error details)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Controls how much detail is logged for requests using this key
+              </p>
             </div>
           </TabsContent>
         </Tabs>

@@ -110,6 +110,8 @@ export interface PredefinedService {
   createdAt: string;
 }
 
+export type LogLevel = 'minimal' | 'standard' | 'extended';
+
 export interface ApiKey {
   id: string;
   name: string;
@@ -117,6 +119,7 @@ export interface ApiKey {
   displayKey: string;
   rateLimitPerMinute: number;
   rateLimitPerDay: number;
+  logLevel?: LogLevel;  // null = inherit from organization
   expiresAt?: string;
   revoked: boolean;
   createdAt: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { api, ApiKey, InstanceService, System, Instance, SystemService } from '@/lib/api';
+import { api, ApiKey, InstanceService, System, Instance, SystemService, LogLevel } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { AccessGrant, PermissionPreset, PRESET_CONFIG } from './access-grant-card';
@@ -149,6 +149,7 @@ export function useApiKeyForm({
   const [description, setDescription] = useState(apiKey?.description || '');
   const [rateLimitPerMinute, setRateLimitPerMinute] = useState(apiKey?.rateLimitPerMinute || 60);
   const [rateLimitPerDay, setRateLimitPerDay] = useState(apiKey?.rateLimitPerDay || 10000);
+  const [logLevel, setLogLevel] = useState<LogLevel | ''>(apiKey?.logLevel || '');
   const [expiresAt, setExpiresAt] = useState(
     apiKey?.expiresAt ? new Date(apiKey.expiresAt).toISOString().slice(0, 16) : ''
   );
@@ -206,6 +207,7 @@ export function useApiKeyForm({
       setDescription(apiKey.description || '');
       setRateLimitPerMinute(apiKey.rateLimitPerMinute);
       setRateLimitPerDay(apiKey.rateLimitPerDay);
+      setLogLevel(apiKey.logLevel || '');
       setExpiresAt(apiKey.expiresAt ? new Date(apiKey.expiresAt).toISOString().slice(0, 16) : '');
     }
   }, [apiKey]);
@@ -618,6 +620,7 @@ export function useApiKeyForm({
     setDescription('');
     setRateLimitPerMinute(60);
     setRateLimitPerDay(10000);
+    setLogLevel('');
     setExpiresAt('');
     setAccessGrants([]);
     setAliasConflicts([]);
@@ -640,6 +643,7 @@ export function useApiKeyForm({
     description,
     rateLimitPerMinute,
     rateLimitPerDay,
+    logLevel,
     expiresAt,
     accessGrants,
     aliasConflicts,
@@ -653,6 +657,7 @@ export function useApiKeyForm({
     setDescription,
     setRateLimitPerMinute,
     setRateLimitPerDay,
+    setLogLevel,
     setExpiresAt,
     setNewKey,
 
