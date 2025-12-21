@@ -110,6 +110,8 @@ export interface PredefinedService {
   createdAt: string;
 }
 
+export type LogLevel = 'minimal' | 'standard' | 'extended';
+
 export interface ApiKey {
   id: string;
   name: string;
@@ -117,26 +119,90 @@ export interface ApiKey {
   displayKey: string;
   rateLimitPerMinute: number;
   rateLimitPerDay: number;
+  logLevel?: LogLevel;  // null = inherit from organization
   expiresAt?: string;
   revoked: boolean;
   createdAt: string;
   lastUsedAt?: string;
 }
 
+// Secure request log - metadata only, no body content
+export type ErrorCategory = 'auth' | 'permission' | 'validation' | 'server' | 'network' | 'timeout';
+export type Operation = 'read' | 'create' | 'update' | 'delete';
+
 export interface RequestLog {
   id: string;
   apiKeyId: string;
+
+  // Request metadata
   method: string;
   path: string;
+  entity?: string;
+  operation?: Operation;
+
+  // Response metadata
   statusCode: number;
+  success: boolean;
+
+  // Performance metrics
   responseTime?: number;
   sapResponseTime?: number;
-  requestBody?: any;
-  responseBody?: any;
-  requestHeaders?: Record<string, string>;
-  responseHeaders?: Record<string, string>;
+
+  // Size metrics (no body content)
+  requestSize?: number;
+  responseSize?: number;
+  recordCount?: number;
+
+  // Error handling (structured)
+  errorCode?: string;
+  errorCategory?: ErrorCategory;
   errorMessage?: string;
+
+  // Audit trail
+  requestId?: string;
+  clientIpHash?: string;
+  userAgent?: string;
+
   createdAt: string;
+}
+
+export interface LogsResponse {
+  data: RequestLog[];
+  pagination: {
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+export interface LogAnalytics {
+  summary: {
+    totalRequests: number;
+    successCount: number;
+    errorCount: number;
+    avgResponseTime: number;
+    p50ResponseTime: number;
+    p95ResponseTime: number;
+    p99ResponseTime: number;
+    totalRequestBytes: number;
+    totalResponseBytes: number;
+  };
+  topEntities: Array<{
+    entity: string;
+    count: number;
+    successRate: number;
+    avgResponseTime: number;
+  }>;
+  errorDistribution: Array<{
+    category: ErrorCategory;
+    count: number;
+  }>;
+  hourlyStats: Array<{
+    hour: string;
+    count: number;
+    successCount: number;
+    avgResponseTime: number;
+  }>;
 }
 
 export interface AccessGrant {
@@ -338,12 +404,40 @@ export const api = {
   },
 
   logs: {
-    list: (params?: { limit?: number; offset?: number; apiKeyId?: string }) => {
+    list: (params?: {
+      limit?: number;
+      offset?: number;
+      apiKeyId?: string;
+      entity?: string;
+      operation?: Operation;
+      success?: boolean;
+      errorCategory?: ErrorCategory;
+      from?: string;
+      to?: string;
+    }) => {
       const searchParams = new URLSearchParams();
       if (params?.limit) searchParams.set('limit', params.limit.toString());
       if (params?.offset) searchParams.set('offset', params.offset.toString());
       if (params?.apiKeyId) searchParams.set('apiKeyId', params.apiKeyId);
-      return fetchAPI<RequestLog[]>(`/admin/logs?${searchParams}`);
+      if (params?.entity) searchParams.set('entity', params.entity);
+      if (params?.operation) searchParams.set('operation', params.operation);
+      if (params?.success !== undefined) searchParams.set('success', params.success.toString());
+      if (params?.errorCategory) searchParams.set('errorCategory', params.errorCategory);
+      if (params?.from) searchParams.set('from', params.from);
+      if (params?.to) searchParams.set('to', params.to);
+      return fetchAPI<LogsResponse>(`/admin/logs?${searchParams}`);
+    },
+    get: (id: string) => fetchAPI<RequestLog>(`/admin/logs/${id}`),
+    analytics: (params: {
+      from: string;
+      to: string;
+      apiKeyId?: string;
+    }) => {
+      const searchParams = new URLSearchParams();
+      searchParams.set('from', params.from);
+      searchParams.set('to', params.to);
+      if (params.apiKeyId) searchParams.set('apiKeyId', params.apiKeyId);
+      return fetchAPI<LogAnalytics>(`/admin/logs/analytics?${searchParams}`);
     },
   },
 };
