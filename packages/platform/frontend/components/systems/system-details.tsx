@@ -178,6 +178,14 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
   }, [system.type]);
 
   const handleServiceCreated = useCallback(async () => {
+    // Refresh system services to get the newly created service
+    try {
+      const updatedSystemServices = await api.systemServices.list(system.id);
+      setSystemServices(updatedSystemServices);
+    } catch (e) {
+      // Continue with polling even if system services refresh fails
+    }
+
     // Poll for updates until newly added services are verified
     const pollForUpdates = async (attempts = 0) => {
       if (attempts > 20) {
@@ -206,7 +214,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
 
     // Start polling after initial delay
     setTimeout(() => pollForUpdates(0), 500);
-  }, []);
+  }, [system.id]);
 
   const handleDeleteInstance = async (id: string) => {
     if (!confirm('Are you sure you want to delete this instance? All linked services will be removed.')) return;

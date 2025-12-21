@@ -142,6 +142,7 @@ export function useApiKeyForm({
   // Form state
   const [loading, setLoading] = useState(false);
   const [creatingInstanceService, setCreatingInstanceService] = useState(false);
+  const [savingGrant, setSavingGrant] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('basic');
 
@@ -465,6 +466,7 @@ export function useApiKeyForm({
     }
 
     if (isEditMode && grant.id) {
+      setSavingGrant(grant.id);
       try {
         await api.apiKeys.updateAccessGrant(apiKey!.id, grant.id, newPerms);
         setAccessGrants(prev => prev.map(g =>
@@ -472,6 +474,8 @@ export function useApiKeyForm({
         ));
       } catch (error: any) {
         toast.error(error.message || 'Failed to update permissions');
+      } finally {
+        setSavingGrant(null);
       }
     } else {
       setAccessGrants(prev => prev.map(g =>
@@ -516,6 +520,7 @@ export function useApiKeyForm({
     }
 
     if (isEditMode && grant.id) {
+      setSavingGrant(grant.id);
       try {
         await api.apiKeys.updateAccessGrant(apiKey!.id, grant.id, newPerms);
         setAccessGrants(prev => prev.map(g =>
@@ -523,6 +528,8 @@ export function useApiKeyForm({
         ));
       } catch (error: any) {
         toast.error(error.message || 'Failed to update permissions');
+      } finally {
+        setSavingGrant(null);
       }
     } else {
       setAccessGrants(prev => prev.map(g =>
@@ -581,7 +588,7 @@ export function useApiKeyForm({
           expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
         });
         toast.success('API key updated');
-        router.push('/api-keys');
+        router.push(`/api-keys/${apiKey!.id}`);
         router.refresh();
       } else {
         const result = await api.apiKeys.create({
@@ -634,6 +641,7 @@ export function useApiKeyForm({
     // State
     loading,
     creatingInstanceService,
+    savingGrant,
     newKey,
     activeTab,
     name,

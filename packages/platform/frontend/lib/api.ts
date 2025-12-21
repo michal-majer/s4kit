@@ -335,6 +335,26 @@ export const api = {
       fetchAPI<AccessGrant & { id: string }>(`/admin/api-keys/${id}/access/${grantId}`, { method: 'PATCH', body: JSON.stringify({ permissions }) }),
     deleteAccessGrant: (id: string, grantId: string) =>
       fetchAPI<{ success: boolean }>(`/admin/api-keys/${id}/access/${grantId}`, { method: 'DELETE' }),
+    rotate: (id: string, options?: { revokeReason?: string; newName?: string }) =>
+      fetchAPI<{
+        newKey: {
+          id: string;
+          name: string;
+          description?: string;
+          secretKey: string;
+          displayKey: string;
+          rateLimitPerMinute: number;
+          rateLimitPerDay: number;
+          expiresAt?: string;
+          createdAt: string;
+          accessGrantsCount: number;
+        };
+        revokedKey: {
+          id: string;
+          displayKey: string;
+        };
+        warning: string;
+      }>(`/admin/api-keys/${id}/rotate`, { method: 'POST', body: JSON.stringify(options || {}) }),
   },
 
   logs: {

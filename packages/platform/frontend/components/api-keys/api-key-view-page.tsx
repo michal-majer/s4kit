@@ -1,0 +1,413 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { PageHeader } from '@/components/common/page-header';
+import { api, ApiKey } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { toast } from 'sonner';
+import {
+  ArrowLeft,
+  Pencil,
+  RefreshCw,
+  ShieldOff,
+  Clock,
+  Key,
+  Calendar,
+  Activity,
+  Gauge,
+  ChevronDown,
+  ChevronRight,
+  Server,
+  Loader2,
+  Copy,
+  Check,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { RotateKeyDialog } from './rotate-key-dialog';
+import { RevokeKeyDialog } from './revoke-key-dialog';
+import { PRESET_CONFIG, ENV_BADGES, type PermissionPreset } from './access-grant-card';
+
+type KeyStatus = 'active' | 'revoked' | 'expired';
+
+function getKeyStatus(key: ApiKey): KeyStatus {
+  if (key.revoked) return 'revoked';
+  if (key.expiresAt && new Date(key.expiresAt) < new Date()) return 'expired';
+  return 'active';
+}
+
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMs < 0) {
+    const futureDays = Math.abs(diffDays);
+    if (futureDays === 0) return 'Today';
+    if (futureDays === 1) return 'Tomorrow';
+    if (futureDays < 7) return `in ${futureDays} days`;
+    return formatDate(dateString);
+  }
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return formatDate(dateString);
+}
+
+function detectPreset(permissions: Record<string, string[]>): PermissionPreset {
+  const defaultPerms = permissions['*'] || [];
+  if (defaultPerms.length === 0) return 'custom';
+  const sorted = [...defaultPerms].sort().join(',');
+  if (sorted === 'read') return 'read';
+  if (sorted === 'create,read,update') return 'read_write';
+  if (sorted === 'create,delete,read,update') return 'full';
+  return 'custom';
+}
+
+interface AccessGrantWithDetails {
+  id: string;
+  instanceServiceId: string;
+  permissions: Record<string, string[]>;
+  instance?: { id: string; environment: string } | null;
+  systemService?: { id: string; name: string; alias: string; entities?: string[] } | null;
+  system?: { id: string; name: string } | null;
+}
+
+interface ApiKeyViewPageProps {
+  apiKey: ApiKey;
+}
+
+export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
+  const router = useRouter();
+  const [rotateOpen, setRotateOpen] = useState(false);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [accessGrants, setAccessGrants] = useState<AccessGrantWithDetails[]>([]);
+  const [loadingGrants, setLoadingGrants] = useState(true);
+  const [expandedGrants, setExpandedGrants] = useState<Set<string>>(new Set());
+
+  const status = getKeyStatus(apiKey);
+  const isActive = status === 'active';
+
+  useEffect(() => {
+    api.apiKeys.getAccess(apiKey.id)
+      .then(grants => setAccessGrants(grants))
+      .catch(() => toast.error('Failed to load access grants'))
+      .finally(() => setLoadingGrants(false));
+  }, [apiKey.id]);
+
+  const handleCopyKey = () => {
+    navigator.clipboard.writeText(apiKey.displayKey);
+    setCopied(true);
+    toast.success('Key copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const toggleGrant = (grantId: string) => {
+    setExpandedGrants(prev => {
+      const next = new Set(prev);
+      if (next.has(grantId)) {
+        next.delete(grantId);
+      } else {
+        next.add(grantId);
+      }
+      return next;
+    });
+  };
+
+  const statusBadge = useMemo(() => {
+    if (status === 'revoked') {
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <ShieldOff className="h-3 w-3" />
+          Revoked
+        </Badge>
+      );
+    }
+    if (status === 'expired') {
+      return (
+        <Badge variant="secondary" className="gap-1 text-amber-600 border-amber-200 bg-amber-50">
+          <Clock className="h-3 w-3" />
+          Expired
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+        Active
+      </Badge>
+    );
+  }, [status]);
+
+  return (
+    <div className="flex flex-col gap-6 p-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/api-keys">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold">{apiKey.name}</h1>
+              {statusBadge}
+            </div>
+            {apiKey.description && (
+              <p className="text-muted-foreground mt-1">{apiKey.description}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {isActive && (
+            <>
+              <Button variant="outline" onClick={() => setRotateOpen(true)}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Rotate
+              </Button>
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setRevokeOpen(true)}
+              >
+                <ShieldOff className="mr-2 h-4 w-4" />
+                Revoke
+              </Button>
+            </>
+          )}
+          <Button asChild>
+            <Link href={`/api-keys/${apiKey.id}/edit`}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Key Display */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Key className="h-5 w-5 text-muted-foreground" />
+            <code className="text-sm bg-muted px-3 py-1.5 rounded-md font-mono">
+              {apiKey.displayKey}
+            </code>
+          </div>
+          <Button variant="ghost" size="icon" onClick={handleCopyKey}>
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Details Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <Calendar className="h-4 w-4" />
+            Created
+          </div>
+          <div className="font-medium">{formatDate(apiKey.createdAt)}</div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <Activity className="h-4 w-4" />
+            Last Used
+          </div>
+          <div className="font-medium">
+            {apiKey.lastUsedAt ? formatRelativeTime(apiKey.lastUsedAt) : 'Never'}
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <Clock className="h-4 w-4" />
+            Expires
+          </div>
+          <div className={cn(
+            "font-medium",
+            apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date() && "text-red-600"
+          )}>
+            {apiKey.expiresAt ? formatRelativeTime(apiKey.expiresAt) : 'Never'}
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+            <Gauge className="h-4 w-4" />
+            Rate Limits
+          </div>
+          <div className="font-medium">
+            {apiKey.rateLimitPerMinute}/min, {apiKey.rateLimitPerDay}/day
+          </div>
+        </Card>
+      </div>
+
+      {/* Services & Permissions */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Server className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Services & Permissions</h2>
+          <Badge variant="secondary" className="ml-2">
+            {accessGrants.length} {accessGrants.length === 1 ? 'service' : 'services'}
+          </Badge>
+        </div>
+
+        {loadingGrants ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : accessGrants.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">
+            No services configured for this API key.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {accessGrants.map((grant) => {
+              const preset = detectPreset(grant.permissions);
+              const env = grant.instance?.environment || 'unknown';
+              const systemName = grant.system?.name || 'System';
+              const serviceName = grant.systemService?.name || 'Unknown Service';
+              const availableEntities = grant.systemService?.entities;
+              const availableCount = Array.isArray(availableEntities) ? availableEntities.length : null;
+              const hasWildcard = !!grant.permissions['*']?.length;
+              const specificPermissions = Object.entries(grant.permissions).filter(
+                ([key]) => key !== '*'
+              );
+              const isExpanded = expandedGrants.has(grant.id);
+
+              return (
+                <div key={grant.id} className="border rounded-lg overflow-hidden">
+                  <Collapsible open={isExpanded} onOpenChange={() => toggleGrant(grant.id)}>
+                    <CollapsibleTrigger asChild>
+                      <button className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant="outline"
+                            className={cn('text-xs', ENV_BADGES[env] || 'bg-gray-100 text-gray-700')}
+                          >
+                            {env.toUpperCase()}
+                          </Badge>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground">{systemName}</span>
+                            <span className="text-muted-foreground">/</span>
+                            <span className="font-medium">{serviceName}</span>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {hasWildcard
+                              ? availableCount !== null
+                                ? `(all ${availableCount} entities)`
+                                : '(all entities)'
+                              : specificPermissions.length > 0
+                                ? `(${specificPermissions.length} entities)`
+                                : '(no entities)'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(PRESET_CONFIG[preset].color)}
+                          >
+                            {PRESET_CONFIG[preset].label}
+                          </Badge>
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="px-4 pb-4 border-t bg-muted/20">
+                        <div className="pt-3 space-y-2">
+                          {grant.permissions['*'] && (
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">Default for all entities:</span>{' '}
+                              <span className="font-medium">
+                                {grant.permissions['*'].join(', ')}
+                              </span>
+                            </div>
+                          )}
+                          {specificPermissions.length > 0 && (
+                            <div className="mt-3">
+                              <div className="text-sm text-muted-foreground mb-2">
+                                {grant.permissions['*'] ? 'Entity overrides:' : 'Entity permissions:'}
+                              </div>
+                              <div className="space-y-1">
+                                {specificPermissions.map(([entity, perms]) => (
+                                  <div
+                                    key={entity}
+                                    className="flex items-center justify-between text-sm bg-background px-3 py-1.5 rounded"
+                                  >
+                                    <code className="font-mono text-xs">{entity}</code>
+                                    <span className="text-muted-foreground">
+                                      {perms.join(', ')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {!grant.permissions['*'] && specificPermissions.length === 0 && (
+                            <div className="text-sm text-amber-600">
+                              No permissions configured
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* Dialogs */}
+      <RotateKeyDialog
+        apiKey={apiKey}
+        open={rotateOpen}
+        onOpenChange={setRotateOpen}
+        onSuccess={() => {
+          setRotateOpen(false);
+          router.refresh();
+        }}
+      />
+      <RevokeKeyDialog
+        apiKey={apiKey}
+        open={revokeOpen}
+        onOpenChange={setRevokeOpen}
+        onSuccess={() => {
+          setRevokeOpen(false);
+          router.push('/api-keys');
+          router.refresh();
+        }}
+      />
+    </div>
+  );
+}

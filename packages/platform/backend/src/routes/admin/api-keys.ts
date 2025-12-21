@@ -320,23 +320,33 @@ app.get('/:id/access', async (c) => {
     where: eq(apiKeyAccess.apiKeyId, id)
   });
   
-  // Enrich with instance and service info
+  // Enrich with instance, service, and system info
   const enrichedGrants = await Promise.all(grants.map(async (grant) => {
     const instService = await db.query.instanceServices.findFirst({
       where: eq(instanceServices.id, grant.instanceServiceId)
     });
-    
-    if (!instService) return { ...grant, instance: null, systemService: null };
-    
+
+    if (!instService) return { ...grant, instance: null, systemService: null, system: null };
+
     const [inst, svc] = await Promise.all([
       db.query.instances.findFirst({ where: eq(instances.id, instService.instanceId) }),
       db.query.systemServices.findFirst({ where: eq(systemServices.id, instService.systemServiceId) })
     ]);
-    
+
+    // Get system info
+    let system = null;
+    if (inst) {
+      const sys = await db.query.systems.findFirst({ where: eq(systems.id, inst.systemId) });
+      if (sys) {
+        system = { id: sys.id, name: sys.name };
+      }
+    }
+
     return {
       ...grant,
       instance: inst ? { id: inst.id, environment: inst.environment } : null,
-      systemService: svc ? { id: svc.id, name: svc.name, alias: svc.alias, entities: svc.entities } : null
+      systemService: svc ? { id: svc.id, name: svc.name, alias: svc.alias, entities: svc.entities } : null,
+      system
     };
   }));
   
@@ -492,16 +502,68 @@ app.post('/:id/revoke', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const result = revokeSchema.safeParse(body);
-  
+
   const reason = result.success ? result.data.reason : undefined;
-  
+
   const success = await apiKeyService.revokeKey(id, reason);
-  
+
   if (!success) {
     return c.json({ error: 'API key not found' }, 404);
   }
-  
+
   return c.json({ success: true, message: 'API key has been revoked' });
+});
+
+// Rotate API Key (create new key with same settings, revoke old)
+const rotateSchema = z.object({
+  revokeReason: z.string().max(500).optional(),
+  newName: z.string().min(1).max(255).optional(),
+});
+
+app.post('/:id/rotate', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const result = rotateSchema.safeParse(body);
+
+  const options = result.success ? result.data : {};
+
+  try {
+    const rotationResult = await apiKeyService.rotateKey(id, options);
+
+    // Fetch access grants for the new key
+    const newGrants = await db.query.apiKeyAccess.findMany({
+      where: eq(apiKeyAccess.apiKeyId, rotationResult.newKey.id)
+    });
+
+    return c.json({
+      newKey: {
+        id: rotationResult.newKey.id,
+        name: rotationResult.newKey.name,
+        description: rotationResult.newKey.description,
+        secretKey: rotationResult.newKey.key,
+        displayKey: rotationResult.newKey.displayKey,
+        rateLimitPerMinute: rotationResult.newKey.rateLimitPerMinute,
+        rateLimitPerDay: rotationResult.newKey.rateLimitPerDay,
+        expiresAt: rotationResult.newKey.expiresAt,
+        createdAt: rotationResult.newKey.createdAt,
+        accessGrantsCount: newGrants.length,
+      },
+      revokedKey: {
+        id: rotationResult.revokedKeyId,
+        displayKey: rotationResult.revokedKeyDisplayKey,
+      },
+      warning: 'Store the new key securely. It will not be shown again.'
+    }, 201);
+  } catch (error: any) {
+    if (error.message === 'API key not found') {
+      return c.json({ error: 'API key not found' }, 404);
+    }
+    if (error.message === 'Cannot rotate a revoked key') {
+      return c.json({ error: 'Cannot rotate a revoked key' }, 400);
+    }
+    console.error('Failed to rotate API key:', error);
+    return c.json({ error: 'Failed to rotate API key' }, 500);
+  }
 });
 
 // Delete API Key (also uses revoke for audit trail, but kept for REST compatibility)

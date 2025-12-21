@@ -243,5 +243,109 @@ export const apiKeyService = {
    */
   getMaskedKey: (keyPrefix: string, keyLast4: string): string => {
     return `${keyPrefix}...${keyLast4}`;
+  },
+
+  /**
+   * Rotate an API key - creates a new key with the same settings and revokes the old one
+   *
+   * @param oldKeyId - The UUID of the existing API key to rotate
+   * @param options - Optional settings for the rotation
+   * @returns The new key details and info about the revoked key
+   */
+  rotateKey: async (
+    oldKeyId: string,
+    options: {
+      revokeReason?: string;
+      newName?: string;
+    } = {}
+  ): Promise<{
+    newKey: GeneratedApiKey & {
+      id: string;
+      name: string;
+      description: string | null;
+      organizationId: string;
+      rateLimitPerMinute: number;
+      rateLimitPerDay: number;
+      expiresAt: Date | null;
+      createdAt: Date;
+    };
+    revokedKeyId: string;
+    revokedKeyDisplayKey: string;
+  }> => {
+    // Fetch the old key
+    const oldKey = await db.query.apiKeys.findFirst({
+      where: eq(apiKeys.id, oldKeyId)
+    });
+
+    if (!oldKey) {
+      throw new Error('API key not found');
+    }
+
+    if (oldKey.revoked) {
+      throw new Error('Cannot rotate a revoked key');
+    }
+
+    // Generate new key
+    const { randomUUID } = await import('crypto');
+    const newKeyId = randomUUID();
+    const generatedKey = apiKeyService.generateKey(newKeyId, 'live');
+
+    // Determine new name
+    const newName = options.newName || `${oldKey.name} (Rotated)`;
+
+    // Create the new key record with same settings
+    const [newKeyRecord] = await db.insert(apiKeys).values({
+      id: newKeyId,
+      name: newName,
+      description: oldKey.description,
+      organizationId: oldKey.organizationId,
+      rateLimitPerMinute: oldKey.rateLimitPerMinute,
+      rateLimitPerDay: oldKey.rateLimitPerDay,
+      expiresAt: oldKey.expiresAt,
+      keyHash: generatedKey.keyHash,
+      keyPrefix: generatedKey.keyPrefix,
+      keyLast4: generatedKey.keyLast4,
+      createdBy: oldKey.createdBy,
+    }).returning();
+
+    if (!newKeyRecord) {
+      throw new Error('Failed to create new API key');
+    }
+
+    // Copy all access grants from old key to new key
+    const { apiKeyAccess } = await import('../db/schema');
+    const oldGrants = await db.query.apiKeyAccess.findMany({
+      where: eq(apiKeyAccess.apiKeyId, oldKeyId)
+    });
+
+    if (oldGrants.length > 0) {
+      await db.insert(apiKeyAccess).values(
+        oldGrants.map(grant => ({
+          apiKeyId: newKeyId,
+          instanceServiceId: grant.instanceServiceId,
+          permissions: grant.permissions
+        }))
+      );
+    }
+
+    // Revoke the old key
+    const revokeReason = options.revokeReason || `Rotated to key ${generatedKey.keyPrefix}`;
+    await apiKeyService.revokeKey(oldKeyId, revokeReason);
+
+    return {
+      newKey: {
+        ...generatedKey,
+        id: newKeyRecord.id,
+        name: newKeyRecord.name,
+        description: newKeyRecord.description,
+        organizationId: newKeyRecord.organizationId,
+        rateLimitPerMinute: newKeyRecord.rateLimitPerMinute,
+        rateLimitPerDay: newKeyRecord.rateLimitPerDay,
+        expiresAt: newKeyRecord.expiresAt,
+        createdAt: newKeyRecord.createdAt,
+      },
+      revokedKeyId: oldKeyId,
+      revokedKeyDisplayKey: apiKeyService.getMaskedKey(oldKey.keyPrefix, oldKey.keyLast4)
+    };
   }
 };

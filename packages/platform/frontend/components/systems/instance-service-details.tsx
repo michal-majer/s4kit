@@ -464,17 +464,43 @@ export function InstanceServiceDetails({
             <CardContent>
               {resolvedEntities.length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {resolvedEntities.map((entity, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
-                    >
-                      <Database className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <code className="text-sm font-mono truncate" title={entity}>
-                        {entity}
-                      </code>
-                    </div>
-                  ))}
+                  {resolvedEntities.map((entity, index) => {
+                    const entityUrl = `${fullEndpoint}/${entity}?$format=json`;
+                    return (
+                      <div
+                        key={index}
+                        className="group flex items-center justify-between gap-1 p-2 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Database className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <code className="text-sm font-mono truncate" title={entity}>
+                            {entity}
+                          </code>
+                        </div>
+                        <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => copyToClipboard(entityUrl, `${entity} URL`)}
+                            title="Copy URL"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            asChild
+                          >
+                            <a href={entityUrl} target="_blank" rel="noopener noreferrer" title="Open in browser">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">

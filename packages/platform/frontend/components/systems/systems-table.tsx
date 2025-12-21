@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { DataTable, Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
+import { ConfigurableTable, ConfigurableTableConfig } from '@/components/ui/configurable-table';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/common/empty-state';
 import { api, System, SystemType } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -37,106 +35,84 @@ export function SystemsTable({ systems }: { systems: System[] }) {
       await api.systems.delete(id);
       toast.success('System deleted');
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete system');
     }
   };
 
-  if (systems.length === 0) {
-    return (
-      <EmptyState
-        icon={Server}
-        title="No systems yet"
-        description="Add your first SAP system to start managing connections and services."
-      >
-        <CreateSystemDialog />
-      </EmptyState>
-    );
-  }
-
-  const columns: Column<System>[] = [
-    {
-      id: 'name',
-      header: 'Name',
-      accessorKey: 'name',
-      cell: (system) => (
-        <Link
-          href={`/systems/${system.id}`}
-          className="text-primary hover:underline font-medium inline-flex items-center gap-1"
-        >
-          {system.name}
-        </Link>
-      ),
-    },
-    {
-      id: 'type',
-      header: 'Type',
-      accessorKey: 'type',
-      cell: (system) => (
-        <Badge variant={systemTypeBadgeVariant[system.type]}>
-          {systemTypeLabels[system.type]}
-        </Badge>
-      ),
-    },
-    {
-      id: 'description',
-      header: 'Description',
-      accessorKey: 'description',
-      cell: (system) => (
-        <span className="text-muted-foreground">
-          {system.description || '-'}
-        </span>
-      ),
-    },
-    {
-      id: 'actions',
-      header: 'Actions',
-      sortable: false,
-      headerClassName: 'text-right',
-      className: 'text-right',
-      cell: (system) => (
-        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-            <Link href={`/systems/${system.id}`}>
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingSystem(system);
-            }}
+  const config: ConfigurableTableConfig<System> = {
+    columns: [
+      {
+        id: 'name',
+        header: 'Name',
+        accessorKey: 'name',
+        cell: (system) => (
+          <Link
+            href={`/systems/${system.id}`}
+            className="text-primary hover:underline font-medium inline-flex items-center gap-1"
           >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDelete(system.id);
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      ),
+            {system.name}
+          </Link>
+        ),
+      },
+      {
+        id: 'type',
+        header: 'Type',
+        accessorKey: 'type',
+        cell: (system) => (
+          <Badge variant={systemTypeBadgeVariant[system.type]}>
+            {systemTypeLabels[system.type]}
+          </Badge>
+        ),
+      },
+      {
+        id: 'description',
+        header: 'Description',
+        accessorKey: 'description',
+        cell: (system) => (
+          <span className="text-muted-foreground">
+            {system.description || '-'}
+          </span>
+        ),
+      },
+    ],
+    actions: {
+      type: 'inline',
+      showOnHover: true,
+      items: [
+        {
+          label: 'View',
+          icon: ExternalLink,
+          href: (system) => `/systems/${system.id}`,
+          onClick: () => {},
+        },
+        {
+          label: 'Edit',
+          icon: Pencil,
+          onClick: (system) => setEditingSystem(system),
+        },
+        {
+          label: 'Delete',
+          icon: Trash2,
+          variant: 'destructive',
+          onClick: (system) => handleDelete(system.id),
+        },
+      ],
     },
-  ];
+    emptyState: {
+      icon: Server,
+      title: 'No systems yet',
+      description: 'Add your first SAP system to start managing connections and services.',
+      action: <CreateSystemDialog />,
+    },
+    searchPlaceholder: 'Search systems...',
+    searchableColumns: ['name', 'description'],
+    getRowId: (system) => system.id,
+  };
 
   return (
     <>
-      <DataTable
-        data={systems}
-        columns={columns}
-        searchPlaceholder="Search systems..."
-        searchableColumns={['name', 'description']}
-        getRowId={(system) => system.id}
-      />
+      <ConfigurableTable data={systems} config={config} />
       {editingSystem && (
         <EditSystemDialog
           system={editingSystem}

@@ -39,6 +39,7 @@ export function ApiKeyFormPage({
     dataLoaded,
     loading,
     creatingInstanceService,
+    savingGrant,
     newKey,
     activeTab,
     name,
@@ -225,6 +226,7 @@ export function ApiKeyFormPage({
                     onToggleEntities={() => toggleShowEntities(grant.id || grant.instanceServiceId)}
                     onSetEntityFilter={(filter) => setEntityFilter(grant.id || grant.instanceServiceId, filter)}
                     onTogglePermission={(entity, perm) => togglePermission(grant.id || grant.instanceServiceId, entity, perm)}
+                    isSaving={savingGrant === grant.id}
                   />
                 ))}
               </>
@@ -258,7 +260,7 @@ export function ApiKeyFormPage({
         </Tabs>
 
         <div className="flex justify-end gap-2 pt-6 mt-6 border-t">
-          <Link href="/api-keys">
+          <Link href={isEditMode && apiKey ? `/api-keys/${apiKey.id}` : '/api-keys'}>
             <Button type="button" variant="outline">
               Cancel
             </Button>

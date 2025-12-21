@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronDown, ChevronRight, Search, Settings2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, Settings2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PERMISSIONS = ['read', 'create', 'update', 'delete'] as const;
@@ -56,6 +56,7 @@ interface AccessGrantCardProps {
   onToggleEntities: () => void;
   onSetEntityFilter: (filter: string) => void;
   onTogglePermission: (entity: string, perm: string) => void;
+  isSaving?: boolean;
 }
 
 export function AccessGrantCard({
@@ -65,6 +66,7 @@ export function AccessGrantCard({
   onToggleEntities,
   onSetEntityFilter,
   onTogglePermission,
+  isSaving,
 }: AccessGrantCardProps) {
   // Handle both grant structures (create page vs edit page)
   const entities = grant.systemService?.entities
@@ -90,7 +92,14 @@ export function AccessGrantCard({
   const presets: PermissionPreset[] = ['read', 'read_write', 'full'];
 
   return (
-    <div className="border rounded-lg bg-card overflow-hidden">
+    <div className={cn("border rounded-lg bg-card overflow-hidden relative", isSaving && "opacity-70")}>
+      {/* Saving indicator */}
+      {isSaving && (
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-1 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded-full">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Saving...
+        </div>
+      )}
       {/* Header */}
       <div className="px-4 py-3 bg-muted/30 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
