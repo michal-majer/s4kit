@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { api } from '@/lib/api';
+import { withServerCookies } from '@/lib/server-api';
 import { ServicePreview } from '@/components/systems/service-preview';
 
 interface PageProps {
@@ -8,12 +9,14 @@ interface PageProps {
 
 export default async function ServicePreviewPage({ params }: PageProps) {
   const { id, serviceId } = await params;
-  
+
   try {
-    const [system, service] = await Promise.all([
-      api.systems.get(id),
-      api.systemServices.get(serviceId),
-    ]);
+    const [system, service] = await withServerCookies(() =>
+      Promise.all([
+        api.systems.get(id),
+        api.systemServices.get(serviceId),
+      ])
+    );
 
     // Verify the service belongs to this system
     if (service.systemId !== id) {

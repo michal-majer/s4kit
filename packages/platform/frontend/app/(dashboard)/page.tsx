@@ -1,15 +1,18 @@
 import { api } from '@/lib/api';
+import { withServerCookies } from '@/lib/server-api';
 import { PageHeader } from '@/components/common/page-header';
 import { StatsCard } from '@/components/common/stats-card';
 import { Server, Key, Activity, BarChart3 } from 'lucide-react';
 
 async function getStats() {
   try {
-    const [systems, apiKeys, logsResponse] = await Promise.all([
-      api.systems.list().catch(() => []),
-      api.apiKeys.list().catch(() => []),
-      api.logs.list({ limit: 100 }).catch(() => ({ data: [], pagination: { limit: 100, offset: 0, hasMore: false } })),
-    ]);
+    const [systems, apiKeys, logsResponse] = await withServerCookies(() =>
+      Promise.all([
+        api.systems.list().catch(() => []),
+        api.apiKeys.list().catch(() => []),
+        api.logs.list({ limit: 100 }).catch(() => ({ data: [], pagination: { limit: 100, offset: 0, hasMore: false } })),
+      ])
+    );
 
     const logs = logsResponse.data;
     const today = new Date();

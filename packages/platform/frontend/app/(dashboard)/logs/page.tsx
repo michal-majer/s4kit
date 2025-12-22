@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { api } from '@/lib/api';
+import { withServerCookies } from '@/lib/server-api';
 import { PageHeader } from '@/components/common/page-header';
 import { StatsCard } from '@/components/common/stats-card';
 import { LogsTable } from '@/components/logs/logs-table';
@@ -77,7 +78,8 @@ async function getLogsData(params: Record<string, string | undefined>) {
 
 export default async function LogsPage({ searchParams }: LogsPageProps) {
   const params = await searchParams;
-  const { logs, analytics, apiKeys } = await getLogsData(params);
+
+  const { logs, analytics, apiKeys } = await withServerCookies(() => getLogsData(params));
 
   const successRate = analytics?.summary
     ? Math.round(
@@ -150,7 +152,7 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
       </Suspense>
 
       {/* Logs Table */}
-      <Suspense fallback={<TableSkeleton />}>
+      <Suspense fallback={<TableSkeleton columns={8} />}>
         <LogsTable logs={logs} />
       </Suspense>
     </div>

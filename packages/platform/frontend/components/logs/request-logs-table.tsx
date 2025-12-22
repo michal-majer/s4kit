@@ -135,7 +135,7 @@ export function RequestLogsTable({ logs: initialLogs }: RequestLogsTableProps) {
   ];
 
   const hasDetails = (log: RequestLog) =>
-    !!(log.requestBody || log.responseBody || log.requestHeaders || log.responseHeaders || log.errorMessage);
+    !!(log.errorMessage);
 
   const renderExpandedContent = (log: RequestLog) => (
     <div className="space-y-4">
@@ -148,46 +148,6 @@ export function RequestLogsTable({ logs: initialLogs }: RequestLogsTableProps) {
           <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
             <pre className="text-sm text-destructive whitespace-pre-wrap break-words">
               {log.errorMessage}
-            </pre>
-          </div>
-        </div>
-      )}
-      {log.requestBody && (
-        <div>
-          <span className="font-semibold text-sm block mb-2">Request Body</span>
-          <div className="bg-muted rounded-md p-3 overflow-x-auto">
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-              {JSON.stringify(log.requestBody, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
-      {log.responseBody && (
-        <div>
-          <span className="font-semibold text-sm block mb-2">Response Body</span>
-          <div className="bg-muted rounded-md p-3 overflow-x-auto max-h-96 overflow-y-auto">
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-              {JSON.stringify(log.responseBody, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
-      {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 && (
-        <div>
-          <span className="font-semibold text-sm block mb-2">Request Headers</span>
-          <div className="bg-muted rounded-md p-3 overflow-x-auto">
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-              {JSON.stringify(log.requestHeaders, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
-      {log.responseHeaders && Object.keys(log.responseHeaders).length > 0 && (
-        <div>
-          <span className="font-semibold text-sm block mb-2">Response Headers</span>
-          <div className="bg-muted rounded-md p-3 overflow-x-auto">
-            <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-              {JSON.stringify(log.responseHeaders, null, 2)}
             </pre>
           </div>
         </div>

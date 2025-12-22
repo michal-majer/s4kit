@@ -16,7 +16,6 @@ import { toast } from 'sonner';
 import { KeyDisplay } from './key-display';
 import { Trash2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
-const TEST_ORG_ID = '00000000-0000-4000-8000-000000000001';
 const PERMISSIONS = ['read', 'create', 'update', 'delete'] as const;
 
 interface AccessGrant {
@@ -305,7 +304,6 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
       const result = await api.apiKeys.create({
         name,
         description: description || undefined,
-        organizationId: TEST_ORG_ID,
         rateLimitPerMinute,
         rateLimitPerDay,
         accessGrants: accessGrants.map(g => ({

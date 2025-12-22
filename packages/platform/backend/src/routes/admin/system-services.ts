@@ -303,7 +303,7 @@ app.post('/:id/refresh-entities', async (c) => {
   }
   
   // Use the first (highest priority) instance
-  const instance = systemInstances[0];
+  const instance = systemInstances[0]!;
   
   try {
     // Determine auth to use: service auth if set, otherwise instance auth

@@ -6,8 +6,6 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { AccessGrant, PermissionPreset, PRESET_CONFIG } from './access-grant-card';
 
-const TEST_ORG_ID = '00000000-0000-4000-8000-000000000001';
-
 export interface AliasConflict {
   alias: string;
   systemCount: number;
@@ -596,7 +594,6 @@ export function useApiKeyForm({
         const result = await api.apiKeys.create({
           name,
           description: description || undefined,
-          organizationId: TEST_ORG_ID,
           rateLimitPerMinute,
           rateLimitPerDay,
           expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,

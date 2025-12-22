@@ -1,11 +1,12 @@
 import { ApiKeysTable } from '@/components/api-keys/api-keys-table';
 import { PageHeader } from '@/components/common/page-header';
 import { api } from '@/lib/api';
+import { withServerCookies } from '@/lib/server-api';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 export default async function ApiKeysPage() {
-  const apiKeys = await api.apiKeys.list().catch(() => []);
+  const apiKeys = await withServerCookies(() => api.apiKeys.list().catch(() => []));
 
   return (
     <div className="flex flex-col gap-8 p-8">

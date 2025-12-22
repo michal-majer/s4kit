@@ -4,9 +4,18 @@ import { instances, systems, systemServices, instanceServices } from '../../db/s
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, and, inArray } from 'drizzle-orm';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
-const app = new Hono();
+const app = new Hono<{ Variables: SessionVariables }>();
+
+// Helper to verify system belongs to organization
+async function verifySystemOrg(systemId: string, organizationId: string): Promise<boolean> {
+  const system = await db.query.systems.findFirst({
+    where: and(eq(systems.id, systemId), eq(systems.organizationId, organizationId)),
+  });
+  return !!system;
+}
 
 const instanceSchema = z.object({
   systemId: z.uuidv4(),
@@ -46,27 +55,56 @@ const instanceSchema = z.object({
   path: ['authType']
 });
 
-// List instances (optionally by systemId)
-app.get('/', async (c) => {
+// List instances (optionally by systemId, filtered by organization)
+app.get('/', requirePermission('instance:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const systemId = c.req.query('systemId');
-  
-  const allInstances = await db.query.instances.findMany({
-    where: systemId ? eq(instances.systemId, systemId) : undefined,
-    orderBy: [desc(instances.createdAt)]
+
+  // Get all systems for this organization
+  const orgSystems = await db.query.systems.findMany({
+    where: eq(systems.organizationId, organizationId),
+    columns: { id: true },
   });
-  
+  const orgSystemIds = orgSystems.map((s) => s.id);
+
+  if (orgSystemIds.length === 0) {
+    return c.json([]);
+  }
+
+  let whereCondition;
+  if (systemId) {
+    // Verify systemId belongs to org
+    if (!orgSystemIds.includes(systemId)) {
+      return c.json({ error: 'System not found' }, 404);
+    }
+    whereCondition = eq(instances.systemId, systemId);
+  } else {
+    whereCondition = inArray(instances.systemId, orgSystemIds);
+  }
+
+  const allInstances = await db.query.instances.findMany({
+    where: whereCondition,
+    orderBy: [desc(instances.createdAt)],
+  });
+
   // Don't return secrets
   const safeInstances = allInstances.map(({ username, password, credentials, ...rest }) => rest);
   return c.json(safeInstances);
 });
 
 // Create instance
-app.post('/', async (c) => {
+app.post('/', requirePermission('instance:create'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
   const result = instanceSchema.safeParse(body);
 
   if (!result.success) {
     return c.json({ error: result.error }, 400);
+  }
+
+  // Verify system belongs to organization
+  if (!(await verifySystemOrg(result.data.systemId, organizationId))) {
+    return c.json({ error: 'System not found' }, 404);
   }
 
   const { 
@@ -175,26 +213,41 @@ app.post('/', async (c) => {
   return c.json(safeInstance, 201);
 });
 
-// Get single instance
-app.get('/:id', async (c) => {
+// Get single instance (verify belongs to org via system)
+app.get('/:id', requirePermission('instance:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const id = c.req.param('id');
-  
+
   const instance = await db.query.instances.findFirst({
-    where: eq(instances.id, id)
+    where: eq(instances.id, id),
   });
-  
+
   if (!instance) {
     return c.json({ error: 'Instance not found' }, 404);
   }
-  
+
+  // Verify system belongs to organization
+  if (!(await verifySystemOrg(instance.systemId, organizationId))) {
+    return c.json({ error: 'Instance not found' }, 404);
+  }
+
   const { username, password, credentials, ...safeInstance } = instance;
   return c.json(safeInstance);
 });
 
 // Update instance
-app.patch('/:id', async (c) => {
+app.patch('/:id', requirePermission('instance:update'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const id = c.req.param('id');
   const body = await c.req.json();
+
+  // Verify instance belongs to organization
+  const existingInstance = await db.query.instances.findFirst({
+    where: eq(instances.id, id),
+  });
+  if (!existingInstance || !(await verifySystemOrg(existingInstance.systemId, organizationId))) {
+    return c.json({ error: 'Instance not found' }, 404);
+  }
   
   const updateSchema = z.object({
     baseUrl: z.url().optional(),
@@ -325,12 +378,19 @@ app.patch('/:id', async (c) => {
 });
 
 // Delete instance
-app.delete('/:id', async (c) => {
+app.delete('/:id', requirePermission('instance:delete'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const id = c.req.param('id');
 
-  const [deleted] = await db.delete(instances)
-    .where(eq(instances.id, id))
-    .returning();
+  // Verify instance belongs to organization
+  const instance = await db.query.instances.findFirst({
+    where: eq(instances.id, id),
+  });
+  if (!instance || !(await verifySystemOrg(instance.systemId, organizationId))) {
+    return c.json({ error: 'Instance not found' }, 404);
+  }
+
+  const [deleted] = await db.delete(instances).where(eq(instances.id, id)).returning();
 
   if (!deleted) {
     return c.json({ error: 'Instance not found' }, 404);
@@ -449,21 +509,27 @@ async function refreshAllServicesForInstance(
 }
 
 // Refresh all services for an instance
-app.post('/:id/refresh-all-services', async (c) => {
+app.post('/:id/refresh-all-services', requirePermission('instance:update'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const id = c.req.param('id');
 
   const instance = await db.query.instances.findFirst({
-    where: eq(instances.id, id)
+    where: eq(instances.id, id),
   });
 
   if (!instance) {
     return c.json({ error: 'Instance not found' }, 404);
   }
 
+  // Verify system belongs to organization
+  if (!(await verifySystemOrg(instance.systemId, organizationId))) {
+    return c.json({ error: 'Instance not found' }, 404);
+  }
+
   const results = await refreshAllServicesForInstance(id, instance);
 
-  const verified = results.filter(r => r.status === 'verified').length;
-  const failed = results.filter(r => r.status === 'failed').length;
+  const verified = results.filter((r) => r.status === 'verified').length;
+  const failed = results.filter((r) => r.status === 'failed').length;
 
   return c.json({
     success: true,

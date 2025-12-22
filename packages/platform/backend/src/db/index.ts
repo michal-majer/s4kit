@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
+import * as authSchema from './auth-schema';
 
 // Get database URL from environment
 const databaseUrl = process.env.DATABASE_URL;
@@ -17,11 +18,15 @@ const queryClient = postgres(databaseUrl, {
   connect_timeout: 10,
 });
 
-// Create drizzle instance with schema
-export const db = drizzle(queryClient, { schema });
+// Combine all schemas
+const allSchemas = { ...schema, ...authSchema };
 
-// Export schema for use in other files
+// Create drizzle instance with schema
+export const db = drizzle(queryClient, { schema: allSchemas });
+
+// Export schemas for use in other files
 export * from './schema';
+export * from './auth-schema';
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

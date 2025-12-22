@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { api } from '@/lib/api';
+import { withServerCookies } from '@/lib/server-api';
 import { InstanceServiceDetails } from '@/components/systems/instance-service-details';
 
 interface PageProps {
@@ -12,17 +13,21 @@ export default async function InstanceServicePage({ params, searchParams }: Page
   const { instance: instanceParam } = await searchParams;
 
   try {
-    const [system, instanceService] = await Promise.all([
-      api.systems.get(systemId),
-      api.instanceServices.get(instanceServiceId),
-    ]);
+    const [system, instanceService] = await withServerCookies(() =>
+      Promise.all([
+        api.systems.get(systemId),
+        api.instanceServices.get(instanceServiceId),
+      ])
+    );
 
     // Get related data and sibling services (same system service across environments)
-    const [instance, systemService, siblingServices] = await Promise.all([
-      api.instances.get(instanceService.instanceId),
-      api.systemServices.get(instanceService.systemServiceId),
-      api.instanceServices.list({ systemServiceId: instanceService.systemServiceId }),
-    ]);
+    const [instance, systemService, siblingServices] = await withServerCookies(() =>
+      Promise.all([
+        api.instances.get(instanceService.instanceId),
+        api.systemServices.get(instanceService.systemServiceId),
+        api.instanceServices.list({ systemServiceId: instanceService.systemServiceId }),
+      ])
+    );
 
     // Verify the service belongs to this system
     if (systemService.systemId !== systemId || instance.systemId !== systemId) {

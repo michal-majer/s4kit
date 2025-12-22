@@ -8,8 +8,9 @@ import { z } from 'zod';
 import { eq, desc, and, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import type { Instance, SystemService, InstanceService } from '../../types';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
-const app = new Hono();
+const app = new Hono<{ Variables: SessionVariables }>();
 
 /**
  * Validates that services in an API key don't have duplicate aliases across different systems
@@ -73,10 +74,10 @@ const accessGrantSchema = z.object({
 });
 
 // Schema for creating API key (now requires access grants)
+// Note: organizationId comes from session context, not request body
 const apiKeySchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
-  organizationId: z.string().uuid(),
   rateLimitPerMinute: z.number().int().positive().max(10000).default(60),
   rateLimitPerDay: z.number().int().positive().max(1000000).default(10000),
   expiresAt: z.string().datetime().optional(), // ISO date string
@@ -88,32 +89,36 @@ const revokeSchema = z.object({
 });
 
 // List API Keys (safe response - no sensitive data)
-app.get('/', async (c) => {
+app.get('/', requirePermission('apiKey:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+
   const keys = await db.query.apiKeys.findMany({
+    where: eq(apiKeys.organizationId, organizationId),
     orderBy: [desc(apiKeys.createdAt)]
   });
-  
+
   // Return safe key info with masked display
   const safeKeys = keys.map(({ keyHash, ...rest }) => ({
     ...rest,
     displayKey: apiKeyService.getMaskedKey(rest.keyPrefix, rest.keyLast4)
   }));
-  
+
   return c.json(safeKeys);
 });
 
 // Get single API Key
-app.get('/:id', async (c) => {
+app.get('/:id', requirePermission('apiKey:read'), async (c) => {
   const id = c.req.param('id');
-  
+  const organizationId = c.get('organizationId')!;
+
   const key = await db.query.apiKeys.findFirst({
-    where: eq(apiKeys.id, id)
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
   });
-  
+
   if (!key) {
     return c.json({ error: 'API key not found' }, 404);
   }
-  
+
   const { keyHash, ...safeKey } = key;
   return c.json({
     ...safeKey,
@@ -130,8 +135,9 @@ const updateApiKeySchema = z.object({
   expiresAt: z.string().datetime().optional().nullable(),
 });
 
-app.patch('/:id', async (c) => {
+app.patch('/:id', requirePermission('apiKey:update'), async (c) => {
   const id = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
   const result = updateApiKeySchema.safeParse(body);
 
@@ -142,11 +148,11 @@ app.patch('/:id', async (c) => {
   const [updated] = await db.update(apiKeys)
     .set({
       ...result.data,
-      expiresAt: result.data.expiresAt !== undefined 
+      expiresAt: result.data.expiresAt !== undefined
         ? (result.data.expiresAt ? new Date(result.data.expiresAt) : null)
         : undefined
     })
-    .where(eq(apiKeys.id, id))
+    .where(and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId)))
     .returning();
 
   if (!updated) {
@@ -161,7 +167,9 @@ app.patch('/:id', async (c) => {
 });
 
 // Generate new API Key
-app.post('/', async (c) => {
+app.post('/', requirePermission('apiKey:create'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const userId = c.get('user')!.id;
   const body = await c.req.json();
   const result = apiKeySchema.safeParse(body);
 
@@ -233,17 +241,17 @@ app.post('/', async (c) => {
   });
 
   const invalidSystems = relatedSystems.filter(
-    sys => sys.organizationId !== result.data.organizationId
+    sys => sys.organizationId !== organizationId
   );
   if (invalidSystems.length > 0) {
-    return c.json({ 
-      error: `One or more systems do not belong to organization ${result.data.organizationId}` 
+    return c.json({
+      error: 'One or more systems do not belong to your organization'
     }, 403);
   }
 
   // Generate UUID first so we can embed it in the key
   const keyId = randomUUID();
-  
+
   // Generate the Stripe-like key (using 'live' as default since environment is now at instance level)
   const generatedKey = apiKeyService.generateKey(keyId, 'live');
 
@@ -252,14 +260,14 @@ app.post('/', async (c) => {
     id: keyId,
     name: result.data.name,
     description: result.data.description,
-    organizationId: result.data.organizationId,
+    organizationId,
     rateLimitPerMinute: result.data.rateLimitPerMinute,
     rateLimitPerDay: result.data.rateLimitPerDay,
     expiresAt: result.data.expiresAt ? new Date(result.data.expiresAt) : null,
     keyHash: generatedKey.keyHash,
     keyPrefix: generatedKey.keyPrefix,
     keyLast4: generatedKey.keyLast4,
-    createdBy: c.req.header('X-User-Id') || undefined,
+    createdBy: userId,
   }).returning();
 
   if (!newKeyRecord) {
@@ -313,9 +321,18 @@ app.post('/', async (c) => {
 });
 
 // List access grants for an API key
-app.get('/:id/access', async (c) => {
+app.get('/:id/access', requirePermission('apiKey:read'), async (c) => {
   const id = c.req.param('id');
-  
+  const organizationId = c.get('organizationId')!;
+
+  // Verify API key belongs to organization
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
+  });
+  if (!key) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
+
   const grants = await db.query.apiKeyAccess.findMany({
     where: eq(apiKeyAccess.apiKeyId, id)
   });
@@ -354,8 +371,9 @@ app.get('/:id/access', async (c) => {
 });
 
 // Add access grant to an API key
-app.post('/:id/access', async (c) => {
+app.post('/:id/access', requirePermission('apiKey:update'), async (c) => {
   const apiKeyId = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
   const result = accessGrantSchema.safeParse(body);
 
@@ -363,9 +381,9 @@ app.post('/:id/access', async (c) => {
     return c.json({ error: result.error.flatten() }, 400);
   }
 
-  // Verify API key exists
+  // Verify API key exists and belongs to organization
   const existingKey = await db.query.apiKeys.findFirst({
-    where: eq(apiKeys.id, apiKeyId)
+    where: and(eq(apiKeys.id, apiKeyId), eq(apiKeys.organizationId, organizationId))
   });
 
   if (!existingKey) {
@@ -449,15 +467,24 @@ app.post('/:id/access', async (c) => {
 });
 
 // Update access grant permissions
-app.patch('/:id/access/:grantId', async (c) => {
+app.patch('/:id/access/:grantId', requirePermission('apiKey:update'), async (c) => {
   const apiKeyId = c.req.param('id');
   const grantId = c.req.param('grantId');
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
-  
+
+  // Verify API key belongs to organization
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, apiKeyId), eq(apiKeys.organizationId, organizationId))
+  });
+  if (!key) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
+
   const permissionsSchema = z.object({
     permissions: z.record(z.string(), z.array(z.string()))
   });
-  
+
   const result = permissionsSchema.safeParse(body);
   if (!result.success) {
     return c.json({ error: result.error.flatten() }, 400);
@@ -479,9 +506,18 @@ app.patch('/:id/access/:grantId', async (c) => {
 });
 
 // Remove access grant
-app.delete('/:id/access/:grantId', async (c) => {
+app.delete('/:id/access/:grantId', requirePermission('apiKey:update'), async (c) => {
   const apiKeyId = c.req.param('id');
   const grantId = c.req.param('grantId');
+  const organizationId = c.get('organizationId')!;
+
+  // Verify API key belongs to organization
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, apiKeyId), eq(apiKeys.organizationId, organizationId))
+  });
+  if (!key) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
 
   const [deleted] = await db.delete(apiKeyAccess)
     .where(and(
@@ -498,17 +534,25 @@ app.delete('/:id/access/:grantId', async (c) => {
 });
 
 // Revoke API Key (soft delete)
-app.post('/:id/revoke', async (c) => {
+app.post('/:id/revoke', requirePermission('apiKey:delete'), async (c) => {
   const id = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json().catch(() => ({}));
   const result = revokeSchema.safeParse(body);
 
-  const reason = result.success ? result.data.reason : undefined;
+  // Verify API key belongs to organization
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
+  });
+  if (!key) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
 
+  const reason = result.success ? result.data.reason : undefined;
   const success = await apiKeyService.revokeKey(id, reason);
 
   if (!success) {
-    return c.json({ error: 'API key not found' }, 404);
+    return c.json({ error: 'Failed to revoke API key' }, 500);
   }
 
   return c.json({ success: true, message: 'API key has been revoked' });
@@ -520,10 +564,19 @@ const rotateSchema = z.object({
   newName: z.string().min(1).max(255).optional(),
 });
 
-app.post('/:id/rotate', async (c) => {
+app.post('/:id/rotate', requirePermission('apiKey:update'), async (c) => {
   const id = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json().catch(() => ({}));
   const result = rotateSchema.safeParse(body);
+
+  // Verify API key belongs to organization
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
+  });
+  if (!key) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
 
   const options = result.success ? result.data : {};
 
@@ -567,15 +620,24 @@ app.post('/:id/rotate', async (c) => {
 });
 
 // Delete API Key (also uses revoke for audit trail, but kept for REST compatibility)
-app.delete('/:id', async (c) => {
+app.delete('/:id', requirePermission('apiKey:delete'), async (c) => {
   const id = c.req.param('id');
-  
-  const success = await apiKeyService.revokeKey(id, 'Deleted via API');
-  
-  if (!success) {
+  const organizationId = c.get('organizationId')!;
+
+  // Verify API key belongs to organization
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
+  });
+  if (!key) {
     return c.json({ error: 'API key not found' }, 404);
   }
-  
+
+  const success = await apiKeyService.revokeKey(id, 'Deleted via API');
+
+  if (!success) {
+    return c.json({ error: 'Failed to delete API key' }, 500);
+  }
+
   return c.json({ success: true });
 });
 
@@ -613,14 +675,15 @@ function resolveAuth(instance: Instance, systemService: SystemService, instanceS
 }
 
 // Generate TypeScript types for API key
-app.get('/:id/types', async (c) => {
+app.get('/:id/types', requirePermission('apiKey:read'), async (c) => {
   const id = c.req.param('id');
-  
+  const organizationId = c.get('organizationId')!;
+
   // Get API key
   const key = await db.query.apiKeys.findFirst({
-    where: eq(apiKeys.id, id)
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
   });
-  
+
   if (!key) {
     return c.json({ error: 'API key not found' }, 404);
   }

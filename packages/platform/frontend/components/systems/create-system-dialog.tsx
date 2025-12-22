@@ -26,8 +26,6 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 
-const DEMO_ORG_ID = '00000000-0000-4000-8000-000000000001';
-
 const systemTypes: { value: SystemType; label: string; description: string }[] = [
   { value: 's4_public', label: 'SAP S/4HANA Cloud Public Edition', description: 'Multi-tenant cloud with predefined services' },
   { value: 's4_private', label: 'SAP S/4HANA Cloud Private Edition', description: 'Single-tenant cloud with predefined services' },
@@ -55,7 +53,6 @@ export function CreateSystemDialog() {
         name: formData.name,
         type: formData.type as SystemType,
         description: formData.description || undefined,
-        organizationId: DEMO_ORG_ID,
       });
       toast.success('System created successfully');
       if (formData.type === 's4_public' || formData.type === 's4_private') {

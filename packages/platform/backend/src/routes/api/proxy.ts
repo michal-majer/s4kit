@@ -66,7 +66,7 @@ function getClientIp(c: { req: { header: (name: string) => string | undefined } 
   const forwarded = c.req.header('x-forwarded-for');
   if (forwarded) {
     // Take the first IP in the chain (original client)
-    return forwarded.split(',')[0].trim();
+    return forwarded.split(',')[0]?.trim();
   }
 
   const realIp = c.req.header('x-real-ip');
@@ -207,7 +207,7 @@ app.all('/*', async (c) => {
     });
 
     // Extract error info for structured logging
-    const statusCode = err.status || err.response?.status || 500;
+    const statusCode = (err.status || err.response?.status || 500) as 400 | 401 | 403 | 404 | 500 | 502 | 503 | 504;
     const errorCode = err.odataError?.code || err.code || 'PROXY_ERROR';
     const errorMessage = err.odataError?.message || err.message || 'Internal Proxy Error';
 

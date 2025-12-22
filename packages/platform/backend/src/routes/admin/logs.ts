@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { requestLogs } from '../../db/schema';
-import { desc, eq, and, gte, lte, sql } from 'drizzle-orm';
+import { requestLogs, apiKeys } from '../../db/schema';
+import { desc, eq, and, gte, lte, sql, inArray } from 'drizzle-orm';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
-const app = new Hono();
+const app = new Hono<{ Variables: SessionVariables }>();
 
 /**
- * List request logs with filtering
+ * List request logs with filtering (filtered to organization's API keys)
  *
  * Query parameters:
  * - apiKeyId: Filter by specific API key
@@ -19,7 +20,8 @@ const app = new Hono();
  * - limit: Max results (default 100, max 1000)
  * - offset: Pagination offset
  */
-app.get('/', async (c) => {
+app.get('/', requirePermission('logs:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const {
     apiKeyId,
     entity,
@@ -32,10 +34,28 @@ app.get('/', async (c) => {
     offset: offsetParam,
   } = c.req.query();
 
+  // Get all API keys for this organization to filter logs
+  const orgApiKeys = await db.query.apiKeys.findMany({
+    where: eq(apiKeys.organizationId, organizationId),
+    columns: { id: true },
+  });
+  const orgApiKeyIds = orgApiKeys.map((k) => k.id);
+
+  if (orgApiKeyIds.length === 0) {
+    return c.json({
+      data: [],
+      pagination: { limit: 100, offset: 0, hasMore: false },
+    });
+  }
+
   // Build filter conditions
-  const conditions = [];
+  const conditions = [inArray(requestLogs.apiKeyId, orgApiKeyIds)];
 
   if (apiKeyId) {
+    // Verify the requested API key belongs to the organization
+    if (!orgApiKeyIds.includes(apiKeyId)) {
+      return c.json({ error: 'API key not found' }, 404);
+    }
     conditions.push(eq(requestLogs.apiKeyId, apiKeyId));
   }
 
@@ -68,8 +88,10 @@ app.get('/', async (c) => {
   const offset = Math.max(parseInt(offsetParam || '0'), 0);
 
   // Execute query
-  const logs = await db.select().from(requestLogs)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+  const logs = await db
+    .select()
+    .from(requestLogs)
+    .where(and(...conditions))
     .orderBy(desc(requestLogs.createdAt))
     .limit(limit)
     .offset(offset);
@@ -85,71 +107,105 @@ app.get('/', async (c) => {
 });
 
 /**
- * Get aggregated log analytics
+ * Get aggregated log analytics (filtered to organization's API keys)
  *
  * Query parameters:
  * - apiKeyId: Filter by specific API key
  * - from: Start date (ISO string) - required
  * - to: End date (ISO string) - required
  */
-app.get('/analytics', async (c) => {
+app.get('/analytics', requirePermission('logs:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const { apiKeyId, from, to } = c.req.query();
 
   if (!from || !to) {
     return c.json({ error: 'from and to dates are required' }, 400);
   }
 
+  // Get all API keys for this organization
+  const orgApiKeys = await db.query.apiKeys.findMany({
+    where: eq(apiKeys.organizationId, organizationId),
+    columns: { id: true },
+  });
+  const orgApiKeyIds = orgApiKeys.map((k) => k.id);
+
+  if (orgApiKeyIds.length === 0) {
+    return c.json({
+      summary: {
+        totalRequests: 0,
+        successCount: 0,
+        errorCount: 0,
+        avgResponseTime: 0,
+      },
+      topEntities: [],
+      errorDistribution: [],
+      hourlyStats: [],
+    });
+  }
+
   const conditions = [
+    inArray(requestLogs.apiKeyId, orgApiKeyIds),
     gte(requestLogs.createdAt, new Date(from)),
     lte(requestLogs.createdAt, new Date(to)),
   ];
 
   if (apiKeyId) {
+    if (!orgApiKeyIds.includes(apiKeyId)) {
+      return c.json({ error: 'API key not found' }, 404);
+    }
     conditions.push(eq(requestLogs.apiKeyId, apiKeyId));
   }
 
   // Get summary statistics
-  const summary = await db.select({
-    totalRequests: sql<number>`count(*)::int`,
-    successCount: sql<number>`count(*) filter (where ${requestLogs.success} = true)::int`,
-    errorCount: sql<number>`count(*) filter (where ${requestLogs.success} = false)::int`,
-    avgResponseTime: sql<number>`round(avg(${requestLogs.responseTime}))::int`,
-    p50ResponseTime: sql<number>`percentile_cont(0.5) within group (order by ${requestLogs.responseTime})::int`,
-    p95ResponseTime: sql<number>`percentile_cont(0.95) within group (order by ${requestLogs.responseTime})::int`,
-    p99ResponseTime: sql<number>`percentile_cont(0.99) within group (order by ${requestLogs.responseTime})::int`,
-    totalRequestBytes: sql<number>`coalesce(sum(${requestLogs.requestSize}), 0)::bigint`,
-    totalResponseBytes: sql<number>`coalesce(sum(${requestLogs.responseSize}), 0)::bigint`,
-  }).from(requestLogs)
+  const summary = await db
+    .select({
+      totalRequests: sql<number>`count(*)::int`,
+      successCount: sql<number>`count(*) filter (where ${requestLogs.success} = true)::int`,
+      errorCount: sql<number>`count(*) filter (where ${requestLogs.success} = false)::int`,
+      avgResponseTime: sql<number>`round(avg(${requestLogs.responseTime}))::int`,
+      p50ResponseTime: sql<number>`percentile_cont(0.5) within group (order by ${requestLogs.responseTime})::int`,
+      p95ResponseTime: sql<number>`percentile_cont(0.95) within group (order by ${requestLogs.responseTime})::int`,
+      p99ResponseTime: sql<number>`percentile_cont(0.99) within group (order by ${requestLogs.responseTime})::int`,
+      totalRequestBytes: sql<number>`coalesce(sum(${requestLogs.requestSize}), 0)::bigint`,
+      totalResponseBytes: sql<number>`coalesce(sum(${requestLogs.responseSize}), 0)::bigint`,
+    })
+    .from(requestLogs)
     .where(and(...conditions));
 
   // Get top entities by request count
-  const topEntities = await db.select({
-    entity: requestLogs.entity,
-    count: sql<number>`count(*)::int`,
-    successRate: sql<number>`round(100.0 * count(*) filter (where ${requestLogs.success} = true) / count(*), 1)`,
-    avgResponseTime: sql<number>`round(avg(${requestLogs.responseTime}))::int`,
-  }).from(requestLogs)
+  const topEntities = await db
+    .select({
+      entity: requestLogs.entity,
+      count: sql<number>`count(*)::int`,
+      successRate: sql<number>`round(100.0 * count(*) filter (where ${requestLogs.success} = true) / count(*), 1)`,
+      avgResponseTime: sql<number>`round(avg(${requestLogs.responseTime}))::int`,
+    })
+    .from(requestLogs)
     .where(and(...conditions))
     .groupBy(requestLogs.entity)
     .orderBy(sql`count(*) desc`)
     .limit(10);
 
   // Get error distribution by category
-  const errorDistribution = await db.select({
-    category: requestLogs.errorCategory,
-    count: sql<number>`count(*)::int`,
-  }).from(requestLogs)
+  const errorDistribution = await db
+    .select({
+      category: requestLogs.errorCategory,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(requestLogs)
     .where(and(...conditions, eq(requestLogs.success, false)))
     .groupBy(requestLogs.errorCategory)
     .orderBy(sql`count(*) desc`);
 
   // Get hourly request counts for the time range
-  const hourlyStats = await db.select({
-    hour: sql<string>`to_char(${requestLogs.createdAt}, 'YYYY-MM-DD HH24:00')`,
-    count: sql<number>`count(*)::int`,
-    successCount: sql<number>`count(*) filter (where ${requestLogs.success} = true)::int`,
-    avgResponseTime: sql<number>`round(avg(${requestLogs.responseTime}))::int`,
-  }).from(requestLogs)
+  const hourlyStats = await db
+    .select({
+      hour: sql<string>`to_char(${requestLogs.createdAt}, 'YYYY-MM-DD HH24:00')`,
+      count: sql<number>`count(*)::int`,
+      successCount: sql<number>`count(*) filter (where ${requestLogs.success} = true)::int`,
+      avgResponseTime: sql<number>`round(avg(${requestLogs.responseTime}))::int`,
+    })
+    .from(requestLogs)
     .where(and(...conditions))
     .groupBy(sql`to_char(${requestLogs.createdAt}, 'YYYY-MM-DD HH24:00')`)
     .orderBy(sql`to_char(${requestLogs.createdAt}, 'YYYY-MM-DD HH24:00')`);
@@ -163,13 +219,23 @@ app.get('/analytics', async (c) => {
 });
 
 /**
- * Get a single log entry by ID
+ * Get a single log entry by ID (verify belongs to organization)
  */
-app.get('/:id', async (c) => {
+app.get('/:id', requirePermission('logs:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const { id } = c.req.param();
 
-  const [log] = await db.select().from(requestLogs)
-    .where(eq(requestLogs.id, id))
+  // Get all API keys for this organization
+  const orgApiKeys = await db.query.apiKeys.findMany({
+    where: eq(apiKeys.organizationId, organizationId),
+    columns: { id: true },
+  });
+  const orgApiKeyIds = orgApiKeys.map((k) => k.id);
+
+  const [log] = await db
+    .select()
+    .from(requestLogs)
+    .where(and(eq(requestLogs.id, id), inArray(requestLogs.apiKeyId, orgApiKeyIds)))
     .limit(1);
 
   if (!log) {

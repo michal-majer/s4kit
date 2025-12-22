@@ -2,30 +2,41 @@ import { Hono } from 'hono';
 import { db } from '../../db';
 import { systems, systemServices, predefinedServices } from '../../db/schema';
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, and } from 'drizzle-orm';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
-const app = new Hono();
+const app = new Hono<{ Variables: SessionVariables }>();
 
-const systemSchema = z.object({
+const createSystemSchema = z.object({
   name: z.string().min(1),
   type: z.enum(['s4_public', 's4_private', 'btp', 'other']),
   description: z.string().optional(),
-  organizationId: z.string().uuid(),
 });
 
-// List systems
-app.get('/', async (c) => {
-  const allSystems = await db.query.systems.findMany({
-    orderBy: [desc(systems.createdAt)]
+const updateSystemSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+});
+
+// List systems (filtered by organization)
+app.get('/', requirePermission('system:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+
+  const orgSystems = await db.query.systems.findMany({
+    where: eq(systems.organizationId, organizationId),
+    orderBy: [desc(systems.createdAt)],
   });
-  return c.json(allSystems);
+
+  return c.json(orgSystems);
 });
 
 // Create system
-app.post('/', async (c) => {
+app.post('/', requirePermission('system:create'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const userId = c.get('user')!.id;
   const body = await c.req.json();
-  const result = systemSchema.safeParse(body);
 
+  const result = createSystemSchema.safeParse(body);
   if (!result.success) {
     return c.json({ error: result.error }, 400);
   }
@@ -33,10 +44,15 @@ app.post('/', async (c) => {
   const { type, ...data } = result.data;
 
   // Create the system
-  const [newSystem] = await db.insert(systems).values({
-    ...data,
-    type: type as any,
-  }).returning();
+  const [newSystem] = await db
+    .insert(systems)
+    .values({
+      ...data,
+      type: type as 's4_public' | 's4_private' | 'btp' | 'other',
+      organizationId,
+      createdBy: userId,
+    })
+    .returning();
 
   if (!newSystem) {
     return c.json({ error: 'Failed to create system' }, 500);
@@ -66,43 +82,40 @@ app.post('/', async (c) => {
   return c.json(newSystem, 201);
 });
 
-// Get single system
-app.get('/:id', async (c) => {
+// Get single system (verify organization ownership)
+app.get('/:id', requirePermission('system:read'), async (c) => {
   const id = c.req.param('id');
-  
+  const organizationId = c.get('organizationId')!;
+
   const system = await db.query.systems.findFirst({
-    where: eq(systems.id, id)
+    where: and(eq(systems.id, id), eq(systems.organizationId, organizationId)),
   });
-  
+
   if (!system) {
     return c.json({ error: 'System not found' }, 404);
   }
-  
+
   return c.json(system);
 });
 
 // Update system
-app.patch('/:id', async (c) => {
+app.patch('/:id', requirePermission('system:update'), async (c) => {
   const id = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
-  
-  const updateSchema = z.object({
-    name: z.string().min(1).optional(),
-    description: z.string().optional(),
-  });
-  
-  const result = updateSchema.safeParse(body);
 
+  const result = updateSystemSchema.safeParse(body);
   if (!result.success) {
     return c.json({ error: result.error }, 400);
   }
 
-  const [updated] = await db.update(systems)
+  const [updated] = await db
+    .update(systems)
     .set({
       ...result.data,
       updatedAt: new Date(),
     })
-    .where(eq(systems.id, id))
+    .where(and(eq(systems.id, id), eq(systems.organizationId, organizationId)))
     .returning();
 
   if (!updated) {
@@ -113,11 +126,13 @@ app.patch('/:id', async (c) => {
 });
 
 // Delete system
-app.delete('/:id', async (c) => {
+app.delete('/:id', requirePermission('system:delete'), async (c) => {
   const id = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
 
-  const [deleted] = await db.delete(systems)
-    .where(eq(systems.id, id))
+  const [deleted] = await db
+    .delete(systems)
+    .where(and(eq(systems.id, id), eq(systems.organizationId, organizationId)))
     .returning();
 
   if (!deleted) {

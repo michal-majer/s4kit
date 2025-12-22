@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { sql } from 'drizzle-orm'
 import { db } from './db'
+import { auth } from './auth'
+import { sessionMiddleware, adminAuthMiddleware } from './middleware/session-auth'
 import proxyRoute from './routes/api/proxy'
 import systemsRoute from './routes/admin/systems'
 import instancesRoute from './routes/admin/instances'
@@ -12,9 +14,31 @@ import logsRoute from './routes/admin/logs'
 
 const app = new Hono()
 
-// Enable CORS for all routes
-app.use('*', cors({
-  origin: '*', // In production, restrict this to your frontend domain
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
+
+// CORS for auth routes (requires credentials)
+app.use('/api/auth/*', cors({
+  origin: frontendUrl,
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}))
+
+// CORS for admin routes (requires credentials for session auth)
+app.use('/admin/*', cors({
+  origin: frontendUrl,
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Organization-Id'],
+  credentials: true,
+}))
+
+// Session auth middleware for admin routes
+app.use('/admin/*', sessionMiddleware)
+app.use('/admin/*', adminAuthMiddleware)
+
+// CORS for proxy routes (API key auth, no credentials needed)
+app.use('/api/proxy/*', cors({
+  origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-S4Kit-Service', 'X-S4Kit-Instance', 'X-S4Kit-Raw', 'X-S4Kit-Strip-Metadata'],
   exposeHeaders: ['Content-Length'],
@@ -29,6 +53,11 @@ app.get('/health', async (c) => {
   } catch {
     return c.json({ status: 'unhealthy' }, 503)
   }
+})
+
+// Better-auth handler
+app.on(['POST', 'GET'], '/api/auth/*', (c) => {
+  return auth.handler(c.req.raw)
 })
 
 // API routes

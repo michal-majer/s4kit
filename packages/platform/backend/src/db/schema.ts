@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, unique, text } from 'drizzle-orm/pg-core';
 
 // Enums
 export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 'btp', 'other']);
@@ -25,6 +25,7 @@ export const systems = pgTable('systems', {
   name: varchar('name', { length: 255 }).notNull(),
   type: systemTypeEnum('type').notNull(),
   description: varchar('description', { length: 1000 }),
+  createdBy: text('created_by'), // References users.id (no FK to avoid circular deps)
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -155,7 +156,7 @@ export const apiKeys = pgTable('api_keys', {
 
   // Audit
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  createdBy: varchar('created_by', { length: 255 }),
+  createdBy: text('created_by'), // References users.id (no FK to avoid circular deps)
   lastUsedAt: timestamp('last_used_at'),
   lastUsedIp: varchar('last_used_ip', { length: 45 }),
   usageCount: integer('usage_count').default(0).notNull(),

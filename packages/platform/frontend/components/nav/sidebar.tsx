@@ -1,10 +1,28 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Server, Key, FileText, Layers, Zap, Settings } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { LayoutDashboard, Server, Key, FileText, Layers, Zap, Settings, LogOut, User, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { signOut } from '@/lib/auth-client';
+import { toast } from 'sonner';
+
+interface SidebarUser {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+}
 
 const mainNavItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -18,8 +36,33 @@ const secondaryNavItems = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  user: SidebarUser;
+}
+
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success('Signed out successfully');
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      toast.error('Failed to sign out');
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
@@ -88,6 +131,40 @@ export function Sidebar() {
             </Link>
           );
         })}
+      </div>
+
+      {/* User Section */}
+      <div className="border-t p-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user.image || undefined} alt={user.name} />
+                <AvatarFallback className="text-xs">{getInitials(user.name)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 text-left">
+                <p className="truncate font-medium">{user.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+              </div>
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings/profile" className="cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );

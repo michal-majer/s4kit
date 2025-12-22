@@ -1,14 +1,55 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
+// Cookie header for server-side requests - set via setServerCookies()
+let serverCookieHeader: string | null = null;
+
+/**
+ * Set cookies for server-side API calls.
+ * Call this at the start of server component data fetching.
+ */
+export function setServerCookies(cookieHeader: string) {
+  serverCookieHeader = cookieHeader;
+}
+
+/**
+ * Clear server cookies after use.
+ */
+export function clearServerCookies() {
+  serverCookieHeader = null;
+}
+
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string>),
+  };
+
+  // Add cookie header for server-side requests
+  if (serverCookieHeader) {
+    headers['Cookie'] = serverCookieHeader;
+  }
+
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
+    credentials: 'include',
     cache: 'no-store',
   });
+
+  if (res.status === 401) {
+    throw new AuthError('Unauthorized - please sign in');
+  }
+
+  if (res.status === 403) {
+    throw new AuthError('Forbidden - insufficient permissions');
+  }
 
   if (!res.ok) {
     const error = await res.text().catch(() => 'Unknown error');
@@ -218,7 +259,6 @@ export const api = {
       name: string;
       type: SystemType;
       description?: string;
-      organizationId: string;
     }) => fetchAPI<System>('/admin/systems', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<{
       name: string;
@@ -378,7 +418,6 @@ export const api = {
     create: (data: {
       name: string;
       description?: string;
-      organizationId: string;
       rateLimitPerMinute: number;
       rateLimitPerDay: number;
       expiresAt?: string;
