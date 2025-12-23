@@ -12,6 +12,7 @@ export class S4KitError extends Error implements IS4KitError {
   public readonly code?: string;
   public readonly odataError?: ODataError;
   public readonly request?: InterceptedRequest;
+  public readonly suggestion?: string;
 
   constructor(
     message: string,
@@ -21,6 +22,7 @@ export class S4KitError extends Error implements IS4KitError {
       odataError?: ODataError;
       request?: InterceptedRequest;
       cause?: Error;
+      suggestion?: string;
     }
   ) {
     super(message, { cause: options?.cause });
@@ -29,16 +31,40 @@ export class S4KitError extends Error implements IS4KitError {
     this.code = options?.code;
     this.odataError = options?.odataError;
     this.request = options?.request;
+    this.suggestion = options?.suggestion;
   }
 
   /**
-   * Get a user-friendly error message
+   * Get a user-friendly error message with context
    */
   get friendlyMessage(): string {
-    if (this.odataError?.message) {
-      return this.odataError.message;
+    const parts: string[] = [];
+
+    // Add entity context if available
+    if (this.request?.url) {
+      const entity = this.extractEntityFromUrl(this.request.url);
+      if (entity) {
+        parts.push(`[${entity}]`);
+      }
     }
-    return this.message;
+
+    // Add main message
+    parts.push(this.odataError?.message ?? this.message);
+
+    return parts.join(' ');
+  }
+
+  /**
+   * Get actionable help text
+   */
+  get help(): string {
+    if (this.suggestion) return this.suggestion;
+    return getSuggestionForError(this);
+  }
+
+  private extractEntityFromUrl(url: string): string | null {
+    const match = url.match(/\/([A-Z][A-Za-z_]+)(?:\(|$|\?)/);
+    return match?.[1] ?? null;
   }
 
   /**
@@ -336,4 +362,54 @@ export function isRetryable(error: Error): boolean {
  */
 export function isS4KitError(error: unknown): error is S4KitError {
   return error instanceof S4KitError;
+}
+
+/**
+ * Get actionable suggestion based on error type
+ */
+function getSuggestionForError(error: S4KitError): string {
+  if (error instanceof AuthenticationError) {
+    return 'Check that your API key is valid and not expired. Get a new key from the S4Kit dashboard.';
+  }
+
+  if (error instanceof AuthorizationError) {
+    return 'Your API key may not have permission for this operation. Check your key permissions in the dashboard.';
+  }
+
+  if (error instanceof NotFoundError) {
+    const entity = error.request?.url?.match(/\/([A-Z][A-Za-z_]+)/)?.[1];
+    if (entity) {
+      return `Verify that "${entity}" exists and the ID is correct. Use .list() to see available entities.`;
+    }
+    return 'The requested resource was not found. Verify the entity name and ID.';
+  }
+
+  if (error instanceof ValidationError) {
+    if (error.fieldErrors.size > 0) {
+      const fields = Array.from(error.fieldErrors.keys()).join(', ');
+      return `Fix the following fields: ${fields}`;
+    }
+    return 'Check the request data for missing or invalid fields.';
+  }
+
+  if (error instanceof RateLimitError) {
+    if (error.retryAfter) {
+      return `Wait ${error.retryAfter} seconds before retrying. Consider implementing request throttling.`;
+    }
+    return 'You have exceeded the rate limit. Implement exponential backoff or reduce request frequency.';
+  }
+
+  if (error instanceof NetworkError) {
+    return 'Check your network connection. If the problem persists, the S4Kit API may be temporarily unavailable.';
+  }
+
+  if (error instanceof TimeoutError) {
+    return 'The request timed out. Try increasing the timeout or reducing the amount of data requested.';
+  }
+
+  if (error instanceof ServerError) {
+    return 'This is a server-side issue. If it persists, contact S4Kit support with the error details.';
+  }
+
+  return 'See the error details for more information.';
 }

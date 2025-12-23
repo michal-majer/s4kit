@@ -78,9 +78,33 @@ bun run db:migrate             # Run pending migrations
 bun run db:push                # Push schema directly (dev only)
 bun run db:studio              # Open Drizzle Studio GUI
 bun run db:seed                # Seed initial data
-bun run db:reset               # Reset and re-seed
+bun run db:reset               # Reset and re-seed (blocked in production!)
 bun run db:recreate            # Full database recreation
+
+# SAP API catalog management
+bun run fetch-sap-apis         # Fetch API catalog from SAP Hub
+bun run db:refresh-apis        # Update predefined_services only (production-safe)
 ```
+
+## SAP API Catalog
+
+The backend includes a catalog of **1,049 predefined SAP OData APIs** (deprecated APIs are excluded):
+
+| Edition | System Type | APIs | Source Package |
+|---------|-------------|------|----------------|
+| Public Cloud | `s4_public` | 503 | `SAPS4HANACloud` |
+| Private/On-Premise | `s4_private` | 546 | `S4HANAOPAPI` |
+
+To refresh the API catalog from SAP Business Accelerator Hub:
+
+```bash
+bun run fetch-sap-apis    # Fetch latest APIs from SAP Hub
+bun run db:refresh-apis   # Update predefined_services only (safe for production)
+```
+
+> **Warning:** `db:reset` is blocked in production - it would delete all data!
+
+See `src/scripts/SAP_APIS.md` for detailed documentation.
 
 ## Database Schema
 

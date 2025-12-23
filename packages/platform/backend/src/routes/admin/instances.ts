@@ -3,6 +3,7 @@ import { db } from '../../db';
 import { instances, systems, systemServices, instanceServices } from '../../db/schema';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
+import { serviceBindingParser } from '../../services/service-binding-parser';
 import { z } from 'zod';
 import { desc, eq, and, inArray } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
@@ -181,14 +182,31 @@ app.post('/', requirePermission('instance:create'), async (c) => {
     return c.json({ error: 'Failed to create instance' }, 500);
   }
 
-  // For S4HANA systems, auto-link all system services and trigger verification
+  // For S4HANA systems, auto-link only popular services (not all 503)
   const system = await db.query.systems.findFirst({
     where: eq(systems.id, data.systemId)
   });
 
   if (system && (system.type === 's4_public' || system.type === 's4_private')) {
+    // Auto-link the most popular/essential services for quick start
+    const POPULAR_SERVICE_ALIASES = [
+      'bp',                  // Business Partner (v2)
+      'salesorder',          // Sales Order (v2)
+      'product',             // Product Master (v4)
+      'purchorder',          // Purchase Order (v4)
+      'glaccount',           // G/L Account (v2)
+      'costcenter',          // Cost Center (v2)
+      'companycode',         // Company Code (v2)
+      'materialdoc',         // Material Documents (v2)
+      'billing',             // Billing Document (v2)
+      'glaccountlineitem',   // G/L Account Line Items (v2)
+    ];
+
     const systemServicesForSystem = await db.query.systemServices.findMany({
-      where: eq(systemServices.systemId, data.systemId)
+      where: and(
+        eq(systemServices.systemId, data.systemId),
+        inArray(systemServices.alias, POPULAR_SERVICE_ALIASES)
+      )
     });
 
     // Create instance services with pending verification
@@ -205,8 +223,8 @@ app.post('/', requirePermission('instance:create'), async (c) => {
       }
     }
 
-    // Trigger async refresh for all services (non-blocking)
-    refreshAllServicesForInstance(newInstance.id, newInstance, systemServicesForSystem).catch(console.error);
+    // Trigger batched verification (non-blocking) - processes 5 at a time with delays
+    batchedRefreshServices(newInstance.id, newInstance, systemServicesForSystem).catch(console.error);
   }
 
   const { username: _, password: __, credentials: ___, ...safeInstance } = newInstance;
@@ -377,6 +395,85 @@ app.patch('/:id', requirePermission('instance:update'), async (c) => {
   return c.json(safeInstance);
 });
 
+// Import service binding JSON (VCAP_SERVICES or BTP service binding)
+app.post('/:id/import-binding', requirePermission('instance:update'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const id = c.req.param('id');
+
+  // Verify instance belongs to organization
+  const existingInstance = await db.query.instances.findFirst({
+    where: eq(instances.id, id),
+  });
+  if (!existingInstance || !(await verifySystemOrg(existingInstance.systemId, organizationId))) {
+    return c.json({ error: 'Instance not found' }, 404);
+  }
+
+  const importSchema = z.object({
+    bindingJson: z.string().min(1, 'Binding JSON is required'),
+    preferredService: z.enum(['xsuaa', 'destination']).optional(),
+  });
+
+  const body = await c.req.json();
+  const result = importSchema.safeParse(body);
+
+  if (!result.success) {
+    return c.json({ error: result.error.flatten() }, 400);
+  }
+
+  // Parse the service binding
+  const parsed = serviceBindingParser.parseBinding(result.data.bindingJson, result.data.preferredService);
+
+  if (!serviceBindingParser.validateBinding(parsed)) {
+    return c.json({
+      error: 'Invalid service binding format. Expected VCAP_SERVICES or BTP service binding JSON with clientid, clientsecret, and url fields.',
+    }, 400);
+  }
+
+  // Build auth config and credentials
+  const authConfig = {
+    tokenUrl: parsed.tokenUrl,
+    clientId: parsed.clientId,
+    scope: parsed.scope,
+    identityZone: parsed.identityZone,
+    grantType: 'client_credentials' as const,
+    bindingType: parsed.bindingType,
+  };
+
+  const credentials = {
+    clientSecret: encryption.encrypt(parsed.clientSecret),
+  };
+
+  // Update instance with OAuth2 configuration
+  const [updated] = await db.update(instances)
+    .set({
+      authType: 'oauth2',
+      authConfig,
+      credentials,
+      // Clear basic auth fields when switching to OAuth
+      username: null,
+      password: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(instances.id, id))
+    .returning();
+
+  if (!updated) {
+    return c.json({ error: 'Failed to update instance' }, 500);
+  }
+
+  // Return parsed config (without secrets) for UI confirmation
+  return c.json({
+    success: true,
+    config: {
+      tokenUrl: parsed.tokenUrl,
+      clientId: parsed.clientId,
+      scope: parsed.scope,
+      identityZone: parsed.identityZone,
+      bindingType: parsed.bindingType,
+    },
+  });
+});
+
 // Delete instance
 app.delete('/:id', requirePermission('instance:delete'), async (c) => {
   const organizationId = c.get('organizationId')!;
@@ -502,6 +599,123 @@ async function refreshAllServicesForInstance(
         .where(eq(instanceServices.id, instService.id));
 
       results.push({ serviceId: instService.id, status: 'failed', error: error.message });
+    }
+  }
+
+  return results;
+}
+
+// Helper to add delay
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Batched verification - processes services in small batches with delays to avoid rate limiting
+async function batchedRefreshServices(
+  instanceId: string,
+  instance: typeof instances.$inferSelect,
+  systemServicesForSystem: typeof systemServices.$inferSelect[],
+  batchSize = 5,
+  delayMs = 1500
+) {
+  // Get all instance services for this instance
+  const instServices = await db.query.instanceServices.findMany({
+    where: eq(instanceServices.instanceId, instanceId)
+  });
+
+  const results: { serviceId: string; status: 'verified' | 'failed'; entityCount?: number; error?: string }[] = [];
+
+  // Process in batches
+  for (let i = 0; i < instServices.length; i += batchSize) {
+    const batch = instServices.slice(i, i + batchSize);
+
+    // Process batch in parallel
+    const batchResults = await Promise.all(
+      batch.map(async (instService) => {
+        const systemService = systemServicesForSystem.find(s => s.id === instService.systemServiceId);
+        if (!systemService) return null;
+
+        try {
+          // Resolve auth with inheritance: instanceService > systemService > instance
+          let auth: any = null;
+
+          if (instService.authType && instService.authType !== 'none') {
+            auth = {
+              type: instService.authType,
+              username: instService.username,
+              password: instService.password,
+              config: instService.authConfig,
+              credentials: instService.credentials,
+            };
+          } else if (systemService.authType && systemService.authType !== 'none') {
+            auth = {
+              type: systemService.authType,
+              username: systemService.username,
+              password: systemService.password,
+              config: systemService.authConfig,
+              credentials: systemService.credentials,
+            };
+          } else {
+            auth = {
+              type: instance.authType,
+              username: instance.username,
+              password: instance.password,
+              config: instance.authConfig,
+              credentials: instance.credentials,
+            };
+          }
+
+          const servicePath = instService.servicePathOverride || systemService.servicePath;
+
+          const metadataResult = await metadataParser.fetchMetadata({
+            baseUrl: instance.baseUrl,
+            servicePath,
+            auth,
+          });
+
+          if (metadataResult.error) {
+            await db.update(instanceServices)
+              .set({
+                verificationStatus: 'failed',
+                lastVerifiedAt: new Date(),
+                verificationError: metadataResult.error,
+              })
+              .where(eq(instanceServices.id, instService.id));
+
+            return { serviceId: instService.id, status: 'failed' as const, error: metadataResult.error };
+          } else {
+            const entityNames = metadataResult.entities.map(e => e.name);
+
+            await db.update(instanceServices)
+              .set({
+                entities: entityNames,
+                verificationStatus: 'verified',
+                lastVerifiedAt: new Date(),
+                entityCount: entityNames.length,
+                verificationError: null,
+              })
+              .where(eq(instanceServices.id, instService.id));
+
+            return { serviceId: instService.id, status: 'verified' as const, entityCount: entityNames.length };
+          }
+        } catch (error: any) {
+          await db.update(instanceServices)
+            .set({
+              verificationStatus: 'failed',
+              lastVerifiedAt: new Date(),
+              verificationError: error.message || 'Failed to refresh entities',
+            })
+            .where(eq(instanceServices.id, instService.id));
+
+          return { serviceId: instService.id, status: 'failed' as const, error: error.message };
+        }
+      })
+    );
+
+    // Collect non-null results
+    results.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null));
+
+    // Delay before next batch (except for last batch)
+    if (i + batchSize < instServices.length) {
+      await sleep(delayMs);
     }
   }
 

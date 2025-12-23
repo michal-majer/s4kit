@@ -7,10 +7,13 @@ import { cn } from "@/lib/utils"
 
 function Tabs({
   className,
+  id,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  const generatedId = React.useId()
   return (
     <TabsPrimitive.Root
+      id={id ?? generatedId}
       data-slot="tabs"
       className={cn("flex flex-col gap-2", className)}
       {...props}

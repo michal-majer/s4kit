@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { withServerCookies } from '@/lib/server-api';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { Plus } from 'lucide-react';
 
 export default async function ApiKeysPage() {
   const apiKeys = await withServerCookies(() => api.apiKeys.list().catch(() => []));
@@ -15,7 +16,10 @@ export default async function ApiKeysPage() {
         description="Manage access credentials for your API"
       >
         <Link href="/api-keys/new">
-          <Button>Create API Key</Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Create API Key
+          </Button>
         </Link>
       </PageHeader>
       <ApiKeysTable apiKeys={apiKeys} />

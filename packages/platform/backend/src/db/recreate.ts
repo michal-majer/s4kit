@@ -8,6 +8,13 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL environment variable is not set');
 }
 
+// Prevent accidental recreation in production
+if (process.env.NODE_ENV === 'production') {
+  console.error('ERROR: db:recreate is not allowed in production!');
+  console.error('This would DROP ALL TABLES and recreate the database from scratch.');
+  process.exit(1);
+}
+
 async function recreateDatabase() {
   const sqlClient = postgres(databaseUrl!, { max: 1 });
   const db = drizzle(sqlClient);

@@ -57,9 +57,11 @@ export class HttpClient {
   private requestInterceptors: RequestInterceptor[] = [];
   private responseInterceptors: ResponseInterceptor[] = [];
   private errorInterceptors: ErrorInterceptor[] = [];
+  private debug: boolean;
 
   constructor(config: HttpClientConfig) {
     this.config = config;
+    this.debug = config.debug ?? false;
 
     // Initialize interceptors
     if (config.onRequest) this.requestInterceptors = [...config.onRequest];
@@ -96,11 +98,15 @@ export class HttpClient {
             }
 
             // Run error interceptors
+            let finalError: S4KitError = s4kitError;
             for (const interceptor of this.errorInterceptors) {
-              s4kitError = await interceptor(s4kitError);
+              const result = await interceptor(finalError);
+              if (result instanceof S4KitError) {
+                finalError = result;
+              }
             }
 
-            throw s4kitError;
+            throw finalError;
           }
         ],
       },
@@ -159,6 +165,21 @@ export class HttpClient {
   }
 
   // ==========================================================================
+  // Debug Logging
+  // ==========================================================================
+
+  private log(message: string, data?: any): void {
+    if (!this.debug) return;
+    const timestamp = new Date().toISOString();
+    const prefix = `[s4kit ${timestamp}]`;
+    if (data !== undefined) {
+      console.log(prefix, message, data);
+    } else {
+      console.log(prefix, message);
+    }
+  }
+
+  // ==========================================================================
   // Header Building
   // ==========================================================================
 
@@ -189,6 +210,7 @@ export class HttpClient {
     options: KyOptions & { json?: any } = {},
     requestOptions?: RequestOptions
   ): Promise<T> {
+    const startTime = Date.now();
     const headers = this.buildHeaders(requestOptions);
 
     // Build intercepted request object
@@ -205,6 +227,11 @@ export class HttpClient {
       request = await interceptor(request);
     }
 
+    this.log(`→ ${method} ${path}`, request.searchParams ? `?${new URLSearchParams(request.searchParams)}` : '');
+    if (request.body) {
+      this.log('  Body:', request.body);
+    }
+
     // Execute request
     const response = await this.client(request.url, {
       method: request.method,
@@ -213,8 +240,16 @@ export class HttpClient {
       searchParams: request.searchParams,
     });
 
+    const duration = Date.now() - startTime;
+
     // Parse response
     const data = await response.json() as T;
+
+    this.log(`← ${response.status} (${duration}ms)`);
+    if (this.debug && data) {
+      const preview = JSON.stringify(data).slice(0, 200);
+      this.log('  Data:', preview + (preview.length >= 200 ? '...' : ''));
+    }
 
     // Build intercepted response object
     let interceptedResponse: InterceptedResponse = {

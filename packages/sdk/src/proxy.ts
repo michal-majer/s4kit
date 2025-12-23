@@ -10,6 +10,7 @@ import type {
   EntityKey,
   ListResponse,
   DeepInsertData,
+  PaginateOptions,
 } from './types';
 
 // ============================================================================
@@ -270,6 +271,84 @@ function createEntityHandler<T = any>(
       params?: Record<string, any>
     ): Promise<R> {
       return client.post<R>(`${basePath}(${formatId(id)})/${name}`, params ?? {});
+    },
+
+    // ==========================================================================
+    // Pagination
+    // ==========================================================================
+
+    /**
+     * Paginate through all entities with automatic page handling
+     */
+    paginate(options?: PaginateOptions<T>): AsyncIterable<ListResponse<T>> {
+      const pageSize = options?.pageSize ?? options?.top ?? 100;
+      const maxItems = options?.maxItems;
+      const queryOptions: QueryOptions<T> = { ...options, top: pageSize };
+      const self = this;
+
+      return {
+        [Symbol.asyncIterator](): AsyncIterator<ListResponse<T>> {
+          let skip = 0;
+          let totalFetched = 0;
+          let done = false;
+
+          return {
+            async next(): Promise<IteratorResult<ListResponse<T>>> {
+              if (done) {
+                return { done: true, value: undefined };
+              }
+
+              // Calculate how many items to fetch this page
+              let pageTop = pageSize;
+              if (maxItems !== undefined) {
+                const remaining = maxItems - totalFetched;
+                if (remaining <= 0) {
+                  done = true;
+                  return { done: true, value: undefined };
+                }
+                pageTop = Math.min(pageSize, remaining);
+              }
+
+              const response = await self.listWithCount({
+                ...queryOptions,
+                top: pageTop,
+                skip,
+              });
+
+              const items = response.value;
+              totalFetched += items.length;
+              skip += items.length;
+
+              // Check if we've reached the end
+              if (items.length < pageTop) {
+                done = true;
+              }
+              if (maxItems !== undefined && totalFetched >= maxItems) {
+                done = true;
+              }
+
+              return {
+                done: false,
+                value: {
+                  value: items,
+                  count: response.count,
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+
+    /**
+     * Get all entities (automatically handles pagination)
+     */
+    async all(options?: PaginateOptions<T>): Promise<T[]> {
+      const result: T[] = [];
+      for await (const page of this.paginate(options)) {
+        result.push(...page.value);
+      }
+      return result;
     },
   };
 }

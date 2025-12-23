@@ -1,7 +1,7 @@
 import { createMiddleware } from 'hono/factory';
-import { db } from '../db';
-import { requestLogs } from '../db/schema';
-import type { Variables } from '../types';
+import { db } from '../index.ts';
+import { requestLogs } from '@s4kit/shared/db/schema';
+import type { Variables } from '../types.ts';
 
 /**
  * Secure logging middleware - captures metadata only, never body content.

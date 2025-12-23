@@ -1,0 +1,39 @@
+# Cloud Foundry Manifest for S4Kit Proxy Service
+# Deploy with: cf push -f manifest.yml
+---
+applications:
+  - name: s4kit-proxy
+    memory: 512M
+    instances: 2
+    disk_quota: 1G
+
+    # Bun buildpack
+    buildpacks:
+      - https://github.com/nickhstr/heroku-buildpack-bun.git
+
+    # Start command
+    command: bun run start
+
+    # Health check
+    health-check-type: http
+    health-check-http-endpoint: /health/ready
+
+    # Environment variables
+    env:
+      NODE_ENV: production
+      PORT: 8080
+
+    # Routes
+    routes:
+      - route: s4kit-proxy.cfapps.eu10.hana.ondemand.com
+
+    # Services (bind to managed services)
+    services:
+      - s4kit-postgres
+      - s4kit-redis
+
+# Notes:
+# 1. Create PostgreSQL service: cf create-service postgresql standard s4kit-postgres
+# 2. Create Redis service: cf create-service redis standard s4kit-redis
+# 3. Set encryption key: cf set-env s4kit-proxy ENCRYPTION_KEY <your-key>
+# 4. Push: cf push -f manifest.yml

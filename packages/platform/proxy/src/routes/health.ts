@@ -1,0 +1,73 @@
+import { Hono } from 'hono';
+import { db, redis } from '../index.ts';
+import { sql } from '@s4kit/shared/db';
+
+const app = new Hono();
+
+// Liveness probe - service is running
+app.get('/live', (c) => {
+  return c.json({ status: 'ok' });
+});
+
+// Readiness probe - service can handle requests
+app.get('/ready', async (c) => {
+  const checks: Record<string, 'ok' | 'error'> = {};
+
+  try {
+    await db.execute(sql`SELECT 1`);
+    checks.database = 'ok';
+  } catch {
+    checks.database = 'error';
+  }
+
+  try {
+    await redis.ping();
+    checks.redis = 'ok';
+  } catch {
+    checks.redis = 'error';
+  }
+
+  const allOk = Object.values(checks).every(v => v === 'ok');
+  return c.json({ status: allOk ? 'ready' : 'degraded', checks }, allOk ? 200 : 503);
+});
+
+// Detailed health for monitoring
+app.get('/', async (c) => {
+  const checks: Record<string, any> = {};
+
+  // Database check
+  try {
+    const start = Date.now();
+    await db.execute(sql`SELECT 1`);
+    checks.database = { status: 'ok', latencyMs: Date.now() - start };
+  } catch (e: any) {
+    checks.database = { status: 'error', error: e.message };
+  }
+
+  // Redis check
+  try {
+    const start = Date.now();
+    await redis.ping();
+    checks.redis = { status: 'ok', latencyMs: Date.now() - start };
+  } catch (e: any) {
+    checks.redis = { status: 'error', error: e.message };
+  }
+
+  // Memory usage
+  const memUsage = process.memoryUsage();
+  checks.memory = {
+    heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+    heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+    rssMB: Math.round(memUsage.rss / 1024 / 1024),
+  };
+
+  const allOk = checks.database.status === 'ok' && checks.redis.status === 'ok';
+  return c.json({
+    status: allOk ? 'healthy' : 'unhealthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.VERSION || '0.1.0',
+    checks,
+  }, allOk ? 200 : 503);
+});
+
+export default app;

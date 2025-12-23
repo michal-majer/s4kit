@@ -6,6 +6,7 @@
 import ky from 'ky';
 import { XMLParser } from 'fast-xml-parser';
 import { encryption } from './encryption';
+import { oauthTokenService, type OAuthTokenConfig } from './oauth-token';
 
 export interface ODataEntity {
   name: string;
@@ -32,6 +33,7 @@ export interface ODataMetadataResult {
   entities: ODataEntity[];
   raw?: string;
   error?: string;
+  odataVersion?: 'v2' | 'v4';
 }
 
 export interface ODataMetadataFull {
@@ -39,6 +41,7 @@ export interface ODataMetadataFull {
   entityTypes: ODataEntityType[];
   raw?: string;
   error?: string;
+  odataVersion?: 'v2' | 'v4';
 }
 
 interface FetchMetadataOptions {
@@ -92,10 +95,28 @@ function parseMetadataXml(xml: string): ODataEntity[] {
 }
 
 /**
+ * Detect OData version from $metadata XML
+ * OData v4 uses OASIS namespace, v2 uses Microsoft namespace
+ */
+function detectODataVersion(xml: string): 'v2' | 'v4' {
+  // OData v4 uses OASIS namespace
+  if (xml.includes('http://docs.oasis-open.org/odata/ns/edmx')) {
+    return 'v4';
+  }
+  // OData v4 also indicated by Version="4.0" or Version="4.01"
+  if (/Version\s*=\s*["']4\.\d+["']/i.test(xml)) {
+    return 'v4';
+  }
+  // Default to v2 (Microsoft namespace or legacy)
+  return 'v2';
+}
+
+/**
  * Parse full OData metadata XML to extract EntityType definitions with properties
  */
 function parseFullMetadataXml(xml: string): ODataMetadataFull {
   const entities = parseMetadataXml(xml);
+  const odataVersion = detectODataVersion(xml);
   const entityTypes: ODataEntityType[] = [];
   
   try {
@@ -183,6 +204,7 @@ function parseFullMetadataXml(xml: string): ODataMetadataFull {
     entities,
     entityTypes,
     raw: xml,
+    odataVersion,
   };
 }
 
@@ -254,7 +276,7 @@ export const metadataParser = {
           // Custom authentication
           const authConfig = options.auth.config as any;
           const credentials = options.auth.credentials as any;
-          
+
           if (authConfig?.headerName && credentials?.headerValue) {
             const headerName = authConfig.headerName;
             const headerValue = encryption.decrypt(credentials.headerValue);
@@ -262,22 +284,46 @@ export const metadataParser = {
           } else {
             throw new Error('Custom authentication header name and value not found in auth configuration');
           }
+        } else if (authType === 'oauth2') {
+          // OAuth2 authentication
+          const authConfig = options.auth.config as any;
+          const credentials = options.auth.credentials as any;
+
+          if (!authConfig?.tokenUrl || !authConfig?.clientId) {
+            throw new Error('OAuth2 tokenUrl and clientId are required in authConfig');
+          }
+          if (!credentials?.clientSecret) {
+            throw new Error('OAuth2 clientSecret is required in credentials');
+          }
+
+          const oauthConfig: OAuthTokenConfig = {
+            tokenUrl: authConfig.tokenUrl,
+            clientId: authConfig.clientId,
+            clientSecret: encryption.decrypt(credentials.clientSecret),
+            scope: authConfig.scope,
+            grantType: authConfig.grantType || 'client_credentials',
+          };
+
+          const accessToken = await oauthTokenService.getToken(oauthConfig, `oauth:metadata:${metadataUrl}`);
+          headers['Authorization'] = `Bearer ${accessToken}`;
         } else {
-          throw new Error(`Authentication type '${authType}' is not yet supported for metadata fetching`);
+          throw new Error(`Authentication type '${authType}' is not supported for metadata fetching`);
         }
       }
-      
+
       const response = await ky.get(metadataUrl, {
         headers,
         timeout: 30000 // 30 second timeout
       });
-      
+
       const xml = await response.text();
       const entities = parseMetadataXml(xml);
-      
+      const odataVersion = detectODataVersion(xml);
+
       return {
         entities,
-        raw: xml
+        raw: xml,
+        odataVersion,
       };
     } catch (error: any) {
       console.error('Failed to fetch $metadata:', error);
@@ -319,13 +365,15 @@ export const metadataParser = {
         headers,
         timeout: 30000
       });
-      
+
       const xml = await response.text();
       const entities = parseMetadataXml(xml);
-      
+      const odataVersion = detectODataVersion(xml);
+
       return {
         entities,
-        raw: xml
+        raw: xml,
+        odataVersion,
       };
     } catch (error: any) {
       console.error('Failed to fetch $metadata:', error);
@@ -341,6 +389,13 @@ export const metadataParser = {
    */
   parseMetadata: (xml: string): ODataEntity[] => {
     return parseMetadataXml(xml);
+  },
+
+  /**
+   * Detect OData version from metadata XML
+   */
+  detectVersion: (xml: string): 'v2' | 'v4' => {
+    return detectODataVersion(xml);
   },
 
   /**
@@ -383,7 +438,7 @@ export const metadataParser = {
           // Custom authentication
           const authConfig = options.auth.config as any;
           const credentials = options.auth.credentials as any;
-          
+
           if (authConfig?.headerName && credentials?.headerValue) {
             const headerName = authConfig.headerName;
             const headerValue = encryption.decrypt(credentials.headerValue);
@@ -391,16 +446,38 @@ export const metadataParser = {
           } else {
             throw new Error('Custom authentication header name and value not found in auth configuration');
           }
+        } else if (authType === 'oauth2') {
+          // OAuth2 authentication
+          const authConfig = options.auth.config as any;
+          const credentials = options.auth.credentials as any;
+
+          if (!authConfig?.tokenUrl || !authConfig?.clientId) {
+            throw new Error('OAuth2 tokenUrl and clientId are required in authConfig');
+          }
+          if (!credentials?.clientSecret) {
+            throw new Error('OAuth2 clientSecret is required in credentials');
+          }
+
+          const oauthConfig: OAuthTokenConfig = {
+            tokenUrl: authConfig.tokenUrl,
+            clientId: authConfig.clientId,
+            clientSecret: encryption.decrypt(credentials.clientSecret),
+            scope: authConfig.scope,
+            grantType: authConfig.grantType || 'client_credentials',
+          };
+
+          const accessToken = await oauthTokenService.getToken(oauthConfig, `oauth:metadata:${metadataUrl}`);
+          headers['Authorization'] = `Bearer ${accessToken}`;
         } else {
-          throw new Error(`Authentication type '${authType}' is not yet supported for metadata fetching`);
+          throw new Error(`Authentication type '${authType}' is not supported for metadata fetching`);
         }
       }
-      
+
       const response = await ky.get(metadataUrl, {
         headers,
         timeout: 30000 // 30 second timeout
       });
-      
+
       const xml = await response.text();
       return parseFullMetadataXml(xml);
     } catch (error: any) {

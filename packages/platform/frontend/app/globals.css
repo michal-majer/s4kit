@@ -3,11 +3,28 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Custom font imports */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_KU7NSg.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff2') format('woff2');
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -37,89 +54,287 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  /* SAP TechEd inspired - much rounder */
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-3xl: calc(var(--radius) + 16px);
+  --radius-4xl: calc(var(--radius) + 24px);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* SAP TechEd inspired - very round */
+  --radius: 1.25rem;
+
+  /* Light Mode - Clean, modern */
+  --background: oklch(0.98 0.005 270);
+  --foreground: oklch(0.2 0.04 280);
+
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.2 0.04 280);
+
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.2 0.04 280);
+
+  /* Primary - SAP deep indigo/purple */
+  --primary: oklch(0.35 0.15 280);
+  --primary-foreground: oklch(0.98 0 0);
+
+  /* Secondary - Soft lavender */
+  --secondary: oklch(0.94 0.03 290);
+  --secondary-foreground: oklch(0.3 0.1 280);
+
+  --muted: oklch(0.95 0.01 280);
+  --muted-foreground: oklch(0.5 0.03 280);
+
+  /* Accent - SAP Cyan/Teal (like GA badges) */
+  --accent: oklch(0.75 0.18 185);
+  --accent-foreground: oklch(0.15 0.06 185);
+
+  --destructive: oklch(0.55 0.22 25);
+
+  /* Success - Bright teal/cyan */
+  --success: oklch(0.72 0.18 175);
+  --success-foreground: oklch(0.15 0.06 175);
+
+  /* Warning - Warm amber */
+  --warning: oklch(0.78 0.16 75);
+  --warning-foreground: oklch(0.25 0.06 75);
+
+  --border: oklch(0.92 0.01 280);
+  --input: oklch(0.92 0.01 280);
+  --ring: oklch(0.6 0.18 185);
+
+  /* Chart colors - SAP TechEd palette */
+  --chart-1: oklch(0.72 0.18 185);
+  --chart-2: oklch(0.65 0.15 290);
+  --chart-3: oklch(0.75 0.12 330);
+  --chart-4: oklch(0.78 0.16 75);
+  --chart-5: oklch(0.6 0.2 25);
+
+  /* Sidebar - Light with subtle purple tint */
+  --sidebar: oklch(0.98 0.01 280);
+  --sidebar-foreground: oklch(0.2 0.04 280);
+  --sidebar-primary: oklch(0.35 0.15 280);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.94 0.02 280);
+  --sidebar-accent-foreground: oklch(0.25 0.06 280);
+  --sidebar-border: oklch(0.92 0.01 280);
+  --sidebar-ring: oklch(0.6 0.18 185);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Dark Mode - SAP TechEd deep indigo */
+  --background: oklch(0.18 0.06 280);
+  --foreground: oklch(0.95 0.01 280);
+
+  --card: oklch(0.22 0.05 280);
+  --card-foreground: oklch(0.95 0.01 280);
+
+  --popover: oklch(0.24 0.05 280);
+  --popover-foreground: oklch(0.95 0.01 280);
+
+  /* Primary - Light purple/lavender for dark mode */
+  --primary: oklch(0.85 0.1 290);
+  --primary-foreground: oklch(0.18 0.06 280);
+
+  /* Secondary - Deep purple */
+  --secondary: oklch(0.28 0.06 280);
+  --secondary-foreground: oklch(0.9 0.02 280);
+
+  --muted: oklch(0.26 0.05 280);
+  --muted-foreground: oklch(0.65 0.03 280);
+
+  /* Accent - Bright cyan (GA now badge style) */
+  --accent: oklch(0.78 0.2 185);
+  --accent-foreground: oklch(0.18 0.06 280);
+
+  --destructive: oklch(0.65 0.2 25);
+
+  --success: oklch(0.75 0.2 175);
+  --success-foreground: oklch(0.18 0.06 280);
+
+  --warning: oklch(0.8 0.18 75);
+  --warning-foreground: oklch(0.18 0.06 280);
+
+  --border: oklch(0.32 0.05 280);
+  --input: oklch(0.28 0.05 280);
+  --ring: oklch(0.78 0.2 185);
+
+  /* Chart colors - Vibrant for dark */
+  --chart-1: oklch(0.78 0.2 185);
+  --chart-2: oklch(0.72 0.18 290);
+  --chart-3: oklch(0.78 0.15 330);
+  --chart-4: oklch(0.8 0.18 75);
+  --chart-5: oklch(0.68 0.22 25);
+
+  /* Sidebar - Darker indigo */
+  --sidebar: oklch(0.2 0.06 280);
+  --sidebar-foreground: oklch(0.95 0.01 280);
+  --sidebar-primary: oklch(0.78 0.2 185);
+  --sidebar-primary-foreground: oklch(0.18 0.06 280);
+  --sidebar-accent: oklch(0.26 0.06 280);
+  --sidebar-accent-foreground: oklch(0.9 0.02 280);
+  --sidebar-border: oklch(0.3 0.05 280);
+  --sidebar-ring: oklch(0.78 0.2 185);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "ss02", "cv01";
   }
+
+  /* Refined focus states */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+
+  /* Selection color */
+  ::selection {
+    @apply bg-accent/30 text-accent-foreground;
+  }
+}
+
+@layer utilities {
+  /* SAP TechEd inspired pastel card backgrounds */
+  .card-lavender {
+    @apply bg-[oklch(0.92_0.06_300)] dark:bg-[oklch(0.35_0.1_300)];
+  }
+
+  .card-mint {
+    @apply bg-[oklch(0.92_0.08_175)] dark:bg-[oklch(0.35_0.12_175)];
+  }
+
+  .card-purple {
+    @apply bg-[oklch(0.88_0.1_280)] dark:bg-[oklch(0.32_0.12_280)];
+  }
+
+  .card-pink {
+    @apply bg-[oklch(0.92_0.08_340)] dark:bg-[oklch(0.35_0.1_340)];
+  }
+
+  .card-gradient-purple {
+    background: linear-gradient(135deg, oklch(0.6 0.2 290) 0%, oklch(0.55 0.22 340) 100%);
+  }
+
+  .card-gradient-blue {
+    background: linear-gradient(135deg, oklch(0.55 0.18 280) 0%, oklch(0.6 0.2 230) 100%);
+  }
+
+  /* Subtle text gradient */
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent;
+    background-size: 200% auto;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-background/80 backdrop-blur-xl border border-border/50;
+  }
+
+  /* Glow effects - SAP cyan */
+  .glow-accent {
+    box-shadow: 0 0 24px oklch(0.78 0.2 185 / 0.25),
+                0 0 48px oklch(0.78 0.2 185 / 0.15);
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 24px oklch(0.35 0.15 280 / 0.2),
+                0 0 48px oklch(0.35 0.15 280 / 0.1);
+  }
+
+  /* Subtle noise texture overlay */
+  .noise {
+    position: relative;
+  }
+
+  .noise::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  /* Shimmer animation for loading */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      oklch(0.94 0.02 280) 0%,
+      oklch(0.96 0.01 280) 50%,
+      oklch(0.94 0.02 280) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .dark .shimmer {
+    background: linear-gradient(
+      90deg,
+      oklch(0.26 0.05 280) 0%,
+      oklch(0.3 0.05 280) 50%,
+      oklch(0.26 0.05 280) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Fade in up animation */
+  .animate-in-up {
+    animation: fadeInUp 0.5s ease-out forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Stagger delays */
+  .delay-75 { animation-delay: 75ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-225 { animation-delay: 225ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-375 { animation-delay: 375ms; }
+  .delay-450 { animation-delay: 450ms; }
 }

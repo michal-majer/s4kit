@@ -16,6 +16,7 @@ export type {
   ExpandOptions,
   ListResponse,
   ODataResponse,
+  PaginateOptions,
 
   // Entity handling
   EntityHandler,

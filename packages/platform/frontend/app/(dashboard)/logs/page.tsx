@@ -6,14 +6,7 @@ import { StatsCard } from '@/components/common/stats-card';
 import { LogsTable } from '@/components/logs/logs-table';
 import { LogsFilters } from '@/components/logs/logs-filters';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import {
-  Activity,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  TrendingUp,
-  Database,
-} from 'lucide-react';
+import { Database } from 'lucide-react';
 
 interface LogsPageProps {
   searchParams: Promise<{
@@ -96,30 +89,34 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
 
       {/* Stats Overview */}
       {analytics?.summary && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Requests (24h)"
             value={analytics.summary.totalRequests}
             description="Total API calls"
-            icon={Activity}
+            icon="activity"
+            variant="lavender"
           />
           <StatsCard
             title="Success Rate"
             value={`${successRate}%`}
             description={`${analytics.summary.successCount} successful`}
-            icon={CheckCircle2}
+            icon="check-circle"
+            variant="mint"
           />
           <StatsCard
             title="Errors (24h)"
             value={analytics.summary.errorCount}
             description="Failed requests"
-            icon={XCircle}
+            icon="x-circle"
+            variant="pink"
           />
           <StatsCard
             title="Avg Latency"
             value={`${analytics.summary.avgResponseTime || 0}ms`}
             description={`P95: ${analytics.summary.p95ResponseTime || 0}ms`}
-            icon={Clock}
+            icon="clock"
+            variant="purple"
           />
         </div>
       )}
@@ -130,13 +127,13 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
           {analytics.topEntities.slice(0, 5).map((entity) => (
             <div
               key={entity.entity}
-              className="flex items-center gap-3 rounded-lg border bg-card p-4"
+              className="flex items-center gap-3.5 rounded-2xl border-0 bg-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
             >
-              <div className="rounded-lg bg-primary/10 p-2">
+              <div className="rounded-xl bg-primary/10 p-2.5">
                 <Database className="h-4 w-4 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{entity.entity}</p>
+                <p className="text-sm font-bold truncate">{entity.entity}</p>
                 <p className="text-xs text-muted-foreground">
                   {entity.count} requests &middot; {entity.successRate}% success
                 </p>

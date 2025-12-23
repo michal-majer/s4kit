@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import { authMiddleware } from '../../middleware/auth';
-import { rateLimitMiddleware } from '../../middleware/rate-limit';
-import { loggingMiddleware } from '../../middleware/logging';
-import { accessResolver } from '../../services/access-resolver';
-import { sapClient } from '../../services/sap-client';
+import { authMiddleware } from '../middleware/auth.ts';
+import { rateLimitMiddleware } from '../middleware/rate-limit.ts';
+import { loggingMiddleware } from '../middleware/logging.ts';
+import { accessResolver } from '../services/access-resolver.ts';
+import { sapClient } from '../services/sap-client.ts';
 import {
   generateRequestId,
   hashClientIp,
@@ -13,8 +13,8 @@ import {
   calculateSize,
   countRecords,
   sanitizeErrorMessage,
-} from '../../utils/log-helpers';
-import type { Variables, Instance, SystemService, InstanceService, SecureLogData } from '../../types';
+} from '../utils/log-helpers.ts';
+import type { Variables, Instance, SystemService, InstanceService, SecureLogData } from '../types.ts';
 
 const app = new Hono<{ Variables: Variables }>();
 

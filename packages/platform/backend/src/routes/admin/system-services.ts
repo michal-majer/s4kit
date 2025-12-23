@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { systemServices, predefinedServices, instances } from '../../db/schema';
+import { systemServices, predefinedServices, instances, instanceServices, apiKeyAccess } from '../../db/schema';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { count, desc, eq } from 'drizzle-orm';
 
 const app = new Hono();
 
@@ -16,6 +16,7 @@ const serviceSchema = z.object({
   description: z.string().optional(),
   entities: z.array(z.string()).optional(),
   predefinedServiceId: z.string().uuid().optional(),
+  odataVersion: z.enum(['v2', 'v4']).optional(),
   // Optional auth configuration
   authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).optional(),
   username: z.string().min(1).optional(),
@@ -54,10 +55,10 @@ app.post('/', async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
-  const { 
+  const {
     authType,
-    username, 
-    password, 
+    username,
+    password,
     apiKey,
     apiKeyHeaderName,
     oauth2ClientId,
@@ -68,12 +69,14 @@ app.post('/', async (c) => {
     authConfig,
     credentials,
     entities,
-    ...data 
+    odataVersion,
+    ...data
   } = result.data;
 
   const serviceData: any = {
     ...data,
     entities: entities || [],
+    odataVersion: odataVersion || null,
   };
 
   if (authType) {
@@ -246,6 +249,21 @@ app.patch('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
+  // Check if service is used by any API keys
+  const usageResult = await db.select({ count: count() })
+    .from(apiKeyAccess)
+    .innerJoin(instanceServices, eq(apiKeyAccess.instanceServiceId, instanceServices.id))
+    .where(eq(instanceServices.systemServiceId, id));
+
+  const usageCount = usageResult[0]?.count ?? 0;
+  if (usageCount > 0) {
+    return c.json({
+      error: 'Cannot delete service',
+      message: `Service is used by ${usageCount} API key access grant(s). Remove the API key access grants first.`,
+      apiKeyCount: usageCount
+    }, 409);
+  }
+
   const [deleted] = await db.delete(systemServices)
     .where(eq(systemServices.id, id))
     .returning();
@@ -345,11 +363,12 @@ app.post('/:id/refresh-entities', async (c) => {
     
     // Extract entity names
     const entityNames = metadataResult.entities.map(e => e.name);
-    
-    // Update the service with new entities
+
+    // Update the service with new entities and detected OData version
     const [updated] = await db.update(systemServices)
-      .set({ 
+      .set({
         entities: entityNames,
+        odataVersion: metadataResult.odataVersion || service.odataVersion,
         updatedAt: new Date()
       })
       .where(eq(systemServices.id, id))

@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { instanceServices, systemServices, instances } from '../../db/schema';
+import { instanceServices, systemServices, instances, apiKeyAccess } from '../../db/schema';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
+import { sapClient, type ResolvedAuthConfig } from '../../services/sap-client';
 import { z } from 'zod';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 
 const app = new Hono();
 
@@ -87,6 +88,13 @@ async function refreshInstanceServiceEntities(instanceServiceId: string): Promis
         verificationError: null,
       })
       .where(eq(instanceServices.id, instanceServiceId));
+
+    // Update parent systemService odataVersion if detected and not already set
+    if (metadataResult.odataVersion && !systemService.odataVersion) {
+      await db.update(systemServices)
+        .set({ odataVersion: metadataResult.odataVersion, updatedAt: new Date() })
+        .where(eq(systemServices.id, systemService.id));
+    }
   } catch (error: any) {
     await db.update(instanceServices)
       .set({
@@ -161,6 +169,7 @@ app.get('/', async (c) => {
         name: systemService.name,
         alias: systemService.alias,
         entities: systemService.entities,
+        odataVersion: systemService.odataVersion,
       } : null,
       instance: instance ? {
         id: instance.id,
@@ -168,7 +177,7 @@ app.get('/', async (c) => {
       } : null,
     };
   }));
-  
+
   return c.json(enrichedServices);
 });
 
@@ -287,6 +296,7 @@ app.get('/:id', async (c) => {
       name: systemService.name,
       alias: systemService.alias,
       entities: systemService.entities,
+      odataVersion: systemService.odataVersion,
     } : null,
     instance: instance ? {
       id: instance.id,
@@ -403,6 +413,20 @@ app.patch('/:id', async (c) => {
 // Delete instance service
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
+
+  // Check if instance service is used by any API keys
+  const usageResult = await db.select({ count: count() })
+    .from(apiKeyAccess)
+    .where(eq(apiKeyAccess.instanceServiceId, id));
+
+  const usageCount = usageResult[0]?.count ?? 0;
+  if (usageCount > 0) {
+    return c.json({
+      error: 'Cannot delete instance service',
+      message: `Instance service is used by ${usageCount} API key access grant(s). Remove the API key access grants first.`,
+      apiKeyCount: usageCount
+    }, 409);
+  }
 
   const [deleted] = await db.delete(instanceServices)
     .where(eq(instanceServices.id, id))
@@ -525,6 +549,13 @@ app.post('/:id/refresh-entities', async (c) => {
       return c.json({ error: 'Failed to update instance service' }, 500);
     }
 
+    // Update parent systemService odataVersion if detected and not already set
+    if (metadataResult.odataVersion && !systemService.odataVersion) {
+      await db.update(systemServices)
+        .set({ odataVersion: metadataResult.odataVersion, updatedAt: new Date() })
+        .where(eq(systemServices.id, systemService.id));
+    }
+
     const { username: _, password: __, credentials: ___, ...safeService } = updated;
 
     // Resolve entities for response
@@ -533,7 +564,8 @@ app.post('/:id/refresh-entities', async (c) => {
     return c.json({
       ...safeService,
       entities: resolvedEntities,
-      refreshedCount: entityNames.length
+      refreshedCount: entityNames.length,
+      odataVersion: metadataResult.odataVersion || systemService.odataVersion,
     });
   } catch (error: any) {
     console.error('Failed to refresh entities:', error);
@@ -552,6 +584,163 @@ app.post('/:id/refresh-entities', async (c) => {
       entities: [],
       verificationStatus: 'failed',
     }, 500);
+  }
+});
+
+// Test API endpoint - make a test request to SAP using the service's auth
+const testSchema = z.object({
+  entity: z.string().optional(),
+  customPath: z.string().optional(),
+  $top: z.number().optional(),
+  $skip: z.number().optional(),
+  $filter: z.string().optional(),
+  $select: z.string().optional(),
+  $expand: z.string().optional(),
+  $orderby: z.string().optional(),
+}).refine(data => data.entity || data.customPath, {
+  message: 'Either entity or customPath is required'
+});
+
+app.post('/:id/test', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+
+  // Validate request body
+  const result = testSchema.safeParse(body);
+  if (!result.success) {
+    return c.json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: result.error.issues[0]?.message || 'Invalid request'
+      }
+    }, 400);
+  }
+
+  const { entity, customPath, ...odataParams } = result.data;
+
+  // Fetch instance service with related data
+  const instanceService = await db.query.instanceServices.findFirst({
+    where: eq(instanceServices.id, id)
+  });
+
+  if (!instanceService) {
+    return c.json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Instance service not found' }
+    }, 404);
+  }
+
+  const [instance, systemService] = await Promise.all([
+    db.query.instances.findFirst({
+      where: eq(instances.id, instanceService.instanceId)
+    }),
+    db.query.systemServices.findFirst({
+      where: eq(systemServices.id, instanceService.systemServiceId)
+    })
+  ]);
+
+  if (!instance || !systemService) {
+    return c.json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Instance or system service not found' }
+    }, 404);
+  }
+
+  // Resolve auth with inheritance: instanceService > systemService > instance
+  let auth: ResolvedAuthConfig;
+
+  if (instanceService.authType && instanceService.authType !== 'none') {
+    auth = {
+      type: instanceService.authType,
+      username: instanceService.username,
+      password: instanceService.password,
+      config: instanceService.authConfig,
+      credentials: instanceService.credentials,
+    };
+  } else if (systemService.authType && systemService.authType !== 'none') {
+    auth = {
+      type: systemService.authType,
+      username: systemService.username,
+      password: systemService.password,
+      config: systemService.authConfig,
+      credentials: systemService.credentials,
+    };
+  } else {
+    auth = {
+      type: instance.authType,
+      username: instance.username,
+      password: instance.password,
+      config: instance.authConfig,
+      credentials: instance.credentials,
+    };
+  }
+
+  // Build path
+  const servicePath = instanceService.servicePathOverride || systemService.servicePath;
+  const entityPath = customPath || entity;
+  const fullPath = `${servicePath}/${entityPath}`.replace(/\/+/g, '/');
+
+  // Build query params
+  const queryParams: Record<string, string> = {};
+  const odataParamNames = ['$top', '$skip', '$filter', '$select', '$expand', '$orderby'] as const;
+  for (const param of odataParamNames) {
+    const value = odataParams[param];
+    if (value !== undefined) {
+      queryParams[param] = String(value);
+    }
+  }
+
+  // Make request
+  const startTime = Date.now();
+  try {
+    const response = await sapClient.requestWithAuth({
+      baseUrl: instance.baseUrl,
+      auth,
+      method: 'GET',
+      path: fullPath,
+      params: queryParams,
+      raw: false,
+      stripMetadata: true,
+    });
+
+    const responseTime = Date.now() - startTime;
+    const sapResponseTime = response?.__sapResponseTime;
+
+    // Clean response - remove internal timing field
+    const { __sapResponseTime, ...cleanData } = response || {};
+
+    return c.json({
+      success: true,
+      statusCode: 200,
+      responseTime,
+      sapResponseTime,
+      data: cleanData,
+      recordCount: Array.isArray(cleanData?.data) ? cleanData.data.length : undefined,
+      request: {
+        method: 'GET',
+        url: `${instance.baseUrl}${fullPath}`,
+        authType: auth.type,
+      }
+    });
+  } catch (error: any) {
+    const responseTime = Date.now() - startTime;
+
+    return c.json({
+      success: false,
+      statusCode: error.status || 500,
+      responseTime,
+      error: {
+        code: error.odataError?.code || error.code || 'REQUEST_FAILED',
+        message: error.odataError?.message || error.message || 'Request failed',
+        details: error.odataError?.details || error.details,
+      },
+      request: {
+        method: 'GET',
+        url: `${instance.baseUrl}${fullPath}`,
+        authType: auth.type,
+      }
+    });
   }
 });
 

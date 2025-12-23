@@ -203,10 +203,10 @@ export function DataTable<T extends Record<string, any>>({
   const totalColumns = columns.length + (hasExpandableRows ? 1 : 0);
 
   return (
-    <div className={cn('rounded-lg border bg-card', className)}>
+    <div className={cn('rounded-3xl border-0 bg-card shadow-sm overflow-hidden', className)}>
       {/* Search bar */}
       {showSearch && (
-        <div className="flex items-center gap-2 border-b px-4 py-3">
+        <div className="flex items-center gap-2 border-b border-border/20 px-5 py-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -235,7 +235,7 @@ export function DataTable<T extends Record<string, any>>({
       {/* Table */}
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
+          <TableRow className="bg-muted/30 hover:bg-muted/30">
             {hasExpandableRows && (
               <TableHead className="w-10" />
             )}
@@ -337,7 +337,7 @@ export function DataTable<T extends Record<string, any>>({
 
       {/* Pagination */}
       {showPagination && (
-        <div className="flex items-center justify-between border-t px-4 py-3">
+        <div className="flex items-center justify-between border-t border-border/20 px-5 py-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Rows per page</span>
             <Select

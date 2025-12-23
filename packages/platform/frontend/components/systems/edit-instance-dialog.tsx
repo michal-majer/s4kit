@@ -22,6 +22,8 @@ import {
 import { api, Instance } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { Upload } from 'lucide-react';
+import { ImportBindingDialog } from './import-binding-dialog';
 
 interface EditInstanceDialogProps {
   instance: Instance;
@@ -32,6 +34,7 @@ interface EditInstanceDialogProps {
 export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanceDialogProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     baseUrl: instance.baseUrl,
     authType: instance.authType,
@@ -44,6 +47,23 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
     customHeaderName: instance.authConfig?.headerName || '',
     customHeaderValue: '',
   });
+
+  const handleImportSuccess = (config: {
+    tokenUrl: string;
+    clientId: string;
+    scope?: string;
+  }) => {
+    setFormData((prev) => ({
+      ...prev,
+      authType: 'oauth2',
+      oauth2TokenUrl: config.tokenUrl,
+      oauth2ClientId: config.clientId,
+      oauth2Scope: config.scope || '',
+      oauth2ClientSecret: '', // Already saved via import
+    }));
+    setImportDialogOpen(false);
+    router.refresh();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +158,23 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
 
             {formData.authType === 'oauth2' && (
               <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setImportDialogOpen(true)}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import Service Binding
+                </Button>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or configure manually</span>
+                  </div>
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="oauth2TokenUrl">Token URL</Label>
                   <Input
@@ -208,6 +245,13 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <ImportBindingDialog
+        instanceId={instance.id}
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImported={handleImportSuccess}
+      />
     </Dialog>
   );
 }

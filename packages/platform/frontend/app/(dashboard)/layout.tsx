@@ -5,15 +5,16 @@ import { AuthProvider } from '@/components/providers/auth-provider';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+async function getCookieHeader() {
+  const cookieStore = await cookies();
+  return cookieStore.getAll()
+    .map(c => `${c.name}=${c.value}`)
+    .join('; ');
+}
+
 async function getSession() {
   try {
-    const cookieStore = await cookies();
-    const headersList = await headers();
-
-    // Forward cookies to the backend for session validation
-    const cookieHeader = cookieStore.getAll()
-      .map(c => `${c.name}=${c.value}`)
-      .join('; ');
+    const cookieHeader = await getCookieHeader();
 
     const res = await fetch(`${API_URL}/api/auth/get-session`, {
       headers: {
@@ -35,20 +36,45 @@ async function getSession() {
   }
 }
 
+async function getOrganization() {
+  try {
+    const cookieHeader = await getCookieHeader();
+
+    const res = await fetch(`${API_URL}/admin/organization`, {
+      headers: {
+        Cookie: cookieHeader,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to get organization:', error);
+    return null;
+  }
+}
+
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getSession();
+  const [session, organization] = await Promise.all([
+    getSession(),
+    getOrganization(),
+  ]);
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  // Get organization info - for now use a default if not set
-  const organizationId = session.session?.activeOrganizationId || '';
-  const organizationName = 'Default Organization'; // TODO: Fetch from API
+  const organizationId = organization?.id || session.session?.activeOrganizationId || '';
+  const organizationName = organization?.name || 'Organization';
   const userRole = 'owner'; // TODO: Fetch from membership
 
   return (

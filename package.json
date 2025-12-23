@@ -2,7 +2,8 @@
   "name": "s4kit-monorepo",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/platform/*"
   ],
   "scripts": {
     "build": "bun run build --filter '*'",

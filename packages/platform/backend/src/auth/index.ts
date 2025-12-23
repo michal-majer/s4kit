@@ -1,9 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { organization } from 'better-auth/plugins/organization';
-import { db } from '../db';
+import { db, organizations } from '../db';
 import * as authSchema from '../db/auth-schema';
 import { config } from '../config/mode';
+import { eq } from 'drizzle-orm';
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
 
@@ -71,6 +72,36 @@ export const auth = betterAuth({
     accountLinking: {
       enabled: true,
       trustedProviders: ['google', 'github'],
+    },
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          // Auto-create organization for new users and add them as owner
+          console.log(`[Auth] Creating organization for new user: ${user.email}`);
+
+          const orgId = crypto.randomUUID();
+          const orgName = user.name ? `${user.name}'s Organization` : 'My Organization';
+
+          // Create organization
+          await db.insert(organizations).values({
+            id: orgId,
+            name: orgName,
+          });
+
+          // Add user as owner
+          await db.insert(authSchema.members).values({
+            id: crypto.randomUUID(),
+            organizationId: orgId,
+            userId: user.id,
+            role: 'owner',
+          });
+
+          console.log(`[Auth] Created organization ${orgId} for user ${user.id}`);
+        },
+      },
     },
   },
 });

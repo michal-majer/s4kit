@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -16,6 +17,70 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { api, InstanceService, SystemService } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { Upload, ChevronDown, ChevronUp } from 'lucide-react';
+
+/**
+ * Client-side parser for service binding JSON
+ */
+function parseServiceBinding(json: string): {
+  tokenUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scope?: string;
+} | null {
+  try {
+    const parsed = JSON.parse(json);
+
+    // Try VCAP_SERVICES format
+    if (parsed.xsuaa && Array.isArray(parsed.xsuaa) && parsed.xsuaa.length > 0) {
+      const creds = parsed.xsuaa[0].credentials;
+      if (creds?.clientid && creds?.clientsecret && creds?.url) {
+        return {
+          tokenUrl: creds.url.replace(/\/$/, '') + '/oauth/token',
+          clientId: creds.clientid,
+          clientSecret: creds.clientsecret,
+          scope: creds.scope,
+        };
+      }
+    }
+
+    // Try destination service format
+    if (parsed.destination && Array.isArray(parsed.destination) && parsed.destination.length > 0) {
+      const creds = parsed.destination[0].credentials;
+      if (creds?.clientid && creds?.clientsecret && creds?.url) {
+        return {
+          tokenUrl: creds.url.replace(/\/$/, '') + '/oauth/token',
+          clientId: creds.clientid,
+          clientSecret: creds.clientsecret,
+        };
+      }
+    }
+
+    // Try direct service binding format
+    if (parsed.clientid && parsed.clientsecret && parsed.url) {
+      return {
+        tokenUrl: parsed.url.replace(/\/$/, '') + '/oauth/token',
+        clientId: parsed.clientid,
+        clientSecret: parsed.clientsecret,
+        scope: parsed.scope,
+      };
+    }
+
+    // Try nested credentials format
+    if (parsed.credentials?.clientid && parsed.credentials?.clientsecret && parsed.credentials?.url) {
+      return {
+        tokenUrl: parsed.credentials.url.replace(/\/$/, '') + '/oauth/token',
+        clientId: parsed.credentials.clientid,
+        clientSecret: parsed.credentials.clientsecret,
+        scope: parsed.credentials.scope,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 interface InstanceServiceConfigDialogProps {
   instanceService: InstanceService;
@@ -32,6 +97,8 @@ export function InstanceServiceConfigDialog({
 }: InstanceServiceConfigDialogProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showImportSection, setShowImportSection] = useState(false);
+  const [bindingJson, setBindingJson] = useState('');
   const [formData, setFormData] = useState({
     servicePathOverride: instanceService.servicePathOverride || '',
     useServicePathOverride: !!instanceService.servicePathOverride,
@@ -47,6 +114,24 @@ export function InstanceServiceConfigDialog({
     oauth2Scope: instanceService.authConfig?.scope || '',
     useEntityOverride: instanceService.hasEntityOverride || false,
   });
+
+  const handleParseBinding = () => {
+    const parsed = parseServiceBinding(bindingJson);
+    if (parsed) {
+      setFormData((prev) => ({
+        ...prev,
+        oauth2TokenUrl: parsed.tokenUrl,
+        oauth2ClientId: parsed.clientId,
+        oauth2ClientSecret: parsed.clientSecret,
+        oauth2Scope: parsed.scope || '',
+      }));
+      setBindingJson('');
+      setShowImportSection(false);
+      toast.success('Service binding parsed successfully');
+    } else {
+      toast.error('Invalid service binding format');
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -251,6 +336,43 @@ export function InstanceServiceConfigDialog({
 
                 {formData.authType === 'oauth2' && (
                   <>
+                    <div className="space-y-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between"
+                        onClick={() => setShowImportSection(!showImportSection)}
+                      >
+                        <span className="flex items-center">
+                          <Upload className="mr-2 h-3 w-3" />
+                          Import from Service Binding
+                        </span>
+                        {showImportSection ? (
+                          <ChevronUp className="h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3" />
+                        )}
+                      </Button>
+                      {showImportSection && (
+                        <div className="space-y-2 rounded-md border p-2">
+                          <Textarea
+                            placeholder="Paste VCAP_SERVICES or service binding JSON..."
+                            value={bindingJson}
+                            onChange={(e) => setBindingJson(e.target.value)}
+                            className="min-h-[80px] font-mono text-xs"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleParseBinding}
+                            disabled={!bindingJson.trim()}
+                          >
+                            Parse & Fill
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <Label htmlFor="oauth2TokenUrl">Token URL</Label>
                       <Input

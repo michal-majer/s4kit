@@ -12,6 +12,7 @@ export interface S4KitConfig {
   service?: string;           // Default service alias - OPTIONAL (auto-resolved from entity)
   timeout?: number;           // Request timeout in milliseconds (default: 30000)
   retries?: number;           // Number of retries on failure (default: 0)
+  debug?: boolean;            // Enable debug logging (default: false)
 }
 
 // ============================================================================
@@ -260,6 +261,45 @@ export interface EntityHandler<T = any> {
    * ```
    */
   boundAction<R = any>(id: EntityKey, name: string, params?: Record<string, any>): Promise<R>;
+
+  // ==================== Pagination ====================
+
+  /**
+   * Paginate through all entities with automatic page handling
+   * @example
+   * ```ts
+   * // Iterate through all pages
+   * for await (const page of client.sap.Products.paginate({ top: 100 })) {
+   *   console.log(`Processing ${page.value.length} items`);
+   *   for (const product of page.value) {
+   *     // process product
+   *   }
+   * }
+   *
+   * // Or collect all items
+   * const all = await client.sap.Products.all({ filter: "Active eq true" });
+   * ```
+   */
+  paginate(options?: PaginateOptions<T>): AsyncIterable<ListResponse<T>>;
+
+  /**
+   * Get all entities (automatically handles pagination)
+   * @example
+   * ```ts
+   * const allProducts = await client.sap.Products.all({ filter: "Active eq true" });
+   * ```
+   */
+  all(options?: PaginateOptions<T>): Promise<T[]>;
+}
+
+/**
+ * Pagination options (extends QueryOptions)
+ */
+export interface PaginateOptions<T = any> extends Omit<QueryOptions<T>, 'skip'> {
+  /** Page size (default: 100) */
+  pageSize?: number;
+  /** Maximum number of items to retrieve (default: unlimited) */
+  maxItems?: number;
 }
 
 /**
@@ -372,7 +412,7 @@ export interface ResponseInterceptor {
 }
 
 export interface ErrorInterceptor {
-  (error: S4KitError): S4KitError | Promise<S4KitError>;
+  (error: IS4KitError): IS4KitError | Promise<IS4KitError>;
 }
 
 export interface InterceptedRequest {
@@ -390,10 +430,16 @@ export interface InterceptedResponse {
 }
 
 export interface IS4KitError extends Error {
-  status?: number;
-  code?: string;
-  odataError?: ODataError;
-  request?: InterceptedRequest;
+  readonly status?: number;
+  readonly code?: string;
+  readonly odataError?: ODataError;
+  readonly request?: InterceptedRequest;
+  readonly suggestion?: string;
+  readonly friendlyMessage: string;
+  readonly help: string;
+  readonly details: ODataErrorDetail[];
+  hasCode(code: string): boolean;
+  toJSON(): Record<string, any>;
 }
 
 // ============================================================================

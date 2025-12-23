@@ -1,0 +1,149 @@
+# Production Docker Compose for S4Kit
+# Usage: docker compose -f docker/docker-compose.prod.yml up -d
+version: '3.8'
+
+services:
+  # Nginx Load Balancer / Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: s4kit-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - proxy
+      - admin
+      - frontend
+    networks:
+      - s4kit-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Proxy Service (Scalable)
+  proxy:
+    build:
+      context: ..
+      dockerfile: packages/platform/proxy/Dockerfile
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - s4kit-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Admin Service
+  admin:
+    build:
+      context: ..
+      dockerfile: packages/platform/backend/Dockerfile
+    container_name: s4kit-admin
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - s4kit-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Frontend (Next.js Dashboard)
+  frontend:
+    build:
+      context: ..
+      dockerfile: packages/platform/frontend/Dockerfile
+    container_name: s4kit-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${ADMIN_API_URL:-http://localhost/admin}
+    networks:
+      - s4kit-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: s4kit-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - s4kit-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: s4kit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-s4kit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-s4kit}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - s4kit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-s4kit}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  s4kit-network:
+    driver: bridge

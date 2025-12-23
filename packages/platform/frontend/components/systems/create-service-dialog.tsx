@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -15,16 +16,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api, SystemService, Instance, InstanceEnvironment } from '@/lib/api';
 import { toast } from 'sonner';
+import { Search, Package } from 'lucide-react';
 
 const envLabels: Record<InstanceEnvironment, string> = {
   sandbox: 'Sandbox',
@@ -69,7 +64,8 @@ export function CreateServiceDialog({
   onCreated,
 }: CreateServiceDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [serviceSearch, setServiceSearch] = useState('');
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>(
     instanceId ? [instanceId] : []
   );
@@ -80,15 +76,39 @@ export function CreateServiceDialog({
     description: '',
   });
 
-  // Show multi-select only when instanceId is not provided and we have instances
-  const showMultiSelect = !instanceId && instances.length > 0;
+  // Filter services by search query
+  const filteredServices = useMemo(() => {
+    if (!serviceSearch.trim()) return existingServices;
+    const query = serviceSearch.toLowerCase();
+    return existingServices.filter(
+      (s) =>
+        s.name?.toLowerCase().includes(query) ||
+        s.alias?.toLowerCase().includes(query) ||
+        s.description?.toLowerCase().includes(query)
+    );
+  }, [existingServices, serviceSearch]);
 
-  // Check if an instance already has a specific service linked
-  const isServiceLinkedToInstance = (instId: string, serviceId: string) => {
-    return instanceServices.some(
-      is => is.instanceId === instId && is.systemServiceId === serviceId
+  // Toggle service selection
+  const toggleServiceSelection = (serviceId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedServiceIds((prev) => [...prev, serviceId]);
+    } else {
+      setSelectedServiceIds((prev) => prev.filter((id) => id !== serviceId));
+    }
+  };
+
+  // Check if service is already linked to all selected instances
+  const isServiceFullyLinked = (serviceId: string) => {
+    if (targetInstanceIds.length === 0) return false;
+    return targetInstanceIds.every((instId) =>
+      instanceServices.some(
+        (is) => is.instanceId === instId && is.systemServiceId === serviceId
+      )
     );
   };
+
+  // Show multi-select only when instanceId is not provided and we have instances
+  const showMultiSelect = !instanceId && instances.length > 0;
 
   const toggleInstance = (id: string, checked: boolean) => {
     if (checked) {
@@ -101,26 +121,38 @@ export function CreateServiceDialog({
   const targetInstanceIds = instanceId ? [instanceId] : selectedInstanceIds;
 
   const handleAddExisting = async () => {
-    if (!selectedServiceId || targetInstanceIds.length === 0) return;
+    if (selectedServiceIds.length === 0 || targetInstanceIds.length === 0) return;
 
     setLoading(true);
     try {
-      // Create instance services for all selected instances
-      await Promise.all(
-        targetInstanceIds.map(instId =>
-          api.instanceServices.create({
-            instanceId: instId,
-            systemServiceId: selectedServiceId,
-          })
-        )
+      // Create instance services for all selected services x instances
+      const creations = selectedServiceIds.flatMap((serviceId) =>
+        targetInstanceIds
+          .filter((instId) => !instanceServices.some(
+            (is) => is.instanceId === instId && is.systemServiceId === serviceId
+          ))
+          .map((instId) =>
+            api.instanceServices.create({
+              instanceId: instId,
+              systemServiceId: serviceId,
+            })
+          )
       );
-      toast.success(`Service added to ${targetInstanceIds.length} instance(s)`);
+
+      await Promise.all(creations);
+
+      const serviceCount = selectedServiceIds.length;
+      const instanceCount = targetInstanceIds.length;
+      toast.success(
+        `Added ${serviceCount} service${serviceCount > 1 ? 's' : ''} to ${instanceCount} instance${instanceCount > 1 ? 's' : ''}`
+      );
       onOpenChange(false);
-      setSelectedServiceId('');
-      setSelectedInstanceIds([]);
+      setSelectedServiceIds([]);
+      setServiceSearch('');
+      setSelectedInstanceIds(instanceId ? [instanceId] : []);
       onCreated?.();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to add service');
+      toast.error(error.message || 'Failed to add services');
     } finally {
       setLoading(false);
     }
@@ -169,7 +201,7 @@ export function CreateServiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Add Service</DialogTitle>
           <DialogDescription>
@@ -186,76 +218,154 @@ export function CreateServiceDialog({
           </TabsList>
 
           <TabsContent value="existing" className="space-y-4 pt-4">
-            <div className="grid gap-2">
-              <Label>Select Service</Label>
-              <Select
-                value={selectedServiceId}
-                onValueChange={(value) => {
-                  setSelectedServiceId(value);
-                  // Clear selections that are already linked to the new service
-                  setSelectedInstanceIds(prev =>
-                    prev.filter(instId => !isServiceLinkedToInstance(instId, value))
-                  );
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a service..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {existingServices.map((service) => (
-                    <SelectItem key={service.id} value={service.id}>
-                      <div className="flex flex-col">
-                        <span>{service.name}</span>
-                        <span className="text-xs text-muted-foreground">{service.alias}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Search input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search APIs by name, alias, or description..."
+                value={serviceSearch}
+                onChange={(e) => setServiceSearch(e.target.value)}
+                className="pl-9"
+              />
             </div>
 
-            {showMultiSelect && (
-              <div className="grid gap-2">
-                <Label>Link to Instances</Label>
-                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                  {instances.map(inst => {
-                    const alreadyLinked = !!selectedServiceId && isServiceLinkedToInstance(inst.id, selectedServiceId);
+            {/* Service count */}
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {filteredServices.length === existingServices.length
+                  ? `${existingServices.length} APIs available`
+                  : `${filteredServices.length} of ${existingServices.length} APIs`}
+              </span>
+              {selectedServiceIds.length > 0 && (
+                <Badge variant="secondary">
+                  {selectedServiceIds.length} selected
+                </Badge>
+              )}
+            </div>
+
+            {/* Scrollable service list */}
+            <ScrollArea className="h-[280px] border rounded-lg">
+              <div className="p-2 space-y-1">
+                {filteredServices.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                    <Package className="h-8 w-8 mb-2" />
+                    <p className="text-sm">No APIs match your search</p>
+                  </div>
+                ) : (
+                  filteredServices.map((service) => {
+                    const isLinked = isServiceFullyLinked(service.id);
+                    const isSelected = selectedServiceIds.includes(service.id);
                     return (
-                      <div key={inst.id} className="flex items-center gap-3">
+                      <div
+                        key={service.id}
+                        className={`flex items-start gap-3 p-3 rounded-md hover:bg-muted/50 transition-colors ${
+                          isLinked ? 'opacity-50' : ''
+                        }`}
+                      >
                         <Checkbox
-                          id={`existing-inst-${inst.id}`}
-                          checked={selectedInstanceIds.includes(inst.id)}
-                          onCheckedChange={(checked) => toggleInstance(inst.id, checked === true)}
-                          disabled={alreadyLinked}
+                          id={`service-${service.id}`}
+                          checked={isSelected}
+                          onCheckedChange={(checked) =>
+                            toggleServiceSelection(service.id, checked === true)
+                          }
+                          disabled={isLinked}
+                          className="mt-1"
                         />
                         <label
-                          htmlFor={`existing-inst-${inst.id}`}
-                          className={`flex items-center gap-2 flex-1 ${alreadyLinked ? 'opacity-50' : 'cursor-pointer'}`}
+                          htmlFor={`service-${service.id}`}
+                          className={`flex-1 space-y-1 ${isLinked ? '' : 'cursor-pointer'}`}
                         >
-                          <span className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`} />
-                          <span className="text-sm font-medium">{envLabels[inst.environment]}</span>
-                          {alreadyLinked ? (
-                            <span className="text-xs text-muted-foreground">(already linked)</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground truncate">{inst.baseUrl}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{service.name}</span>
+                            {service.odataVersion && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {service.odataVersion}
+                              </Badge>
+                            )}
+                            {isLinked && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                linked
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {service.alias}
+                          </div>
+                          {service.description && (
+                            <div className="text-xs text-muted-foreground line-clamp-2">
+                              {service.description}
+                            </div>
                           )}
                         </label>
                       </div>
                     );
-                  })}
+                  })
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Instance selection (multi-select mode) */}
+            {showMultiSelect && (
+              <div className="grid gap-2">
+                <Label>Link to Instances</Label>
+                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                  {instances.map((inst) => (
+                    <div key={inst.id} className="flex items-center gap-3">
+                      <Checkbox
+                        id={`existing-inst-${inst.id}`}
+                        checked={selectedInstanceIds.includes(inst.id)}
+                        onCheckedChange={(checked) =>
+                          toggleInstance(inst.id, checked === true)
+                        }
+                      />
+                      <label
+                        htmlFor={`existing-inst-${inst.id}`}
+                        className="flex items-center gap-2 flex-1 cursor-pointer"
+                      >
+                        <span
+                          className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`}
+                        />
+                        <span className="text-sm font-medium">
+                          {envLabels[inst.environment]}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {inst.baseUrl}
+                        </span>
+                      </label>
+                    </div>
+                  ))}
                 </div>
                 {selectedInstanceIds.length === 0 && (
-                  <p className="text-xs text-destructive">Select at least one instance</p>
+                  <p className="text-xs text-destructive">
+                    Select at least one instance
+                  </p>
                 )}
               </div>
             )}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleAddExisting} disabled={loading || !selectedServiceId || targetInstanceIds.length === 0}>
-                {loading ? 'Adding...' : `Add Service${targetInstanceIds.length > 1 ? ` to ${targetInstanceIds.length} instances` : ''}`}
+              <Button
+                onClick={handleAddExisting}
+                disabled={
+                  loading ||
+                  selectedServiceIds.length === 0 ||
+                  targetInstanceIds.length === 0
+                }
+              >
+                {loading
+                  ? 'Adding...'
+                  : `Add ${selectedServiceIds.length || ''} Service${selectedServiceIds.length !== 1 ? 's' : ''}${
+                      targetInstanceIds.length > 1
+                        ? ` to ${targetInstanceIds.length} instances`
+                        : ''
+                    }`}
               </Button>
             </DialogFooter>
           </TabsContent>

@@ -4,6 +4,7 @@ import { instances } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { encryption } from './encryption';
 import { redis } from '../cache/redis';
+import { oauthTokenService, type OAuthTokenConfig } from './oauth-token';
 import { 
   parseODataResponse, 
   parseODataError, 
@@ -130,7 +131,7 @@ export const sapClient = {
       // Custom authentication - get header name and value from authConfig and credentials
       const authConfig = instance.authConfig as any;
       const credentials = instance.credentials as any;
-      
+
       if (authConfig?.headerName && credentials?.headerValue) {
         const headerName = authConfig.headerName;
         const headerValue = encryption.decrypt(credentials.headerValue);
@@ -138,9 +139,32 @@ export const sapClient = {
       } else {
         throw new Error('Custom authentication header name and value not found in instance configuration');
       }
+    } else if (authType === 'oauth2') {
+      // OAuth2 authentication (Client Credentials or JWT Bearer)
+      const authConfig = instance.authConfig as any;
+      const credentials = instance.credentials as any;
+
+      if (!authConfig?.tokenUrl || !authConfig?.clientId) {
+        throw new Error('OAuth2 tokenUrl and clientId are required in authConfig');
+      }
+      if (!credentials?.clientSecret) {
+        throw new Error('OAuth2 clientSecret is required in credentials');
+      }
+
+      const oauthConfig: OAuthTokenConfig = {
+        tokenUrl: authConfig.tokenUrl,
+        clientId: authConfig.clientId,
+        clientSecret: encryption.decrypt(credentials.clientSecret),
+        scope: authConfig.scope,
+        grantType: authConfig.grantType || 'client_credentials',
+        assertion: authConfig.assertion,
+      };
+
+      const accessToken = await oauthTokenService.getToken(oauthConfig, `oauth:${instance.id}`);
+      authHeader = `Bearer ${accessToken}`;
+      // OAuth typically doesn't need CSRF tokens
     } else {
-      // OAuth2 and other auth types - for now, throw error (can be implemented later)
-      throw new Error(`Authentication type '${authType}' is not yet supported`);
+      throw new Error(`Authentication type '${authType}' is not supported`);
     }
 
     // 5. Make request
@@ -262,7 +286,7 @@ export const sapClient = {
       // Custom authentication - get header name and value from auth config
       const authConfig = auth.config as any;
       const credentials = auth.credentials as any;
-      
+
       if (authConfig?.headerName && credentials?.headerValue) {
         const headerName = authConfig.headerName;
         const headerValue = encryption.decrypt(credentials.headerValue);
@@ -270,8 +294,34 @@ export const sapClient = {
       } else {
         throw new Error('Custom authentication header name and value not found in auth configuration');
       }
+    } else if (authType === 'oauth2') {
+      // OAuth2 authentication (Client Credentials or JWT Bearer)
+      const authConfig = auth.config as any;
+      const credentials = auth.credentials as any;
+
+      if (!authConfig?.tokenUrl || !authConfig?.clientId) {
+        throw new Error('OAuth2 tokenUrl and clientId are required in authConfig');
+      }
+      if (!credentials?.clientSecret) {
+        throw new Error('OAuth2 clientSecret is required in credentials');
+      }
+
+      const oauthConfig: OAuthTokenConfig = {
+        tokenUrl: authConfig.tokenUrl,
+        clientId: authConfig.clientId,
+        clientSecret: encryption.decrypt(credentials.clientSecret),
+        scope: authConfig.scope,
+        grantType: authConfig.grantType || 'client_credentials',
+        assertion: authConfig.assertion,
+      };
+
+      // Use baseUrl + clientId for cache key to ensure uniqueness per service
+      const cacheKey = `oauth:${baseUrl}:${authConfig.clientId}`;
+      const accessToken = await oauthTokenService.getToken(oauthConfig, cacheKey);
+      authHeader = `Bearer ${accessToken}`;
+      // OAuth typically doesn't need CSRF tokens
     } else {
-      throw new Error(`Authentication type '${authType}' is not yet supported`);
+      throw new Error(`Authentication type '${authType}' is not supported`);
     }
 
     // Make request
@@ -326,12 +376,12 @@ export const sapClient = {
       if (authType === 'basic' && error.response?.status === 403 && error.response.headers.get('x-csrf-token') === 'Required') {
         await redis.del(csrfCacheKey);
         const newToken = await sapClient.getCsrfTokenForUrl(csrfCacheKey, baseUrl, authHeader!);
-        
+
         const retryHeaders: Record<string, string> = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         };
-        
+
         if (authHeader) {
           retryHeaders['Authorization'] = authHeader;
           if (newToken) {
@@ -341,10 +391,10 @@ export const sapClient = {
 
         // Build OData-compatible query string (don't encode $ in parameter names)
         const retryQueryString = buildODataQueryString(requestOptions.params);
-        const retryFullPath = retryQueryString 
+        const retryFullPath = retryQueryString
           ? `${normalizePath(requestOptions.path)}?${retryQueryString}`
           : normalizePath(requestOptions.path);
-        
+
         const retrySapStart = Date.now();
         const response = await ky(retryFullPath, {
           prefixUrl: baseUrl,
@@ -354,18 +404,73 @@ export const sapClient = {
         });
         const retrySapEnd = Date.now();
         const retrySapResponseTime = retrySapEnd - retrySapStart;
-        
+
         const rawJson = await response.json();
         const processedData = sapClient.processResponse(rawJson, requestOptions);
-        
+
         // Attach timing info to the response if it's an object
         if (processedData && typeof processedData === 'object') {
           (processedData as any).__sapResponseTime = retrySapResponseTime;
         }
-        
+
         return processedData;
       }
-      
+
+      // If OAuth token is rejected (401), invalidate cache and retry once
+      if (authType === 'oauth2' && error.response?.status === 401) {
+        const authConfig = auth.config as any;
+        const credentials = auth.credentials as any;
+        const cacheKey = `oauth:${baseUrl}:${authConfig.clientId}`;
+
+        // Invalidate cached token
+        await oauthTokenService.invalidateToken({
+          tokenUrl: authConfig.tokenUrl,
+          clientId: authConfig.clientId,
+          clientSecret: encryption.decrypt(credentials.clientSecret),
+        }, cacheKey);
+
+        // Fetch new token
+        const oauthConfig: OAuthTokenConfig = {
+          tokenUrl: authConfig.tokenUrl,
+          clientId: authConfig.clientId,
+          clientSecret: encryption.decrypt(credentials.clientSecret),
+          scope: authConfig.scope,
+          grantType: authConfig.grantType || 'client_credentials',
+          assertion: authConfig.assertion,
+        };
+        const newAccessToken = await oauthTokenService.getToken(oauthConfig, cacheKey);
+
+        const retryHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${newAccessToken}`,
+        };
+
+        const retryQueryString = buildODataQueryString(requestOptions.params);
+        const retryFullPath = retryQueryString
+          ? `${normalizePath(requestOptions.path)}?${retryQueryString}`
+          : normalizePath(requestOptions.path);
+
+        const retrySapStart = Date.now();
+        const response = await ky(retryFullPath, {
+          prefixUrl: baseUrl,
+          method: requestOptions.method,
+          headers: retryHeaders,
+          json: requestOptions.body
+        });
+        const retrySapEnd = Date.now();
+        const retrySapResponseTime = retrySapEnd - retrySapStart;
+
+        const rawJson = await response.json();
+        const processedData = sapClient.processResponse(rawJson, requestOptions);
+
+        if (processedData && typeof processedData === 'object') {
+          (processedData as any).__sapResponseTime = retrySapResponseTime;
+        }
+
+        return processedData;
+      }
+
       // Try to parse OData error from response
       throw await sapClient.handleError(error);
     }

@@ -222,48 +222,78 @@ export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
         </div>
       </Card>
 
-      {/* Details Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-            <Calendar className="h-4 w-4" />
-            Created
+      {/* Details Grid - SAP TechEd Bento Style */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Created */}
+        <div className="group relative overflow-hidden rounded-3xl border-0 p-6 bg-[oklch(0.94_0.05_300)] dark:bg-[oklch(0.28_0.08_290)] shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-3 min-w-0 flex-1">
+              <p className="text-[13px] font-semibold uppercase tracking-wider text-[oklch(0.45_0.08_290)] dark:text-[oklch(0.75_0.05_290)]">
+                Created
+              </p>
+              <p className="text-xl font-bold tracking-tight text-[oklch(0.25_0.1_290)] dark:text-white">
+                {formatDate(apiKey.createdAt)}
+              </p>
+            </div>
+            <div className="shrink-0 rounded-2xl p-3.5 bg-[oklch(0.85_0.1_290)] dark:bg-[oklch(0.4_0.12_290)] transition-all duration-300 group-hover:scale-110">
+              <Calendar className="h-6 w-6 text-[oklch(0.45_0.2_290)] dark:text-[oklch(0.85_0.15_290)]" strokeWidth={1.75} />
+            </div>
           </div>
-          <div className="font-medium">{formatDate(apiKey.createdAt)}</div>
-        </Card>
+        </div>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-            <Activity className="h-4 w-4" />
-            Last Used
+        {/* Last Used */}
+        <div className="group relative overflow-hidden rounded-3xl border-0 p-6 bg-[oklch(0.94_0.06_175)] dark:bg-[oklch(0.28_0.08_175)] shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-3 min-w-0 flex-1">
+              <p className="text-[13px] font-semibold uppercase tracking-wider text-[oklch(0.4_0.08_175)] dark:text-[oklch(0.75_0.08_175)]">
+                Last Used
+              </p>
+              <p className="text-xl font-bold tracking-tight text-[oklch(0.2_0.1_175)] dark:text-white">
+                {apiKey.lastUsedAt ? formatRelativeTime(apiKey.lastUsedAt) : 'Never'}
+              </p>
+            </div>
+            <div className="shrink-0 rounded-2xl p-3.5 bg-[oklch(0.85_0.12_175)] dark:bg-[oklch(0.4_0.14_175)] transition-all duration-300 group-hover:scale-110">
+              <Activity className="h-6 w-6 text-[oklch(0.4_0.18_175)] dark:text-[oklch(0.85_0.18_175)]" strokeWidth={1.75} />
+            </div>
           </div>
-          <div className="font-medium">
-            {apiKey.lastUsedAt ? formatRelativeTime(apiKey.lastUsedAt) : 'Never'}
-          </div>
-        </Card>
+        </div>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-            <Clock className="h-4 w-4" />
-            Expires
+        {/* Expires */}
+        <div className="group relative overflow-hidden rounded-3xl border-0 p-6 bg-[oklch(0.92_0.08_280)] dark:bg-[oklch(0.26_0.1_280)] shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-3 min-w-0 flex-1">
+              <p className="text-[13px] font-semibold uppercase tracking-wider text-[oklch(0.42_0.1_280)] dark:text-[oklch(0.72_0.06_280)]">
+                Expires
+              </p>
+              <p className={cn(
+                "text-xl font-bold tracking-tight text-[oklch(0.22_0.12_280)] dark:text-white",
+                apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date() && "text-red-600 dark:text-red-400"
+              )}>
+                {apiKey.expiresAt ? formatRelativeTime(apiKey.expiresAt) : 'Never'}
+              </p>
+            </div>
+            <div className="shrink-0 rounded-2xl p-3.5 bg-[oklch(0.82_0.14_280)] dark:bg-[oklch(0.38_0.14_280)] transition-all duration-300 group-hover:scale-110">
+              <Clock className="h-6 w-6 text-[oklch(0.4_0.2_280)] dark:text-[oklch(0.85_0.15_280)]" strokeWidth={1.75} />
+            </div>
           </div>
-          <div className={cn(
-            "font-medium",
-            apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date() && "text-red-600"
-          )}>
-            {apiKey.expiresAt ? formatRelativeTime(apiKey.expiresAt) : 'Never'}
-          </div>
-        </Card>
+        </div>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-            <Gauge className="h-4 w-4" />
-            Rate Limits
+        {/* Rate Limits */}
+        <div className="group relative overflow-hidden rounded-3xl border-0 p-6 bg-[oklch(0.94_0.06_340)] dark:bg-[oklch(0.28_0.1_340)] shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-3 min-w-0 flex-1">
+              <p className="text-[13px] font-semibold uppercase tracking-wider text-[oklch(0.45_0.1_340)] dark:text-[oklch(0.75_0.08_340)]">
+                Rate Limits
+              </p>
+              <p className="text-xl font-bold tracking-tight text-[oklch(0.25_0.12_340)] dark:text-white">
+                {apiKey.rateLimitPerMinute}/min, {apiKey.rateLimitPerDay}/day
+              </p>
+            </div>
+            <div className="shrink-0 rounded-2xl p-3.5 bg-[oklch(0.85_0.12_340)] dark:bg-[oklch(0.4_0.14_340)] transition-all duration-300 group-hover:scale-110">
+              <Gauge className="h-6 w-6 text-[oklch(0.45_0.2_340)] dark:text-[oklch(0.85_0.15_340)]" strokeWidth={1.75} />
+            </div>
           </div>
-          <div className="font-medium">
-            {apiKey.rateLimitPerMinute}/min, {apiKey.rateLimitPerDay}/day
-          </div>
-        </Card>
+        </div>
       </div>
 
       {/* Services & Permissions */}

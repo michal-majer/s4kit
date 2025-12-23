@@ -33,10 +33,12 @@ import {
   ChevronRight,
   Shield,
   Link2,
+  Play,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ServiceVerificationStatus } from './service-verification-status';
 import { InstanceServiceConfigDialog } from './instance-service-config-dialog';
+import { ApiTestTab } from './api-test-tab';
 
 const envLabels: Record<InstanceEnvironment, string> = {
   sandbox: 'Sandbox',
@@ -89,6 +91,13 @@ export function InstanceServiceDetails({
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [showConfigDialog, setShowConfigDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState('endpoint');
+  const [testEntity, setTestEntity] = useState<string | null>(null);
+
+  const handleTestEntity = (entity: string) => {
+    setTestEntity(entity);
+    setActiveTab('test');
+  };
 
   const handleRefreshEntities = async () => {
     setRefreshing(true);
@@ -192,6 +201,11 @@ export function InstanceServiceDetails({
                 <Badge variant="secondary" className="font-mono text-xs">
                   {systemService.alias}
                 </Badge>
+                {systemService.odataVersion && (
+                  <Badge variant="outline" className="text-xs">
+                    OData {systemService.odataVersion.toUpperCase()}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -338,7 +352,7 @@ export function InstanceServiceDetails({
       </div>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="endpoint" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="endpoint">
             <Link2 className="h-4 w-4 mr-2" />
@@ -347,6 +361,10 @@ export function InstanceServiceDetails({
           <TabsTrigger value="entities">
             <Database className="h-4 w-4 mr-2" />
             Entities
+          </TabsTrigger>
+          <TabsTrigger value="test">
+            <Play className="h-4 w-4 mr-2" />
+            Test
           </TabsTrigger>
           <TabsTrigger value="authentication">
             <Key className="h-4 w-4 mr-2" />
@@ -490,12 +508,11 @@ export function InstanceServiceDetails({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
-                            asChild
+                            className="h-6 w-6 text-primary hover:text-primary"
+                            onClick={() => handleTestEntity(entity)}
+                            title="Test this entity"
                           >
-                            <a href={entityUrl} target="_blank" rel="noopener noreferrer" title="Open in browser">
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
+                            <Play className="h-3 w-3" />
                           </Button>
                         </div>
                       </div>
@@ -515,6 +532,16 @@ export function InstanceServiceDetails({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Test Tab */}
+        <TabsContent value="test" className="space-y-4">
+          <ApiTestTab
+            instanceServiceId={instanceService.id}
+            entities={resolvedEntities}
+            fullEndpoint={fullEndpoint}
+            initialEntity={testEntity}
+          />
         </TabsContent>
 
         {/* Authentication Tab */}

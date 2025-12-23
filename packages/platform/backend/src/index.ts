@@ -4,13 +4,16 @@ import { sql } from 'drizzle-orm'
 import { db } from './db'
 import { auth } from './auth'
 import { sessionMiddleware, adminAuthMiddleware } from './middleware/session-auth'
-import proxyRoute from './routes/api/proxy'
 import systemsRoute from './routes/admin/systems'
 import instancesRoute from './routes/admin/instances'
 import systemServicesRoute from './routes/admin/system-services'
 import instanceServicesRoute from './routes/admin/instance-services'
 import apiKeysRoute from './routes/admin/api-keys'
 import logsRoute from './routes/admin/logs'
+import organizationRoute from './routes/admin/organization'
+import profileRoute from './routes/admin/profile'
+import sessionsRoute from './routes/admin/sessions'
+import platformInfoRoute from './routes/admin/platform-info'
 
 const app = new Hono()
 
@@ -36,15 +39,6 @@ app.use('/admin/*', cors({
 app.use('/admin/*', sessionMiddleware)
 app.use('/admin/*', adminAuthMiddleware)
 
-// CORS for proxy routes (API key auth, no credentials needed)
-app.use('/api/proxy/*', cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-S4Kit-Service', 'X-S4Kit-Instance', 'X-S4Kit-Raw', 'X-S4Kit-Strip-Metadata'],
-  exposeHeaders: ['Content-Length'],
-  credentials: false,
-}))
-
 // Health check
 app.get('/health', async (c) => {
   try {
@@ -60,9 +54,6 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => {
   return auth.handler(c.req.raw)
 })
 
-// API routes
-app.route('/api/proxy', proxyRoute)
-
 // Admin routes
 app.route('/admin/systems', systemsRoute)
 app.route('/admin/instances', instancesRoute)
@@ -70,5 +61,9 @@ app.route('/admin/system-services', systemServicesRoute)
 app.route('/admin/instance-services', instanceServicesRoute)
 app.route('/admin/api-keys', apiKeysRoute)
 app.route('/admin/logs', logsRoute)
+app.route('/admin/organization', organizationRoute)
+app.route('/admin/profile', profileRoute)
+app.route('/admin/sessions', sessionsRoute)
+app.route('/admin/platform-info', platformInfoRoute)
 
 export default app

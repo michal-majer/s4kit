@@ -100,6 +100,7 @@ export interface SystemService {
   servicePath: string;
   description?: string;
   entities: string[];
+  odataVersion?: 'v2' | 'v4' | null;
   authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
   authConfig?: {
     headerName?: string;
@@ -129,7 +130,7 @@ export interface InstanceService {
   entityCount?: number | null;
   createdAt: string;
   instance?: { id: string; environment: InstanceEnvironment };
-  systemService?: { id: string; name: string; alias: string; entities?: string[] };
+  systemService?: { id: string; name: string; alias: string; entities?: string[]; odataVersion?: 'v2' | 'v4' | null };
   authConfig?: {
     headerName?: string;
     tokenUrl?: string;
@@ -148,6 +149,7 @@ export interface PredefinedService {
   servicePath: string;
   description?: string;
   defaultEntities: string[];
+  odataVersion: 'v2' | 'v4';
   createdAt: string;
 }
 
@@ -251,7 +253,129 @@ export interface AccessGrant {
   permissions: Record<string, string[]>;
 }
 
+// Organization types
+export type UserRole = 'owner' | 'admin' | 'developer';
+
+export interface Organization {
+  id: string;
+  name: string;
+  defaultLogLevel: 'minimal' | 'standard' | 'extended';
+  logRetentionDays: number;
+  createdAt: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  userId: string;
+  role: UserRole;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    image?: string;
+  };
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  inviter?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+// Profile types
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  image?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Session types
+export interface UserSession {
+  id: string;
+  isCurrent: boolean;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+// Platform info types
+export type Platform = 'sap-btp' | 'cloud-foundry' | 'standalone';
+
+export interface PlatformInfo {
+  platform: Platform;
+  space?: string;
+  organization?: string;
+  appName?: string;
+}
+
 export const api = {
+  // Platform info
+  platform: {
+    getInfo: () => fetchAPI<PlatformInfo>('/admin/platform-info'),
+  },
+
+  // Organization management
+  organization: {
+    get: () => fetchAPI<Organization>('/admin/organization'),
+    update: (data: { name?: string; defaultLogLevel?: 'minimal' | 'standard' | 'extended'; logRetentionDays?: number }) =>
+      fetchAPI<Organization>('/admin/organization', { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: () =>
+      fetchAPI<{ success: boolean }>('/admin/organization', { method: 'DELETE' }),
+    getMembers: () =>
+      fetchAPI<OrganizationMember[]>('/admin/organization/members'),
+    updateMemberRole: (userId: string, role: UserRole) =>
+      fetchAPI<OrganizationMember>(`/admin/organization/members/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      }),
+    removeMember: (userId: string) =>
+      fetchAPI<{ success: boolean }>(`/admin/organization/members/${userId}`, { method: 'DELETE' }),
+    getInvitations: () =>
+      fetchAPI<Invitation[]>('/admin/organization/invitations'),
+    sendInvitation: (email: string, role: UserRole = 'developer') =>
+      fetchAPI<Invitation>('/admin/organization/invitations', {
+        method: 'POST',
+        body: JSON.stringify({ email, role }),
+      }),
+    cancelInvitation: (id: string) =>
+      fetchAPI<{ success: boolean }>(`/admin/organization/invitations/${id}`, { method: 'DELETE' }),
+  },
+
+  // User profile
+  profile: {
+    get: () => fetchAPI<UserProfile>('/admin/profile'),
+    update: (data: { name: string }) =>
+      fetchAPI<UserProfile>('/admin/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      fetchAPI<{ success: boolean }>('/admin/profile/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }),
+  },
+
+  // Session management
+  sessions: {
+    list: () => fetchAPI<UserSession[]>('/admin/sessions'),
+    revoke: (id: string) =>
+      fetchAPI<{ success: boolean }>(`/admin/sessions/${id}`, { method: 'DELETE' }),
+    revokeAll: () =>
+      fetchAPI<{ success: boolean; revokedCount: number }>('/admin/sessions', { method: 'DELETE' }),
+  },
+
   systems: {
     list: () => fetchAPI<System[]>('/admin/systems'),
     get: (id: string) => fetchAPI<System>(`/admin/systems/${id}`),
@@ -317,6 +441,19 @@ export const api = {
       total: number;
       results: Array<{ serviceId: string; status: 'verified' | 'failed'; entityCount?: number; error?: string }>;
     }>(`/admin/instances/${id}/refresh-all-services`, { method: 'POST' }),
+    importBinding: (id: string, data: {
+      bindingJson: string;
+      preferredService?: 'xsuaa' | 'destination';
+    }) => fetchAPI<{
+      success: boolean;
+      config: {
+        tokenUrl: string;
+        clientId: string;
+        scope?: string;
+        identityZone?: string;
+        bindingType: string;
+      };
+    }>(`/admin/instances/${id}/import-binding`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   systemServices: {
@@ -333,6 +470,7 @@ export const api = {
       description?: string;
       entities?: string[];
       predefinedServiceId?: string;
+      odataVersion?: 'v2' | 'v4';
       authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
       username?: string;
       password?: string;
@@ -410,6 +548,33 @@ export const api = {
       fetchAPI<InstanceService>(`/admin/instance-services/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/instance-services/${id}`, { method: 'DELETE' }),
     refreshEntities: (id: string) => fetchAPI<InstanceService & { refreshedCount?: number }>(`/admin/instance-services/${id}/refresh-entities`, { method: 'POST' }),
+    test: (id: string, params: {
+      entity?: string;
+      customPath?: string;
+      $top?: number;
+      $skip?: number;
+      $filter?: string;
+      $select?: string;
+      $expand?: string;
+      $orderby?: string;
+    }) => fetchAPI<{
+      success: boolean;
+      statusCode: number;
+      responseTime: number;
+      sapResponseTime?: number;
+      data?: any;
+      recordCount?: number;
+      error?: {
+        code: string;
+        message: string;
+        details?: any;
+      };
+      request: {
+        method: string;
+        url: string;
+        authType: string;
+      };
+    }>(`/admin/instance-services/${id}/test`, { method: 'POST', body: JSON.stringify(params) }),
   },
 
   apiKeys: {

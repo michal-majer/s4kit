@@ -274,7 +274,19 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       toast.success('Service removed');
       setInstanceServices(prev => prev.filter(is => is.id !== instanceServiceId));
     } catch (error: any) {
-      toast.error(error.message || 'Failed to remove service');
+      // Handle 409 conflict (service is used by API keys)
+      let errorMessage = error.message || 'Failed to remove service';
+      try {
+        const parsed = JSON.parse(error.message);
+        if (parsed.apiKeyCount) {
+          errorMessage = `Cannot delete: service is used by ${parsed.apiKeyCount} API key access grant(s). Remove the API key access grants first.`;
+        } else if (parsed.message) {
+          errorMessage = parsed.message;
+        }
+      } catch {
+        // Not JSON, use original message
+      }
+      toast.error(errorMessage, { duration: 5000 });
     }
   };
 
@@ -432,7 +444,14 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                       <div className="border-t">
                         <div className="flex items-center justify-between p-4">
                           <div className="flex items-center gap-3">
-                            <span className="text-sm font-medium">{linkedServices.length} Services</span>
+                            <span className="text-sm font-medium">
+                              {linkedServices.length} Service{linkedServices.length !== 1 ? 's' : ''}
+                              {systemServices.length > linkedServices.length && (
+                                <span className="text-muted-foreground font-normal">
+                                  {' '}· {systemServices.length - linkedServices.length} more available
+                                </span>
+                              )}
+                            </span>
                             {linkedServices.length > 3 && (
                               <div className="relative">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -445,17 +464,29 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                               </div>
                             )}
                           </div>
-                          {linkedServices.length > 0 && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleRefreshAllServices(instance.id)}
-                              disabled={refreshingAllForInstanceId === instance.id}
-                            >
-                              <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAllForInstanceId === instance.id ? 'animate-spin' : ''}`} />
-                              {refreshingAllForInstanceId === instance.id ? 'Verifying...' : 'Verify All'}
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {systemServices.length > linkedServices.length && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setShowCreateService(true)}
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Browse Catalog
+                              </Button>
+                            )}
+                            {linkedServices.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleRefreshAllServices(instance.id)}
+                                disabled={refreshingAllForInstanceId === instance.id}
+                              >
+                                <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAllForInstanceId === instance.id ? 'animate-spin' : ''}`} />
+                                {refreshingAllForInstanceId === instance.id ? 'Verifying...' : 'Verify All'}
+                              </Button>
+                            )}
+                          </div>
                         </div>
 
                         {linkedServices.length === 0 ? (
@@ -469,8 +500,22 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                             ) : (
                               <>
                                 <Database className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                                <p className="text-sm font-medium">No services configured</p>
-                                <p className="text-xs mt-1">Use "Add Service" above to add services to this instance</p>
+                                <p className="text-sm font-medium">No services linked yet</p>
+                                <p className="text-xs mt-1 mb-3">
+                                  {systemServices.length > 0
+                                    ? `Browse ${systemServices.length} available APIs to add services to this instance`
+                                    : 'Add services to this instance'}
+                                </p>
+                                {systemServices.length > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setShowCreateService(true)}
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Browse API Catalog
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>
@@ -506,7 +551,14 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                     >
                                       <TableCell className="py-1.5">
                                         <div className="font-medium text-sm">{service?.name || 'Unknown Service'}</div>
-                                        <code className="text-xs text-muted-foreground font-mono">{service?.alias || '-'}</code>
+                                        <div className="flex items-center gap-1.5">
+                                          <code className="text-xs text-muted-foreground font-mono">{service?.alias || '-'}</code>
+                                          {service?.odataVersion && (
+                                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                                              {service.odataVersion.toUpperCase()}
+                                            </Badge>
+                                          )}
+                                        </div>
                                       </TableCell>
                                       <TableCell className="py-1.5 text-sm text-muted-foreground">
                                         {is.entityCount ?? '-'}

@@ -23,6 +23,14 @@ export function ConfigurableTable<T extends Record<string, any>>({
     filteredData,
   } = useTableFilters(data, config.filters);
 
+  // Build columns, appending actions column if configured
+  // NOTE: Must be before any early returns to maintain consistent hook order
+  const columns = useMemo(() => {
+    if (!config.actions) return config.columns;
+    const actionsColumn = createActionsColumn(config.actions);
+    return [...config.columns, actionsColumn];
+  }, [config.columns, config.actions]);
+
   // If no data at all, show empty state
   if (data.length === 0 && config.emptyState) {
     return (
@@ -35,13 +43,6 @@ export function ConfigurableTable<T extends Record<string, any>>({
       </EmptyState>
     );
   }
-
-  // Build columns, appending actions column if configured
-  const columns = useMemo(() => {
-    if (!config.actions) return config.columns;
-    const actionsColumn = createActionsColumn(config.actions);
-    return [...config.columns, actionsColumn];
-  }, [config.columns, config.actions]);
 
   // Handle filtered empty state
   const showFilteredEmpty = filteredData.length === 0 && hasActiveFilters;

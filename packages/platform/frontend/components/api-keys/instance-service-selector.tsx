@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, ChevronDown, ChevronRight, X, Check, Server, Database } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Search, ChevronDown, ChevronRight, X, Check, Server, Database, Filter } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 interface ServiceOption {
@@ -15,6 +19,8 @@ interface ServiceOption {
   systemName: string;
   serviceName: string;
   isExisting?: boolean;
+  verificationStatus?: 'pending' | 'verified' | 'failed' | null;
+  odataVersion?: 'v2' | 'v4' | null;
 }
 
 interface InstanceServiceSelectorProps {
@@ -31,6 +37,9 @@ const ENV_CONFIG: Record<string, { label: string; short: string; color: string; 
   dev: { label: 'Development', short: 'DEV', color: 'bg-blue-100 text-blue-700', order: 3 },
 };
 
+type ODataVersionFilter = 'all' | 'v2' | 'v4';
+type VerificationStatusFilter = 'all' | 'verified' | 'pending' | 'failed' | 'none';
+
 export function InstanceServiceSelector({
   options,
   selected,
@@ -41,6 +50,11 @@ export function InstanceServiceSelector({
   const [search, setSearch] = useState('');
   const [expandedSystems, setExpandedSystems] = useState<Set<string>>(new Set());
   const [expandedEnvs, setExpandedEnvs] = useState<Set<string>>(new Set());
+
+  // Filter state
+  const [versionFilter, setVersionFilter] = useState<ODataVersionFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<VerificationStatusFilter>('all');
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
   // Group: System → Environment → Services
   const groupedOptions = useMemo(() => {
@@ -65,33 +79,57 @@ export function InstanceServiceSelector({
     return systems;
   }, [options]);
 
-  // Filter based on search
+  // Filter based on search and filter controls
   const filteredGroups = useMemo(() => {
-    if (!search.trim()) return groupedOptions;
-
     const lower = search.toLowerCase();
     const filtered: Record<string, Record<string, ServiceOption[]>> = {};
 
     Object.entries(groupedOptions).forEach(([sys, envs]) => {
       const filteredEnvs: Record<string, ServiceOption[]> = {};
-      
+
       Object.entries(envs).forEach(([env, services]) => {
-        const matches = services.filter(s =>
-          s.serviceName.toLowerCase().includes(lower) ||
-          s.systemName.toLowerCase().includes(lower)
-        );
+        const matches = services.filter(s => {
+          // Search filter
+          if (search.trim()) {
+            const matchesSearch = s.serviceName.toLowerCase().includes(lower) ||
+              s.systemName.toLowerCase().includes(lower);
+            if (!matchesSearch) return false;
+          }
+
+          // OData version filter
+          if (versionFilter !== 'all') {
+            if (s.odataVersion !== versionFilter) return false;
+          }
+
+          // Verification status filter
+          if (statusFilter !== 'all') {
+            if (statusFilter === 'none') {
+              if (s.verificationStatus) return false;
+            } else {
+              if (s.verificationStatus !== statusFilter) return false;
+            }
+          }
+
+          // Show selected only filter
+          if (showSelectedOnly) {
+            if (!selected.includes(s.id)) return false;
+          }
+
+          return true;
+        });
+
         if (matches.length > 0) {
           filteredEnvs[env] = matches;
         }
       });
-      
+
       if (Object.keys(filteredEnvs).length > 0) {
         filtered[sys] = filteredEnvs;
       }
     });
 
     return filtered;
-  }, [groupedOptions, search]);
+  }, [groupedOptions, search, versionFilter, statusFilter, showSelectedOnly, selected]);
 
   // Auto-expand when searching
   useMemo(() => {
@@ -143,6 +181,7 @@ export function InstanceServiceSelector({
   const sortedSystems = Object.keys(filteredGroups).sort();
 
   return (
+    <TooltipProvider>
     <div className="border rounded-lg overflow-hidden bg-card">
       {/* Header */}
       <div className="px-4 py-3 bg-muted/30 border-b flex items-center justify-between">
@@ -190,8 +229,8 @@ export function InstanceServiceSelector({
         </div>
       )}
 
-      {/* Search */}
-      <div className="p-3 border-b">
+      {/* Search and Filters */}
+      <div className="p-3 border-b space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -201,6 +240,54 @@ export function InstanceServiceSelector({
             className="pl-9 h-9"
             disabled={disabled}
           />
+        </div>
+
+        {/* Filter controls */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Filters:</span>
+          </div>
+
+          {/* OData version filter */}
+          <Select value={versionFilter} onValueChange={(v) => setVersionFilter(v as ODataVersionFilter)} disabled={disabled}>
+            <SelectTrigger className="h-7 w-[90px] text-xs">
+              <SelectValue placeholder="Version" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="v2">OData v2</SelectItem>
+              <SelectItem value="v4">OData v4</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Verification status filter */}
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as VerificationStatusFilter)} disabled={disabled}>
+            <SelectTrigger className="h-7 w-[110px] text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="verified">Verified</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="none">Not configured</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Show selected only toggle */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Switch
+              id="show-selected"
+              checked={showSelectedOnly}
+              onCheckedChange={setShowSelectedOnly}
+              disabled={disabled}
+              className="h-4 w-7"
+            />
+            <Label htmlFor="show-selected" className="text-xs text-muted-foreground cursor-pointer">
+              Selected only
+            </Label>
+          </div>
         </div>
       </div>
 
@@ -295,9 +382,31 @@ export function InstanceServiceSelector({
                                       )}>
                                         {isSelected && <Check className="h-3.5 w-3.5" />}
                                       </div>
-                                      <span className={cn(isSelected && "text-primary font-medium")}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className={cn(
+                                            "h-2 w-2 rounded-full shrink-0",
+                                            svc.verificationStatus === 'verified' && "bg-emerald-500",
+                                            svc.verificationStatus === 'pending' && "bg-amber-500",
+                                            svc.verificationStatus === 'failed' && "bg-red-500",
+                                            !svc.verificationStatus && "bg-gray-400"
+                                          )} />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                          {svc.verificationStatus === 'verified' ? 'Verified' :
+                                           svc.verificationStatus === 'pending' ? 'Pending verification' :
+                                           svc.verificationStatus === 'failed' ? 'Verification failed' :
+                                           'Not configured'}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      <span className={cn("flex-1", isSelected && "text-primary font-medium")}>
                                         {svc.serviceName}
                                       </span>
+                                      {svc.odataVersion && (
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-mono text-muted-foreground shrink-0">
+                                          {svc.odataVersion}
+                                        </Badge>
+                                      )}
                                     </button>
                                   );
                                 })}
@@ -322,5 +431,6 @@ export function InstanceServiceSelector({
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }

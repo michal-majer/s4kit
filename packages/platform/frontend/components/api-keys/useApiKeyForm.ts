@@ -246,16 +246,22 @@ export function useApiKeyForm({
   const selectorOptions = useMemo(() => {
     return availableCombinations.map(opt => {
       const system = systems.find(s => s.id === opt.instance.systemId);
+      // Look up verification status from existing instance service
+      const existingService = opt.existingInstanceServiceId
+        ? instanceServices.find(is => is.id === opt.existingInstanceServiceId)
+        : null;
       return {
         id: `${opt.instanceId}:${opt.systemServiceId}`,
         label: `[${opt.instance.environment}] ${system?.name || 'System'} - ${opt.systemService.name}`,
         environment: opt.instance.environment,
         systemName: system?.name || 'System',
         serviceName: opt.systemService.name,
-        isExisting: !!opt.existingInstanceServiceId
+        isExisting: !!opt.existingInstanceServiceId,
+        verificationStatus: existingService?.verificationStatus || null,
+        odataVersion: opt.systemService.odataVersion || null
       };
     });
-  }, [availableCombinations, systems]);
+  }, [availableCombinations, systems, instanceServices]);
 
   // Get currently selected keys for the selector (always use combinationKey format)
   const currentSelectedKeys = useMemo(() => {

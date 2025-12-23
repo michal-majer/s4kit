@@ -1,7 +1,9 @@
-import { db } from '../db';
-import { systemServices, instances, instanceServices, apiKeyAccess, systems } from '../db/schema';
-import { eq, and, sql, inArray } from 'drizzle-orm';
-import type { Instance, SystemService, InstanceService, EntityPermissions } from '../types';
+import { db, redis } from '../index.ts';
+import { systemServices, instances, instanceServices, apiKeyAccess, systems, eq, and, inArray } from '@s4kit/shared/db';
+import type { Instance, SystemService, InstanceService, EntityPermissions } from '../types.ts';
+
+// Cache TTL in seconds
+const ACCESS_CACHE_TTL = 30; // 30 seconds
 
 export interface ResolvedAccess {
   instance: Instance;
@@ -36,7 +38,7 @@ export const accessResolver = {
 
     // Get unique system service IDs
     const systemServiceIds = [...new Set(instServices.map(is => is.systemServiceId))];
-    
+
     if (systemServiceIds.length === 0) {
       return null;
     }
@@ -66,23 +68,23 @@ export const accessResolver = {
       if (!validServiceIds.includes(instService.systemServiceId)) {
         continue;
       }
-      
+
       // Get the system service
       const sysService = sysServices.find(ss => ss.id === instService.systemServiceId);
       if (!sysService) {
         continue;
       }
-      
+
       // Check entities: instanceService.entities first, then fall back to systemService.entities
-      const entitiesToCheck = instService.entities !== null 
-        ? instService.entities 
+      const entitiesToCheck = instService.entities !== null
+        ? instService.entities
         : (sysService.entities || []);
-      
+
       if (entitiesToCheck.includes(entityName)) {
         return sysService;
       }
     }
-    
+
     return null;
   },
 
@@ -107,7 +109,7 @@ export const accessResolver = {
         eq(systemServices.alias, alias)
       )
     });
-    
+
     return result ?? null;
   },
 
@@ -203,6 +205,18 @@ export const accessResolver = {
     serviceAlias: string,
     instanceEnvironment?: string
   ): Promise<ResolvedAccess | null> => {
+    // Check cache first
+    const cacheKey = `access:${apiKeyId}:${serviceAlias}:${instanceEnvironment || 'default'}`;
+    const cached = await redis.get(cacheKey);
+
+    if (cached) {
+      try {
+        return JSON.parse(cached) as ResolvedAccess;
+      } catch {
+        await redis.del(cacheKey);
+      }
+    }
+
     // Find the service by alias
     const sysService = await accessResolver.findServiceByAlias(organizationId, serviceAlias);
     if (!sysService) {
@@ -220,25 +234,28 @@ export const accessResolver = {
       return null;
     }
 
+    let result: ResolvedAccess | null = null;
+
     // If instanceEnvironment is provided, use it to filter
     if (instanceEnvironment) {
       const matching = instAccess.find(ia => ia.instance.environment === instanceEnvironment);
       if (matching) {
-        return matching;
+        result = matching;
       }
-      return null;
-    }
-
-    // If exactly one instance, use it
-    if (instAccess.length === 1) {
-      const result = instAccess[0];
-      if (result) {
-        return result;
+    } else if (instAccess.length === 1) {
+      // If exactly one instance, use it
+      const first = instAccess[0];
+      if (first) {
+        result = first;
       }
     }
 
-    // Multiple instances but no environment specified - return null (caller should handle)
-    return null;
+    // Cache the result
+    if (result) {
+      await redis.set(cacheKey, JSON.stringify(result), 'EX', ACCESS_CACHE_TTL);
+    }
+
+    return result;
   },
 
   /**
@@ -280,5 +297,18 @@ export const accessResolver = {
       DELETE: 'delete'
     };
     return map[method.toUpperCase()] || 'read';
-  }
+  },
+
+  /**
+   * Invalidate cached access grant
+   * Called by admin service when access is modified
+   */
+  invalidateCache: async (apiKeyId: string): Promise<void> => {
+    // Delete all cached access grants for this API key
+    const pattern = `access:${apiKeyId}:*`;
+    const keys = await redis.keys(pattern);
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+  },
 };

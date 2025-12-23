@@ -5,6 +5,7 @@ export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 
 export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox', 'dev', 'quality', 'preprod', 'production']);
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
 export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extended']);
+export const odataVersionEnum = pgEnum('odata_version', ['v2', 'v4']);
 
 // Organizations table
 export const organizations = pgTable('organizations', {
@@ -65,6 +66,8 @@ export const predefinedServices = pgTable('predefined_services', {
   servicePath: varchar('service_path', { length: 500 }).notNull(),
   description: varchar('description', { length: 1000 }),
   defaultEntities: jsonb('default_entities').$type<string[]>().default([]),
+  deprecated: boolean('deprecated').default(false).notNull(),
+  odataVersion: odataVersionEnum('odata_version').default('v2').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueSystemTypeAlias: unique().on(table.systemType, table.alias),
@@ -83,7 +86,10 @@ export const systemServices = pgTable('system_services', {
   
   // Entity names this service exposes
   entities: jsonb('entities').$type<string[]>().default([]),
-  
+
+  // OData version (null = unknown/not detected, inherited from predefinedService or auto-detected)
+  odataVersion: odataVersionEnum('odata_version'),
+
   // Optional service-level auth (used as default when linked to instances)
   authType: authTypeEnum('auth_type'), // null = inherit from instance
   username: varchar('username', { length: 255 }), // encrypted
