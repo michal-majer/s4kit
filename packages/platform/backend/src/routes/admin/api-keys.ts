@@ -4,11 +4,20 @@ import { apiKeys, apiKeyAccess, instanceServices, instances, systemServices, sys
 import { apiKeyService } from '../../services/api-key';
 import { metadataParser, type ODataEntityType } from '../../services/metadata-parser';
 import { generateTypeScriptFile, filterEntityTypes } from '../../services/type-generator';
+import { redis } from '../../cache/redis';
 import { z } from 'zod';
 import { eq, desc, and, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import type { Instance, SystemService, InstanceService } from '../../types';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
+
+/**
+ * Invalidate the API key cache in Redis (used by proxy service)
+ */
+async function invalidateApiKeyCache(keyPrefix: string): Promise<void> {
+  const cacheKey = `apikey:${keyPrefix}`;
+  await redis.del(cacheKey);
+}
 
 const app = new Hono<{ Variables: SessionVariables }>();
 
@@ -138,6 +147,20 @@ const updateApiKeySchema = z.object({
 app.patch('/:id', requirePermission('apiKey:update'), async (c) => {
   const id = c.req.param('id');
   const organizationId = c.get('organizationId')!;
+
+  // Check if key exists and is not revoked
+  const existingKey = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
+  });
+
+  if (!existingKey) {
+    return c.json({ error: 'API key not found' }, 404);
+  }
+
+  if (existingKey.revoked) {
+    return c.json({ error: 'Cannot edit a revoked API key' }, 400);
+  }
+
   const body = await c.req.json();
   const result = updateApiKeySchema.safeParse(body);
 
@@ -145,19 +168,53 @@ app.patch('/:id', requirePermission('apiKey:update'), async (c) => {
     return c.json({ error: result.error.flatten() }, 400);
   }
 
+  // Build update data, only including fields that were provided
+  const updateData: Record<string, unknown> = {};
+
+  if (result.data.name !== undefined) {
+    updateData.name = result.data.name;
+  }
+  if (result.data.description !== undefined) {
+    updateData.description = result.data.description;
+  }
+  if (result.data.rateLimitPerMinute !== undefined) {
+    updateData.rateLimitPerMinute = result.data.rateLimitPerMinute;
+  }
+  if (result.data.rateLimitPerDay !== undefined) {
+    updateData.rateLimitPerDay = result.data.rateLimitPerDay;
+  }
+  if (result.data.expiresAt !== undefined) {
+    updateData.expiresAt = result.data.expiresAt ? new Date(result.data.expiresAt) : null;
+  }
+
+  // If no fields to update, just return the current key
+  if (Object.keys(updateData).length === 0) {
+    const existing = await db.query.apiKeys.findFirst({
+      where: and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId))
+    });
+
+    if (!existing) {
+      return c.json({ error: 'API key not found' }, 404);
+    }
+
+    const { keyHash, ...safeKey } = existing;
+    return c.json({
+      ...safeKey,
+      displayKey: apiKeyService.getMaskedKey(existing.keyPrefix, existing.keyLast4)
+    });
+  }
+
   const [updated] = await db.update(apiKeys)
-    .set({
-      ...result.data,
-      expiresAt: result.data.expiresAt !== undefined
-        ? (result.data.expiresAt ? new Date(result.data.expiresAt) : null)
-        : undefined
-    })
+    .set(updateData)
     .where(and(eq(apiKeys.id, id), eq(apiKeys.organizationId, organizationId)))
     .returning();
 
   if (!updated) {
     return c.json({ error: 'API key not found' }, 404);
   }
+
+  // Invalidate the proxy cache so new rate limits take effect immediately
+  await invalidateApiKeyCache(updated.keyPrefix);
 
   const { keyHash, ...safeKey } = updated;
   return c.json({
@@ -555,6 +612,9 @@ app.post('/:id/revoke', requirePermission('apiKey:delete'), async (c) => {
     return c.json({ error: 'Failed to revoke API key' }, 500);
   }
 
+  // Invalidate the proxy cache so revocation takes effect immediately
+  await invalidateApiKeyCache(key.keyPrefix);
+
   return c.json({ success: true, message: 'API key has been revoked' });
 });
 
@@ -582,6 +642,9 @@ app.post('/:id/rotate', requirePermission('apiKey:update'), async (c) => {
 
   try {
     const rotationResult = await apiKeyService.rotateKey(id, options);
+
+    // Invalidate the old key's cache so revocation takes effect immediately
+    await invalidateApiKeyCache(key.keyPrefix);
 
     // Fetch access grants for the new key
     const newGrants = await db.query.apiKeyAccess.findMany({
@@ -637,6 +700,9 @@ app.delete('/:id', requirePermission('apiKey:delete'), async (c) => {
   if (!success) {
     return c.json({ error: 'Failed to delete API key' }, 500);
   }
+
+  // Invalidate the proxy cache
+  await invalidateApiKeyCache(key.keyPrefix);
 
   return c.json({ success: true });
 });

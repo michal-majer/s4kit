@@ -1,12 +1,23 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { systemServices, predefinedServices, instances, instanceServices, apiKeyAccess } from '../../db/schema';
+import { systems, systemServices, predefinedServices, instances, instanceServices, apiKeyAccess } from '../../db/schema';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { z } from 'zod';
-import { count, desc, eq } from 'drizzle-orm';
+import { count, desc, eq, and } from 'drizzle-orm';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
-const app = new Hono();
+const app = new Hono<{ Variables: SessionVariables }>();
+
+/**
+ * Verify that a system belongs to the current organization
+ */
+async function verifySystemOwnership(systemId: string, organizationId: string): Promise<boolean> {
+  const system = await db.query.systems.findFirst({
+    where: and(eq(systems.id, systemId), eq(systems.organizationId, organizationId)),
+  });
+  return !!system;
+}
 
 const serviceSchema = z.object({
   systemId: z.string().uuid(),
@@ -47,12 +58,18 @@ app.get('/', async (c) => {
 });
 
 // Create system service
-app.post('/', async (c) => {
+app.post('/', requirePermission('service:create'), async (c) => {
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
   const result = serviceSchema.safeParse(body);
 
   if (!result.success) {
     return c.json({ error: result.error }, 400);
+  }
+
+  // Verify system belongs to organization
+  if (!await verifySystemOwnership(result.data.systemId, organizationId)) {
+    return c.json({ error: 'System not found' }, 404);
   }
 
   const {

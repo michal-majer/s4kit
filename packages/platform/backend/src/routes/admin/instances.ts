@@ -182,49 +182,131 @@ app.post('/', requirePermission('instance:create'), async (c) => {
     return c.json({ error: 'Failed to create instance' }, 500);
   }
 
-  // For S4HANA systems, auto-link only popular services (not all 503)
+  // For S4HANA systems, auto-link services
   const system = await db.query.systems.findFirst({
     where: eq(systems.id, data.systemId)
   });
 
-  if (system && (system.type === 's4_public' || system.type === 's4_private')) {
-    // Auto-link the most popular/essential services for quick start
-    const POPULAR_SERVICE_ALIASES = [
-      'bp',                  // Business Partner (v2)
-      'salesorder',          // Sales Order (v2)
-      'product',             // Product Master (v4)
-      'purchorder',          // Purchase Order (v4)
-      'glaccount',           // G/L Account (v2)
-      'costcenter',          // Cost Center (v2)
-      'companycode',         // Company Code (v2)
-      'materialdoc',         // Material Documents (v2)
-      'billing',             // Billing Document (v2)
-      'glaccountlineitem',   // G/L Account Line Items (v2)
-    ];
-
-    const systemServicesForSystem = await db.query.systemServices.findMany({
-      where: and(
-        eq(systemServices.systemId, data.systemId),
-        inArray(systemServices.alias, POPULAR_SERVICE_ALIASES)
-      )
+  if (system && (system.type === 's4_public' || system.type === 's4_private' || system.type === 's4_onprem')) {
+    // Check if there are existing instances for this system
+    const existingInstances = await db.query.instances.findMany({
+      where: eq(instances.systemId, data.systemId)
     });
 
-    // Create instance services with pending verification
-    for (const svc of systemServicesForSystem) {
-      try {
-        await db.insert(instanceServices).values({
-          instanceId: newInstance.id,
-          systemServiceId: svc.id,
-          verificationStatus: 'pending',
+    // Define environment order for finding the closest instance
+    const envOrder: Record<typeof data.environment, number> = {
+      sandbox: 0,
+      dev: 1,
+      quality: 2,
+      preprod: 3,
+      production: 4,
+    };
+
+    // Filter out the newly created instance
+    const otherInstances = existingInstances.filter(inst => inst.id !== newInstance.id);
+
+    // Find the closest instance by environment level (prefer lower, then higher)
+    // Sort by distance from current environment, with lower environments having priority
+    const sortedInstances = otherInstances.sort((a, b) => {
+      const currentEnv = envOrder[data.environment];
+      const distA = Math.abs(envOrder[a.environment] - currentEnv);
+      const distB = Math.abs(envOrder[b.environment] - currentEnv);
+
+      if (distA !== distB) return distA - distB; // Closer environment first
+      // If same distance, prefer lower environment
+      return envOrder[a.environment] - envOrder[b.environment];
+    });
+
+    const sourceInstance = sortedInstances[0];
+
+    let systemServicesForSystem: typeof systemServices.$inferSelect[] = [];
+
+    if (sourceInstance) {
+      // Copy ALL services from the source instance (level below)
+      const sourceInstanceServices = await db.query.instanceServices.findMany({
+        where: eq(instanceServices.instanceId, sourceInstance.id)
+      });
+
+      // Get the system services for these instance services
+      const sourceServiceIds = sourceInstanceServices.map(is => is.systemServiceId);
+      if (sourceServiceIds.length > 0) {
+        systemServicesForSystem = await db.query.systemServices.findMany({
+          where: inArray(systemServices.id, sourceServiceIds)
         });
-      } catch (err) {
-        // Ignore duplicate key errors (service already linked)
-        console.error('Failed to auto-link service:', err);
+
+        // Create instance services copying from source
+        for (const svc of systemServicesForSystem) {
+          try {
+            await db.insert(instanceServices).values({
+              instanceId: newInstance.id,
+              systemServiceId: svc.id,
+              verificationStatus: 'pending',
+            });
+          } catch (err) {
+            // Ignore duplicate key errors (service already linked)
+            console.error('Failed to copy service:', err);
+          }
+        }
+      }
+    } else {
+      // First instance - load the 10 popular/essential services
+      // Different aliases exist in s4_public vs s4_private/s4_onprem
+      const POPULAR_SERVICE_ALIASES_PUBLIC = [
+        'bp',                  // Business Partner (v2)
+        'salesorder',          // Sales Order (A2X)
+        'product',             // Product Master (v4)
+        'purchorder',          // Purchase Order (v4)
+        'glaccount',           // G/L Account (v2)
+        'costcenter',          // Cost Center (v2)
+        'companycode',         // Company Code (v2)
+        'materialdoc',         // Material Documents (v2)
+        'billing',             // Billing Document (v2)
+        'glaccountlineitem',   // G/L Account Line Items (v2)
+      ];
+
+      const POPULAR_SERVICE_ALIASES_PRIVATE = [
+        'bp',                  // Business Partner
+        'product',             // Product Master
+        'purchorder',          // Purchase Order
+        'glaccount',           // G/L Account
+        'companycode',         // Company Code
+        'glaccountlineitem',   // G/L Account Line Items
+        'bank',                // Bank Master
+        'billingdocsrv',       // Billing Document
+        'costcentersrv',       // Cost Center
+        'billingdocrequestsrv', // Billing Document Request
+      ];
+
+      const aliases = system.type === 's4_public'
+        ? POPULAR_SERVICE_ALIASES_PUBLIC
+        : POPULAR_SERVICE_ALIASES_PRIVATE;
+
+      systemServicesForSystem = await db.query.systemServices.findMany({
+        where: and(
+          eq(systemServices.systemId, data.systemId),
+          inArray(systemServices.alias, aliases)
+        )
+      });
+
+      // Create instance services with pending verification
+      for (const svc of systemServicesForSystem) {
+        try {
+          await db.insert(instanceServices).values({
+            instanceId: newInstance.id,
+            systemServiceId: svc.id,
+            verificationStatus: 'pending',
+          });
+        } catch (err) {
+          // Ignore duplicate key errors (service already linked)
+          console.error('Failed to auto-link service:', err);
+        }
       }
     }
 
     // Trigger batched verification (non-blocking) - processes 5 at a time with delays
-    batchedRefreshServices(newInstance.id, newInstance, systemServicesForSystem).catch(console.error);
+    if (systemServicesForSystem.length > 0) {
+      batchedRefreshServices(newInstance.id, newInstance, systemServicesForSystem).catch(console.error);
+    }
   }
 
   const { username: _, password: __, credentials: ___, ...safeInstance } = newInstance;

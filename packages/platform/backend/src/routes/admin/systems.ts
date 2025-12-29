@@ -1,24 +1,24 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { systems, systemServices, predefinedServices } from '../../db/schema';
+import { systems, systemServices, predefinedServices, instances } from '../../db/schema';
 import { z } from 'zod';
-import { desc, eq, and } from 'drizzle-orm';
+import { desc, eq, and, inArray } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
 const app = new Hono<{ Variables: SessionVariables }>();
 
 const createSystemSchema = z.object({
-  name: z.string().min(1),
-  type: z.enum(['s4_public', 's4_private', 'btp', 'other']),
+  name: z.string().min(1).max(100),
+  type: z.enum(['s4_public', 's4_private', 's4_onprem', 'btp', 'other']),
   description: z.string().optional(),
 });
 
 const updateSystemSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
 });
 
-// List systems (filtered by organization)
+// List systems (filtered by organization) with instances
 app.get('/', requirePermission('system:read'), async (c) => {
   const organizationId = c.get('organizationId')!;
 
@@ -27,7 +27,33 @@ app.get('/', requirePermission('system:read'), async (c) => {
     orderBy: [desc(systems.createdAt)],
   });
 
-  return c.json(orgSystems);
+  // Fetch instances for all systems
+  const systemIds = orgSystems.map(s => s.id);
+  const allInstances = systemIds.length > 0
+    ? await db.query.instances.findMany({
+        where: inArray(instances.systemId, systemIds),
+      })
+    : [];
+
+  // Group instances by systemId
+  const instancesBySystem = new Map<string, Array<{ id: string; environment: string }>>();
+  for (const inst of allInstances) {
+    if (!instancesBySystem.has(inst.systemId)) {
+      instancesBySystem.set(inst.systemId, []);
+    }
+    instancesBySystem.get(inst.systemId)!.push({
+      id: inst.id,
+      environment: inst.environment,
+    });
+  }
+
+  // Add instances to each system
+  const systemsWithInstances = orgSystems.map(system => ({
+    ...system,
+    instances: instancesBySystem.get(system.id) || [],
+  }));
+
+  return c.json(systemsWithInstances);
 });
 
 // Create system
@@ -59,9 +85,11 @@ app.post('/', requirePermission('system:create'), async (c) => {
   }
 
   // For S/4HANA types, auto-create predefined services
-  if (type === 's4_public' || type === 's4_private') {
+  // s4_onprem uses the same predefined services as s4_private
+  if (type === 's4_public' || type === 's4_private' || type === 's4_onprem') {
+    const predefinedType = type === 's4_onprem' ? 's4_private' : type;
     const predefined = await db.query.predefinedServices.findMany({
-      where: eq(predefinedServices.systemType, type),
+      where: eq(predefinedServices.systemType, predefinedType),
     });
 
     if (predefined.length > 0) {
@@ -74,6 +102,7 @@ app.post('/', requirePermission('system:create'), async (c) => {
           servicePath: ps.servicePath,
           description: ps.description,
           entities: ps.defaultEntities || [],
+          odataVersion: ps.odataVersion,
         }))
       );
     }

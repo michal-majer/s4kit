@@ -1,7 +1,7 @@
 import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, unique, text } from 'drizzle-orm/pg-core';
 
 // Enums
-export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 'btp', 'other']);
+export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 's4_onprem', 'btp', 'other']);
 export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox', 'dev', 'quality', 'preprod', 'production']);
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
 export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extended']);
@@ -186,6 +186,11 @@ export const apiKeyAccess = pgTable('api_key_access', {
 export const requestLogs = pgTable('request_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
   apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'cascade' }).notNull(),
+
+  // Context for compliance reporting
+  systemId: uuid('system_id').references(() => systems.id, { onDelete: 'set null' }),
+  instanceId: uuid('instance_id').references(() => instances.id, { onDelete: 'set null' }),
+  instanceServiceId: uuid('instance_service_id').references(() => instanceServices.id, { onDelete: 'set null' }),
 
   // Request metadata
   method: varchar('method', { length: 10 }).notNull(),

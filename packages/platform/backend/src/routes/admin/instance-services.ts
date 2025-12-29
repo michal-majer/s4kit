@@ -1,13 +1,38 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { instanceServices, systemServices, instances, apiKeyAccess } from '../../db/schema';
+import { systems, instanceServices, systemServices, instances, apiKeyAccess } from '../../db/schema';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { sapClient, type ResolvedAuthConfig } from '../../services/sap-client';
 import { z } from 'zod';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
-const app = new Hono();
+const app = new Hono<{ Variables: SessionVariables }>();
+
+/**
+ * Verify that an instance service belongs to the current organization
+ * Chain: instanceService -> instance -> system -> organization
+ */
+async function verifyInstanceServiceOwnership(instanceServiceId: string, organizationId: string): Promise<boolean> {
+  const instService = await db.query.instanceServices.findFirst({
+    where: eq(instanceServices.id, instanceServiceId),
+  });
+
+  if (!instService) return false;
+
+  const instance = await db.query.instances.findFirst({
+    where: eq(instances.id, instService.instanceId),
+  });
+
+  if (!instance) return false;
+
+  const system = await db.query.systems.findFirst({
+    where: and(eq(systems.id, instance.systemId), eq(systems.organizationId, organizationId)),
+  });
+
+  return !!system;
+}
 
 // Helper function to refresh entities for an instance service (can be called async)
 async function refreshInstanceServiceEntities(instanceServiceId: string): Promise<void> {
@@ -113,16 +138,16 @@ const instanceServiceSchema = z.object({
   // Optional: per-instance entity list (null = inherit from systemService)
   entities: z.array(z.string()).optional().nullable(),
   // Optional auth override
-  authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).optional(),
+  authType: z.enum(['none', 'basic', 'oauth2', 'custom']).optional(),
   username: z.string().min(1).optional(),
   password: z.string().min(1).optional(),
-  apiKey: z.string().min(1).optional(),
-  apiKeyHeaderName: z.string().optional(),
   oauth2ClientId: z.string().min(1).optional(),
   oauth2ClientSecret: z.string().min(1).optional(),
   oauth2TokenUrl: z.string().url().optional(),
   oauth2Scope: z.string().optional(),
   oauth2AuthorizationUrl: z.string().url().optional(),
+  customHeaderName: z.string().min(1).optional(),
+  customHeaderValue: z.string().min(1).optional(),
   authConfig: z.any().optional(),
   credentials: z.any().optional(),
 });
@@ -143,9 +168,8 @@ app.get('/', async (c) => {
 
   const services = await db.query.instanceServices.findMany({
     where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
-    orderBy: [desc(instanceServices.createdAt)]
   });
-  
+
   // Fetch related data
   const enrichedServices = await Promise.all(services.map(async (is) => {
     const systemService = await db.query.systemServices.findFirst({
@@ -154,10 +178,10 @@ app.get('/', async (c) => {
     const instance = await db.query.instances.findFirst({
       where: eq(instances.id, is.instanceId)
     });
-    
+
     // Resolve entities: use instanceService.entities if set, otherwise inherit from systemService
     const resolvedEntities = is.entities !== null ? is.entities : (systemService?.entities || []);
-    
+
     const { username, password, credentials, ...safeIs } = is;
     return {
       ...safeIs,
@@ -178,6 +202,13 @@ app.get('/', async (c) => {
     };
   }));
 
+  // Sort by service name (case-insensitive)
+  enrichedServices.sort((a, b) => {
+    const nameA = a.systemService?.name?.toLowerCase() || '';
+    const nameB = b.systemService?.name?.toLowerCase() || '';
+    return nameA.localeCompare(nameB);
+  });
+
   return c.json(enrichedServices);
 });
 
@@ -190,21 +221,21 @@ app.post('/', async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
-  const { 
+  const {
     authType,
-    username, 
-    password, 
-    apiKey,
-    apiKeyHeaderName,
+    username,
+    password,
     oauth2ClientId,
     oauth2ClientSecret,
     oauth2TokenUrl,
     oauth2Scope,
     oauth2AuthorizationUrl,
+    customHeaderName,
+    customHeaderValue,
     authConfig,
     credentials,
     entities,
-    ...data 
+    ...data
   } = result.data;
 
   const serviceData: any = {
@@ -215,13 +246,10 @@ app.post('/', async (c) => {
 
   if (authType) {
     serviceData.authType = authType as any;
-    
+
     if (authType === 'basic' && username && password) {
       serviceData.username = encryption.encrypt(username);
       serviceData.password = encryption.encrypt(password);
-    } else if (authType === 'api_key' && apiKey) {
-      serviceData.authConfig = { headerName: apiKeyHeaderName || 'X-API-Key' };
-      serviceData.credentials = { apiKey: encryption.encrypt(apiKey) };
     } else if (authType === 'oauth2') {
       serviceData.authConfig = {
         tokenUrl: oauth2TokenUrl,
@@ -233,17 +261,22 @@ app.post('/', async (c) => {
         clientSecret: oauth2ClientSecret ? encryption.encrypt(oauth2ClientSecret) : undefined,
       };
     } else if (authType === 'custom') {
-      if (authConfig) serviceData.authConfig = authConfig;
-      if (credentials) {
-        const encryptedCredentials: any = {};
-        for (const [key, value] of Object.entries(credentials)) {
-          if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-            encryptedCredentials[key] = encryption.encrypt(value);
-          } else {
-            encryptedCredentials[key] = value;
+      if (customHeaderName && customHeaderValue) {
+        serviceData.authConfig = { headerName: customHeaderName };
+        serviceData.credentials = { headerValue: encryption.encrypt(customHeaderValue) };
+      } else if (authConfig) {
+        serviceData.authConfig = authConfig;
+        if (credentials) {
+          const encryptedCredentials: any = {};
+          for (const [key, value] of Object.entries(credentials)) {
+            if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
+              encryptedCredentials[key] = encryption.encrypt(value);
+            } else {
+              encryptedCredentials[key] = value;
+            }
           }
+          serviceData.credentials = encryptedCredentials;
         }
-        serviceData.credentials = encryptedCredentials;
       }
     }
   }
@@ -306,23 +339,30 @@ app.get('/:id', async (c) => {
 });
 
 // Update instance service
-app.patch('/:id', async (c) => {
+app.patch('/:id', requirePermission('service:update'), async (c) => {
   const id = c.req.param('id');
+  const organizationId = c.get('organizationId')!;
+
+  // Verify ownership through chain: instanceService -> instance -> system -> organization
+  if (!await verifyInstanceServiceOwnership(id, organizationId)) {
+    return c.json({ error: 'Instance service not found' }, 404);
+  }
+
   const body = await c.req.json();
   
   const updateSchema = z.object({
     servicePathOverride: z.string().optional().nullable(),
     entities: z.array(z.string()).optional().nullable(),
-    authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).optional().nullable(),
+    authType: z.enum(['none', 'basic', 'oauth2', 'custom']).optional().nullable(),
     username: z.string().min(1).optional().nullable(),
     password: z.string().min(1).optional().nullable(),
-    apiKey: z.string().min(1).optional(),
-    apiKeyHeaderName: z.string().optional(),
     oauth2ClientId: z.string().min(1).optional(),
     oauth2ClientSecret: z.string().min(1).optional(),
     oauth2TokenUrl: z.string().url().optional(),
     oauth2Scope: z.string().optional(),
     oauth2AuthorizationUrl: z.string().url().optional(),
+    customHeaderName: z.string().min(1).optional(),
+    customHeaderValue: z.string().min(1).optional(),
     authConfig: z.any().optional(),
     credentials: z.any().optional(),
   });
@@ -333,21 +373,21 @@ app.patch('/:id', async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
-  const { 
+  const {
     authType,
-    username, 
-    password, 
-    apiKey,
-    apiKeyHeaderName,
+    username,
+    password,
     oauth2ClientId,
     oauth2ClientSecret,
     oauth2TokenUrl,
     oauth2Scope,
     oauth2AuthorizationUrl,
+    customHeaderName,
+    customHeaderValue,
     authConfig,
     credentials,
     entities,
-    ...data 
+    ...data
   } = result.data;
 
   const updateData: any = { ...data };
@@ -368,9 +408,6 @@ app.patch('/:id', async (c) => {
     } else if (authType === 'basic') {
       if (username) updateData.username = encryption.encrypt(username);
       if (password) updateData.password = encryption.encrypt(password);
-    } else if (authType === 'api_key' && apiKey) {
-      updateData.authConfig = { headerName: apiKeyHeaderName || 'X-API-Key' };
-      updateData.credentials = { apiKey: encryption.encrypt(apiKey) };
     } else if (authType === 'oauth2') {
       updateData.authConfig = {
         tokenUrl: oauth2TokenUrl,
@@ -382,17 +419,22 @@ app.patch('/:id', async (c) => {
         updateData.credentials = { clientSecret: encryption.encrypt(oauth2ClientSecret) };
       }
     } else if (authType === 'custom') {
-      if (authConfig) updateData.authConfig = authConfig;
-      if (credentials) {
-        const encryptedCredentials: any = {};
-        for (const [key, value] of Object.entries(credentials)) {
-          if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-            encryptedCredentials[key] = encryption.encrypt(value);
-          } else {
-            encryptedCredentials[key] = value;
+      if (customHeaderName && customHeaderValue) {
+        updateData.authConfig = { headerName: customHeaderName };
+        updateData.credentials = { headerValue: encryption.encrypt(customHeaderValue) };
+      } else if (authConfig) {
+        updateData.authConfig = authConfig;
+        if (credentials) {
+          const encryptedCredentials: any = {};
+          for (const [key, value] of Object.entries(credentials)) {
+            if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
+              encryptedCredentials[key] = encryption.encrypt(value);
+            } else {
+              encryptedCredentials[key] = value;
+            }
           }
+          updateData.credentials = encryptedCredentials;
         }
-        updateData.credentials = encryptedCredentials;
       }
     }
   }
@@ -710,13 +752,18 @@ app.post('/:id/test', async (c) => {
     // Clean response - remove internal timing field
     const { __sapResponseTime, ...cleanData } = response || {};
 
+    // For production instances, hide response body for security
+    const isProduction = instance.environment === 'production';
+    const recordCount = Array.isArray(cleanData?.data) ? cleanData.data.length : undefined;
+
     return c.json({
       success: true,
       statusCode: 200,
       responseTime,
       sapResponseTime,
-      data: cleanData,
-      recordCount: Array.isArray(cleanData?.data) ? cleanData.data.length : undefined,
+      data: isProduction ? undefined : cleanData,
+      recordCount,
+      bodyHidden: isProduction ? true : undefined,
       request: {
         method: 'GET',
         url: `${instance.baseUrl}${fullPath}`,

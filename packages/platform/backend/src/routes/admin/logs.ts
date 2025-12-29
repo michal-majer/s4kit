@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { db } from '../../db';
-import { requestLogs, apiKeys } from '../../db/schema';
-import { desc, eq, and, gte, lte, sql, inArray } from 'drizzle-orm';
+import { requestLogs, apiKeys, instances, systems } from '../../db/schema';
+import { desc, eq, and, gte, lte, sql, inArray, count } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
 const app = new Hono<{ Variables: SessionVariables }>();
@@ -11,9 +11,13 @@ const app = new Hono<{ Variables: SessionVariables }>();
  *
  * Query parameters:
  * - apiKeyId: Filter by specific API key
+ * - systemId: Filter by system
+ * - environment: Filter by instance environment (sandbox, dev, quality, preprod, production)
  * - entity: Filter by entity name
  * - operation: Filter by operation type (read, create, update, delete)
  * - success: Filter by success status (true/false)
+ * - statusCode: Filter by HTTP status code
+ * - requestId: Filter by request ID (correlation ID)
  * - errorCategory: Filter by error category
  * - from: Start date (ISO string)
  * - to: End date (ISO string)
@@ -24,9 +28,13 @@ app.get('/', requirePermission('logs:read'), async (c) => {
   const organizationId = c.get('organizationId')!;
   const {
     apiKeyId,
+    systemId,
+    environment,
     entity,
     operation,
     success,
+    statusCode,
+    requestId,
     errorCategory,
     from,
     to,
@@ -59,6 +67,34 @@ app.get('/', requirePermission('logs:read'), async (c) => {
     conditions.push(eq(requestLogs.apiKeyId, apiKeyId));
   }
 
+  if (systemId) {
+    conditions.push(eq(requestLogs.systemId, systemId));
+  }
+
+  if (environment) {
+    // Filter by instance environment - get instances for this org with this environment
+    // Join through systems to filter by organizationId
+    const instancesWithEnv = await db
+      .select({ id: instances.id })
+      .from(instances)
+      .innerJoin(systems, eq(instances.systemId, systems.id))
+      .where(and(
+        eq(systems.organizationId, organizationId),
+        eq(instances.environment, environment as 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production')
+      ));
+
+    const instanceIds = instancesWithEnv.map((i) => i.id);
+    if (instanceIds.length > 0) {
+      conditions.push(inArray(requestLogs.instanceId, instanceIds));
+    } else {
+      // No instances with this environment - return empty result
+      return c.json({
+        data: [],
+        pagination: { limit: 100, offset: 0, hasMore: false, total: 0 },
+      });
+    }
+  }
+
   if (entity) {
     conditions.push(eq(requestLogs.entity, entity));
   }
@@ -75,6 +111,14 @@ app.get('/', requirePermission('logs:read'), async (c) => {
     conditions.push(eq(requestLogs.errorCategory, errorCategory));
   }
 
+  if (statusCode) {
+    conditions.push(eq(requestLogs.statusCode, parseInt(statusCode, 10)));
+  }
+
+  if (requestId) {
+    conditions.push(eq(requestLogs.requestId, requestId));
+  }
+
   if (from) {
     conditions.push(gte(requestLogs.createdAt, new Date(from)));
   }
@@ -86,6 +130,12 @@ app.get('/', requirePermission('logs:read'), async (c) => {
   // Parse pagination params
   const limit = Math.min(Math.max(parseInt(limitParam || '100'), 1), 1000);
   const offset = Math.max(parseInt(offsetParam || '0'), 0);
+
+  // Get total count for pagination
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(requestLogs)
+    .where(and(...conditions));
 
   // Execute query
   const logs = await db
@@ -101,7 +151,8 @@ app.get('/', requirePermission('logs:read'), async (c) => {
     pagination: {
       limit,
       offset,
-      hasMore: logs.length === limit,
+      total,
+      hasMore: offset + logs.length < total,
     },
   });
 });

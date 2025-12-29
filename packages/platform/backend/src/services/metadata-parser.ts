@@ -282,7 +282,7 @@ export const metadataParser = {
             const headerValue = encryption.decrypt(credentials.headerValue);
             headers[headerName] = headerValue;
           } else {
-            throw new Error('Custom authentication header name and value not found in auth configuration');
+            throw new Error(`Custom auth incomplete: headerName=${authConfig?.headerName}, hasValue=${!!credentials?.headerValue}`);
           }
         } else if (authType === 'oauth2') {
           // OAuth2 authentication
@@ -327,9 +327,21 @@ export const metadataParser = {
       };
     } catch (error: any) {
       console.error('Failed to fetch $metadata:', error);
+
+      // Try to extract more detailed error message from ky HTTPError
+      let errorMessage = error.message || 'Failed to fetch metadata';
+      if (error.response) {
+        try {
+          const responseText = await error.response.text();
+          errorMessage = `Request failed with status code ${error.response.status}: ${responseText.substring(0, 200)}`;
+        } catch {
+          errorMessage = `Request failed with status code ${error.response.status}`;
+        }
+      }
+
       return {
         entities: [],
-        error: error.message || 'Failed to fetch metadata'
+        error: errorMessage
       };
     }
   },
@@ -444,7 +456,7 @@ export const metadataParser = {
             const headerValue = encryption.decrypt(credentials.headerValue);
             headers[headerName] = headerValue;
           } else {
-            throw new Error('Custom authentication header name and value not found in auth configuration');
+            throw new Error(`Custom auth incomplete: headerName=${authConfig?.headerName}, hasValue=${!!credentials?.headerValue}`);
           }
         } else if (authType === 'oauth2') {
           // OAuth2 authentication
