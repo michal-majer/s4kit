@@ -16,6 +16,11 @@ coverage/
 *.lcov
 .nyc_output
 
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+
 # Environment variables
 .env
 .env.local
@@ -39,7 +44,6 @@ lerna-debug.log*
 .DS_Store
 
 # OS files
-.DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
@@ -79,9 +83,6 @@ out/
 
 # Vite (if applicable)
 .vite/
-
-# TypeScript
-*.tsbuildinfo
 
 # Misc
 *.pem
