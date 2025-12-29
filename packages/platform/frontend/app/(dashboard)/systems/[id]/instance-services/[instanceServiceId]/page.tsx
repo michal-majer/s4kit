@@ -35,7 +35,7 @@ export default async function InstanceServicePage({ params, searchParams }: Page
     }
 
     return (
-      <div className="p-8">
+      <div className="p-5 lg:p-6">
         <InstanceServiceDetails
           instanceService={instanceService}
           systemService={systemService}

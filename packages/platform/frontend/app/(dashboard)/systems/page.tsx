@@ -8,7 +8,7 @@ export default async function SystemsPage() {
   const systems = await withServerCookies(() => api.systems.list().catch(() => []));
 
   return (
-    <div className="flex flex-col gap-8 p-8">
+    <div className="flex flex-col gap-5 p-5 lg:p-6">
       <PageHeader
         title="Systems"
         description="Manage your SAP systems and instances"

@@ -74,14 +74,14 @@ export default async function DashboardPage() {
   const stats = await getStats();
 
   return (
-    <div className="flex flex-col gap-8 p-6 lg:p-8">
+    <div className="flex flex-col gap-5 p-5 lg:p-6">
       <PageHeader
         title="Dashboard"
         description="Monitor your S4Kit platform performance and usage at a glance"
       />
 
       {/* Stats Grid - SAP TechEd Bento Box Style */}
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="animate-in-up">
           <StatsCard
             title="Systems"
@@ -122,8 +122,8 @@ export default async function DashboardPage() {
 
       {/* Charts Section */}
       {stats.analytics.length > 0 && (
-        <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
             <div className="animate-in-up delay-300">
               <RequestVolumeChart data={stats.analytics} />
             </div>
@@ -140,10 +140,10 @@ export default async function DashboardPage() {
 
       {/* Empty state for new users */}
       {stats.analytics.length === 0 && stats.systems === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border bg-card/50 p-16 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-accent/15 ring-1 ring-accent/20">
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/50 p-10 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15 ring-1 ring-accent/20">
             <svg
-              className="h-10 w-10 text-accent"
+              className="h-7 w-7 text-accent"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -156,8 +156,8 @@ export default async function DashboardPage() {
               />
             </svg>
           </div>
-          <h3 className="mt-8 text-xl font-bold tracking-tight">Get started with S4Kit</h3>
-          <p className="mt-3 max-w-md text-sm text-muted-foreground leading-relaxed">
+          <h3 className="mt-5 text-lg font-bold tracking-tight">Get started with S4Kit</h3>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground leading-relaxed">
             Connect your first SAP system to start tracking API requests and monitoring performance.
           </p>
         </div>

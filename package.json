@@ -6,6 +6,7 @@
     "packages/platform/*"
   ],
   "scripts": {
+    "dev:platform": "lsof -ti:3000,3001 | xargs kill -9 2>/dev/null; (cd packages/platform/backend && bun run dev) & (cd packages/platform/frontend && bun run dev) & wait",
     "build": "bun run build --filter '*'",
     "test": "bun test"
   },

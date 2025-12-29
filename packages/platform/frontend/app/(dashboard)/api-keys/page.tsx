@@ -10,7 +10,7 @@ export default async function ApiKeysPage() {
   const apiKeys = await withServerCookies(() => api.apiKeys.list().catch(() => []));
 
   return (
-    <div className="flex flex-col gap-8 p-8">
+    <div className="flex flex-col gap-5 p-5 lg:p-6">
       <PageHeader
         title="API Keys"
         description="Manage access credentials for your API"

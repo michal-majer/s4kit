@@ -81,7 +81,7 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
     : 0;
 
   return (
-    <div className="flex flex-col gap-6 p-8">
+    <div className="flex flex-col gap-5 p-5 lg:p-6">
       <PageHeader
         title="Request Logs"
         description="Monitor API requests and analyze performance"
@@ -89,7 +89,7 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
 
       {/* Stats Overview */}
       {analytics?.summary && (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Requests (24h)"
             value={analytics.summary.totalRequests}
@@ -123,18 +123,18 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
 
       {/* Top Entities */}
       {analytics?.topEntities && analytics.topEntities.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {analytics.topEntities.slice(0, 5).map((entity) => (
             <div
               key={entity.entity}
-              className="flex items-center gap-3.5 rounded-2xl border-0 bg-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+              className="flex items-center gap-2.5 rounded-xl border-0 bg-card p-3.5 shadow-sm transition-all duration-300 hover:shadow-md"
             >
-              <div className="rounded-xl bg-primary/10 p-2.5">
-                <Database className="h-4 w-4 text-primary" />
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Database className="h-3.5 w-3.5 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold truncate">{entity.entity}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {entity.count} requests &middot; {entity.successRate}% success
                 </p>
               </div>

@@ -24,7 +24,7 @@ export default async function ServicePreviewPage({ params }: PageProps) {
     }
 
     return (
-      <div className="p-8">
+      <div className="p-5 lg:p-6">
         <ServicePreview system={system} service={service} />
       </div>
     );

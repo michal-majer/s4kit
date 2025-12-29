@@ -21,7 +21,7 @@ export default async function SystemDetailPage({ params }: PageProps) {
     );
 
     return (
-      <div className="p-8">
+      <div className="p-5 lg:p-6">
         <SystemDetails 
           system={system} 
           instances={instances}

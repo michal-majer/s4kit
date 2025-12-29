@@ -13,7 +13,7 @@ export default async function ServicesPage() {
   );
 
   return (
-    <div className="flex flex-col gap-8 p-8">
+    <div className="flex flex-col gap-5 p-5 lg:p-6">
       <PageHeader
         title="Services"
         description="View OData services across all systems"

@@ -28,3 +28,5 @@ const selectArray = [
 const test: SelectFields<A_BusinessPartnerType> = selectArray;
 
 console.log('SelectFields type works correctly!');
+
+

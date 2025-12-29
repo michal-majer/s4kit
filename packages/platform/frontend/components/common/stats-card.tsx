@@ -119,24 +119,24 @@ export function StatsCard({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-3xl border-0 p-6",
+        "group relative overflow-hidden rounded-2xl border-0 p-4",
         "shadow-sm transition-all duration-300 ease-out",
-        "hover:shadow-xl hover:-translate-y-1",
+        "hover:shadow-lg hover:-translate-y-0.5",
         styles.bg,
         className
       )}
     >
-      <div className="relative flex items-start justify-between gap-4">
-        <div className="space-y-3 min-w-0 flex-1">
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="space-y-2 min-w-0 flex-1">
           <p className={cn(
-            "text-[13px] font-semibold uppercase tracking-wider",
+            "text-[11px] font-semibold uppercase tracking-wider",
             styles.subtextColor
           )}>
             {title}
           </p>
-          <div className="flex items-baseline gap-3">
+          <div className="flex items-baseline gap-2">
             <p className={cn(
-              "text-4xl font-bold tracking-tight tabular-nums",
+              "text-3xl font-bold tracking-tight tabular-nums",
               styles.textColor
             )}>
               {typeof value === 'number' ? value.toLocaleString() : value}
@@ -144,16 +144,16 @@ export function StatsCard({
             {trend && (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full",
+                  "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full",
                   trend.isPositive
                     ? "bg-accent text-accent-foreground"
                     : "bg-destructive/90 text-white"
                 )}
               >
                 {trend.isPositive ? (
-                  <TrendingUp className="h-3 w-3" />
+                  <TrendingUp className="h-2.5 w-2.5" />
                 ) : (
-                  <TrendingDown className="h-3 w-3" />
+                  <TrendingDown className="h-2.5 w-2.5" />
                 )}
                 {Math.abs(trend.value)}%
               </span>
@@ -161,7 +161,7 @@ export function StatsCard({
           </div>
           {description && (
             <p className={cn(
-              "text-sm leading-relaxed",
+              "text-xs leading-relaxed",
               styles.subtextColor
             )}>
               {description}
@@ -170,11 +170,11 @@ export function StatsCard({
         </div>
         {Icon && (
           <div className={cn(
-            "shrink-0 rounded-2xl p-3.5 transition-all duration-300",
+            "shrink-0 rounded-xl p-2.5 transition-all duration-300",
             "group-hover:scale-110",
             styles.iconBg
           )}>
-            <Icon className={cn("h-6 w-6", styles.iconColor)} strokeWidth={1.75} />
+            <Icon className={cn("h-5 w-5", styles.iconColor)} strokeWidth={1.75} />
           </div>
         )}
       </div>
