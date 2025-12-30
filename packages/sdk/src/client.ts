@@ -227,8 +227,12 @@ const RESERVED_METHODS = new Set([
 /**
  * Create S4Kit client with dynamic entity access
  * Allows: client.Products.list() instead of client.sap.Products.list()
+ *
+ * Returns S4KitClientWithDynamicAccess which:
+ * - Without generated types: allows any entity access (returns EntityHandler<any>)
+ * - With generated types: provides full type inference for known entities
  */
-export function S4Kit(config: S4KitConfig | HttpClientConfig): S4KitClient {
+export function S4Kit(config: S4KitConfig | HttpClientConfig): S4KitClientWithDynamicAccess {
   const base = new S4KitBase(config);
 
   return new Proxy(base, {
@@ -251,7 +255,7 @@ export function S4Kit(config: S4KitConfig | HttpClientConfig): S4KitClient {
       // Everything else is an entity name - create handler dynamically
       return createEntityHandler(target['httpClient'], prop);
     },
-  }) as unknown as S4KitClient;
+  }) as unknown as S4KitClientWithDynamicAccess;
 }
 
 // Make S4Kit look like a class for instanceof checks and typing
@@ -275,6 +279,6 @@ S4Kit.prototype = S4KitBase.prototype;
  * const products = await client.Products.list({ top: 10 });
  * ```
  */
-export function createClient(config: S4KitConfig): S4KitClient {
+export function createClient(config: S4KitConfig): S4KitClientWithDynamicAccess {
   return S4Kit(config);
 }
