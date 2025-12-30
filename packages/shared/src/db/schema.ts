@@ -181,6 +181,11 @@ export const requestLogs = pgTable('request_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
   apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'cascade' }).notNull(),
 
+  // Context for compliance reporting (nullable - set null on delete for historical data preservation)
+  systemId: uuid('system_id').references(() => systems.id, { onDelete: 'set null' }),
+  instanceId: uuid('instance_id').references(() => instances.id, { onDelete: 'set null' }),
+  instanceServiceId: uuid('instance_service_id').references(() => instanceServices.id, { onDelete: 'set null' }),
+
   // Request metadata
   method: varchar('method', { length: 10 }).notNull(),
   path: varchar('path', { length: 500 }).notNull(),

@@ -152,6 +152,14 @@ export function parseODataError(errorResponse: any): ODataError {
     };
   }
 
+  // SAP API Gateway fault format (e.g., from API Hub sandbox)
+  if (errorResponse?.fault?.faultstring) {
+    return {
+      code: errorResponse.fault.detail?.errorcode || 'API_GATEWAY_ERROR',
+      message: errorResponse.fault.faultstring,
+    };
+  }
+
   // Fallback
   return {
     code: 'UNKNOWN',

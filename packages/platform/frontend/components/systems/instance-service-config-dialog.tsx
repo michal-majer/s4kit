@@ -103,15 +103,15 @@ export function InstanceServiceConfigDialog({
     servicePathOverride: instanceService.servicePathOverride || '',
     useServicePathOverride: !!instanceService.servicePathOverride,
     useAuthOverride: instanceService.hasAuthOverride || false,
-    authType: instanceService.authType || 'inherit',
+    authType: instanceService.authType || 'basic',
     username: '',
     password: '',
-    apiKey: '',
-    apiKeyHeaderName: instanceService.authConfig?.headerName || 'X-API-Key',
     oauth2ClientId: instanceService.authConfig?.clientId || '',
     oauth2ClientSecret: '',
     oauth2TokenUrl: instanceService.authConfig?.tokenUrl || '',
     oauth2Scope: instanceService.authConfig?.scope || '',
+    customHeaderName: instanceService.authConfig?.headerName || '',
+    customHeaderValue: '',
     useEntityOverride: instanceService.hasEntityOverride || false,
   });
 
@@ -139,15 +139,15 @@ export function InstanceServiceConfigDialog({
         servicePathOverride: instanceService.servicePathOverride || '',
         useServicePathOverride: !!instanceService.servicePathOverride,
         useAuthOverride: instanceService.hasAuthOverride || false,
-        authType: instanceService.authType || 'inherit',
+        authType: instanceService.authType || 'basic',
         username: '',
         password: '',
-        apiKey: '',
-        apiKeyHeaderName: instanceService.authConfig?.headerName || 'X-API-Key',
         oauth2ClientId: instanceService.authConfig?.clientId || '',
         oauth2ClientSecret: '',
         oauth2TokenUrl: instanceService.authConfig?.tokenUrl || '',
         oauth2Scope: instanceService.authConfig?.scope || '',
+        customHeaderName: instanceService.authConfig?.headerName || '',
+        customHeaderValue: '',
         useEntityOverride: instanceService.hasEntityOverride || false,
       });
     }
@@ -168,20 +168,20 @@ export function InstanceServiceConfigDialog({
       }
 
       // Auth override
-      if (formData.useAuthOverride && formData.authType !== 'inherit') {
+      if (formData.useAuthOverride) {
         updateData.authType = formData.authType;
-        
+
         if (formData.authType === 'basic') {
-          if (formData.username) updateData.username = formData.username;
-          if (formData.password) updateData.password = formData.password;
-        } else if (formData.authType === 'api_key') {
-          if (formData.apiKey) updateData.apiKey = formData.apiKey;
-          updateData.apiKeyHeaderName = formData.apiKeyHeaderName;
+          updateData.username = formData.username;
+          updateData.password = formData.password;
         } else if (formData.authType === 'oauth2') {
           updateData.oauth2ClientId = formData.oauth2ClientId;
-          if (formData.oauth2ClientSecret) updateData.oauth2ClientSecret = formData.oauth2ClientSecret;
+          updateData.oauth2ClientSecret = formData.oauth2ClientSecret;
           updateData.oauth2TokenUrl = formData.oauth2TokenUrl;
           updateData.oauth2Scope = formData.oauth2Scope;
+        } else if (formData.authType === 'custom') {
+          updateData.customHeaderName = formData.customHeaderName;
+          updateData.customHeaderValue = formData.customHeaderValue;
         }
       } else {
         updateData.authType = null;
@@ -259,7 +259,7 @@ export function InstanceServiceConfigDialog({
             </div>
             {formData.useAuthOverride && (
               <div className="space-y-4 pl-6 border-l-2">
-                <div>
+                <div className="grid gap-2">
                   <Label htmlFor="authType">Authentication Type</Label>
                   <Select
                     value={formData.authType}
@@ -272,8 +272,8 @@ export function InstanceServiceConfigDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="basic">Basic Auth</SelectItem>
-                      <SelectItem value="api_key">API Key</SelectItem>
                       <SelectItem value="oauth2">OAuth 2.0</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
                       <SelectItem value="none">None</SelectItem>
                     </SelectContent>
                   </Select>
@@ -281,55 +281,42 @@ export function InstanceServiceConfigDialog({
 
                 {formData.authType === 'basic' && (
                   <>
-                    <div>
-                      <Label htmlFor="username">Username</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-username">
+                        Username <span className="text-destructive">*</span>
+                      </Label>
                       <Input
-                        id="username"
+                        id="override-username"
+                        name="override-username"
+                        autoComplete="off"
                         value={formData.username}
                         onChange={(e) =>
                           setFormData({ ...formData, username: e.target.value })
                         }
-                        placeholder="Leave empty to keep existing"
+                        required
                       />
+                      <p className="text-xs text-muted-foreground">
+                        SAP technical user or communication user
+                      </p>
                     </div>
-                    <div>
-                      <Label htmlFor="password">Password</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-password">
+                        Password <span className="text-destructive">*</span>
+                      </Label>
                       <Input
-                        id="password"
+                        id="override-password"
+                        name="override-password"
                         type="password"
+                        autoComplete="new-password"
                         value={formData.password}
                         onChange={(e) =>
                           setFormData({ ...formData, password: e.target.value })
                         }
-                        placeholder="Leave empty to keep existing"
+                        required
                       />
-                    </div>
-                  </>
-                )}
-
-                {formData.authType === 'api_key' && (
-                  <>
-                    <div>
-                      <Label htmlFor="apiKey">API Key</Label>
-                      <Input
-                        id="apiKey"
-                        type="password"
-                        value={formData.apiKey}
-                        onChange={(e) =>
-                          setFormData({ ...formData, apiKey: e.target.value })
-                        }
-                        placeholder="Leave empty to keep existing"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="apiKeyHeaderName">Header Name</Label>
-                      <Input
-                        id="apiKeyHeaderName"
-                        value={formData.apiKeyHeaderName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, apiKeyHeaderName: e.target.value })
-                        }
-                      />
+                      <p className="text-xs text-muted-foreground">
+                        Password for the technical user
+                      </p>
                     </div>
                   </>
                 )}
@@ -340,27 +327,26 @@ export function InstanceServiceConfigDialog({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
                         className="w-full justify-between"
                         onClick={() => setShowImportSection(!showImportSection)}
                       >
                         <span className="flex items-center">
-                          <Upload className="mr-2 h-3 w-3" />
+                          <Upload className="mr-2 h-4 w-4" />
                           Import from Service Binding
                         </span>
                         {showImportSection ? (
-                          <ChevronUp className="h-3 w-3" />
+                          <ChevronUp className="h-4 w-4" />
                         ) : (
-                          <ChevronDown className="h-3 w-3" />
+                          <ChevronDown className="h-4 w-4" />
                         )}
                       </Button>
                       {showImportSection && (
-                        <div className="space-y-2 rounded-md border p-2">
+                        <div className="space-y-2 rounded-md border p-3">
                           <Textarea
                             placeholder="Paste VCAP_SERVICES or service binding JSON..."
                             value={bindingJson}
                             onChange={(e) => setBindingJson(e.target.value)}
-                            className="min-h-[80px] font-mono text-xs"
+                            className="min-h-[100px] font-mono text-xs"
                           />
                           <Button
                             type="button"
@@ -368,52 +354,112 @@ export function InstanceServiceConfigDialog({
                             onClick={handleParseBinding}
                             disabled={!bindingJson.trim()}
                           >
-                            Parse & Fill
+                            Parse & Fill Fields
                           </Button>
                         </div>
                       )}
                     </div>
-                    <div>
-                      <Label htmlFor="oauth2TokenUrl">Token URL</Label>
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-background px-2 text-muted-foreground">Or enter manually</span>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-oauth2TokenUrl">Token URL</Label>
                       <Input
-                        id="oauth2TokenUrl"
+                        id="override-oauth2TokenUrl"
+                        name="override-oauth2TokenUrl"
+                        autoComplete="off"
+                        placeholder="https://auth.example.com/oauth/token"
                         value={formData.oauth2TokenUrl}
                         onChange={(e) =>
                           setFormData({ ...formData, oauth2TokenUrl: e.target.value })
                         }
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="oauth2ClientId">Client ID</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-oauth2ClientId">Client ID</Label>
                       <Input
-                        id="oauth2ClientId"
+                        id="override-oauth2ClientId"
+                        name="override-oauth2ClientId"
+                        autoComplete="off"
                         value={formData.oauth2ClientId}
                         onChange={(e) =>
                           setFormData({ ...formData, oauth2ClientId: e.target.value })
                         }
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="oauth2ClientSecret">Client Secret</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-oauth2ClientSecret">Client Secret</Label>
                       <Input
-                        id="oauth2ClientSecret"
+                        id="override-oauth2ClientSecret"
+                        name="override-oauth2ClientSecret"
                         type="password"
+                        autoComplete="new-password"
                         value={formData.oauth2ClientSecret}
                         onChange={(e) =>
                           setFormData({ ...formData, oauth2ClientSecret: e.target.value })
                         }
-                        placeholder="Leave empty to keep existing"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="oauth2Scope">Scope (optional)</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-oauth2Scope">Scope (optional)</Label>
                       <Input
-                        id="oauth2Scope"
+                        id="override-oauth2Scope"
+                        name="override-oauth2Scope"
+                        autoComplete="off"
                         value={formData.oauth2Scope}
                         onChange={(e) =>
                           setFormData({ ...formData, oauth2Scope: e.target.value })
                         }
                       />
+                    </div>
+                  </>
+                )}
+
+                {formData.authType === 'custom' && (
+                  <>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-customHeaderName">
+                        Header Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="override-customHeaderName"
+                        name="override-customHeaderName"
+                        autoComplete="off"
+                        placeholder="APIKey"
+                        value={formData.customHeaderName}
+                        onChange={(e) =>
+                          setFormData({ ...formData, customHeaderName: e.target.value })
+                        }
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        The HTTP header name used for authentication (e.g., APIKey, Authorization)
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="override-customHeaderValue">
+                        Header Value <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="override-customHeaderValue"
+                        name="override-customHeaderValue"
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="your-api-key-or-token"
+                        value={formData.customHeaderValue}
+                        onChange={(e) =>
+                          setFormData({ ...formData, customHeaderValue: e.target.value })
+                        }
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        The value sent with the header (e.g., your API key or &quot;Bearer token&quot;)
+                      </p>
                     </div>
                   </>
                 )}

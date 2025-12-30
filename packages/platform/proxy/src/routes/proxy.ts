@@ -76,8 +76,12 @@ function getClientIp(c: { req: { header: (name: string) => string | undefined } 
 }
 
 app.all('/*', async (c) => {
-  // Generate request ID for correlation
-  const requestId = generateRequestId();
+  // Use client-provided X-Request-ID or generate one for correlation
+  const clientRequestId = c.req.header('X-Request-ID');
+  const requestId = clientRequestId || generateRequestId();
+
+  // Set request ID in response headers for tracing
+  c.header('X-Request-ID', requestId);
 
   // Initialize log data with audit info
   const logData: SecureLogData = {

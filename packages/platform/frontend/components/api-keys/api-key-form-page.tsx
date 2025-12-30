@@ -192,8 +192,13 @@ export function ApiKeyFormPage({
   const isLastStep = currentStepIndex === STEPS.length - 1;
   const isFirstStep = currentStepIndex === 0;
 
+  const isServicesStep = activeTab === 'services';
+
   return (
-    <div className="flex flex-col gap-6 p-8 max-w-4xl mx-auto">
+    <div className={cn(
+      "flex flex-col gap-6 p-8 mx-auto transition-all duration-200",
+      isServicesStep ? "max-w-6xl" : "max-w-4xl"
+    )}>
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/api-keys">

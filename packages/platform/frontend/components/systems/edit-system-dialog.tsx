@@ -67,9 +67,13 @@ export function EditSystemDialog({ system, open, onOpenChange }: EditSystemDialo
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value.slice(0, 100) })}
                 required
+                maxLength={100}
               />
+              <p className="text-xs text-muted-foreground">
+                {formData.name.length}/100 characters
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>

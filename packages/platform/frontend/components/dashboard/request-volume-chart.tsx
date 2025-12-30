@@ -43,11 +43,11 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
 
-  const dataPoint = payload[0]?.payload;
+  const dataPoint = payload[0]?.payload as DailyStats | undefined;
   const date = dataPoint?.date ? format(parseISO(dataPoint.date), 'MMM d, yyyy') : '';
-  const total = payload.find(p => p.dataKey === 'totalRequests')?.value ?? 0;
-  const success = payload.find(p => p.dataKey === 'successCount')?.value ?? 0;
-  const errors = payload.find(p => p.dataKey === 'errorCount')?.value ?? 0;
+  const total = dataPoint?.totalRequests ?? 0;
+  const success = dataPoint?.successCount ?? 0;
+  const errors = dataPoint?.errorCount ?? 0;
 
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 shadow-xl shadow-black/10">

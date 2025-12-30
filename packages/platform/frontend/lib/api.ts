@@ -60,7 +60,7 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 // Types
-export type SystemType = 's4_public' | 's4_private' | 'btp' | 'other';
+export type SystemType = 's4_public' | 's4_private' | 's4_onprem' | 'btp' | 'other';
 export type InstanceEnvironment = 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production';
 
 export interface System {
@@ -71,6 +71,10 @@ export interface System {
   organizationId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SystemWithInstances extends System {
+  instances: Array<{ id: string; environment: InstanceEnvironment }>;
 }
 
 export interface Instance {
@@ -165,6 +169,8 @@ export interface ApiKey {
   logLevel?: LogLevel;  // null = inherit from organization
   expiresAt?: string;
   revoked: boolean;
+  revokedAt?: string;
+  revokedReason?: string;
   createdAt: string;
   lastUsedAt?: string;
 }
@@ -176,6 +182,11 @@ export type Operation = 'read' | 'create' | 'update' | 'delete';
 export interface RequestLog {
   id: string;
   apiKeyId: string;
+
+  // Context for compliance reporting
+  systemId?: string;
+  instanceId?: string;
+  instanceServiceId?: string;
 
   // Request metadata
   method: string;
@@ -214,6 +225,7 @@ export interface LogsResponse {
   pagination: {
     limit: number;
     offset: number;
+    total: number;
     hasMore: boolean;
   };
 }
@@ -377,7 +389,7 @@ export const api = {
   },
 
   systems: {
-    list: () => fetchAPI<System[]>('/admin/systems'),
+    list: () => fetchAPI<SystemWithInstances[]>('/admin/systems'),
     get: (id: string) => fetchAPI<System>(`/admin/systems/${id}`),
     create: (data: {
       name: string;
@@ -632,9 +644,13 @@ export const api = {
       limit?: number;
       offset?: number;
       apiKeyId?: string;
+      systemId?: string;
+      environment?: InstanceEnvironment;
       entity?: string;
       operation?: Operation;
       success?: boolean;
+      statusCode?: number;
+      requestId?: string;
       errorCategory?: ErrorCategory;
       from?: string;
       to?: string;
@@ -643,9 +659,13 @@ export const api = {
       if (params?.limit) searchParams.set('limit', params.limit.toString());
       if (params?.offset) searchParams.set('offset', params.offset.toString());
       if (params?.apiKeyId) searchParams.set('apiKeyId', params.apiKeyId);
+      if (params?.systemId) searchParams.set('systemId', params.systemId);
+      if (params?.environment) searchParams.set('environment', params.environment);
       if (params?.entity) searchParams.set('entity', params.entity);
       if (params?.operation) searchParams.set('operation', params.operation);
       if (params?.success !== undefined) searchParams.set('success', params.success.toString());
+      if (params?.statusCode) searchParams.set('statusCode', params.statusCode.toString());
+      if (params?.requestId) searchParams.set('requestId', params.requestId);
       if (params?.errorCategory) searchParams.set('errorCategory', params.errorCategory);
       if (params?.from) searchParams.set('from', params.from);
       if (params?.to) searchParams.set('to', params.to);

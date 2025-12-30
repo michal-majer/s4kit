@@ -11,7 +11,7 @@ export function useTableFilters<T>(
     const initial: FilterValues = {};
     filterConfigs?.forEach(fc => {
       if (fc.type === 'tabs') {
-        initial[fc.id] = fc.showAllOption ? 'all' : (fc.defaultValue || '');
+        initial[fc.id] = fc.defaultValue ?? (fc.showAllOption ? 'all' : '');
       } else if (fc.type === 'select') {
         initial[fc.id] = fc.defaultValue || fc.allValue || '';
       } else if (fc.type === 'multi-select') {
@@ -29,7 +29,7 @@ export function useTableFilters<T>(
     const cleared: FilterValues = {};
     filterConfigs?.forEach(fc => {
       if (fc.type === 'tabs') {
-        cleared[fc.id] = fc.showAllOption ? 'all' : (fc.defaultValue || '');
+        cleared[fc.id] = fc.defaultValue ?? (fc.showAllOption ? 'all' : '');
       } else if (fc.type === 'select') {
         cleared[fc.id] = fc.allValue || '';
       } else if (fc.type === 'multi-select') {
@@ -44,7 +44,7 @@ export function useTableFilters<T>(
     return filterConfigs.some(fc => {
       const value = filters[fc.id];
       if (fc.type === 'tabs') {
-        const defaultVal = fc.showAllOption ? 'all' : (fc.defaultValue || '');
+        const defaultVal = fc.defaultValue ?? (fc.showAllOption ? 'all' : '');
         return value !== defaultVal;
       }
       if (fc.type === 'select') {

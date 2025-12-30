@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,9 +29,10 @@ interface EditInstanceDialogProps {
   instance: Instance;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onUpdated?: (updatedInstance: Instance) => void;
 }
 
-export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanceDialogProps) {
+export function EditInstanceDialog({ instance, open, onOpenChange, onUpdated }: EditInstanceDialogProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -47,6 +48,24 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
     customHeaderName: instance.authConfig?.headerName || '',
     customHeaderValue: '',
   });
+
+  // Reset form data when dialog opens or instance changes
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        baseUrl: instance.baseUrl,
+        authType: instance.authType,
+        username: '',
+        password: '',
+        oauth2ClientId: instance.authConfig?.clientId || '',
+        oauth2ClientSecret: '',
+        oauth2TokenUrl: instance.authConfig?.tokenUrl || '',
+        oauth2Scope: instance.authConfig?.scope || '',
+        customHeaderName: instance.authConfig?.headerName || '',
+        customHeaderValue: '',
+      });
+    }
+  }, [open, instance.id, instance.baseUrl, instance.authType, instance.authConfig]);
 
   const handleImportSuccess = (config: {
     tokenUrl: string;
@@ -71,7 +90,7 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
 
     setLoading(true);
     try {
-      await api.instances.update(instance.id, {
+      const updatedInstance = await api.instances.update(instance.id, {
         baseUrl: formData.baseUrl,
         authType: formData.authType,
         username: formData.authType === 'basic' && formData.username ? formData.username : undefined,
@@ -85,6 +104,7 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
       });
       toast.success('Instance updated');
       onOpenChange(false);
+      onUpdated?.(updatedInstance);
       router.refresh();
     } catch (error) {
       toast.error('Failed to update instance');
@@ -112,6 +132,9 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
                 onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                The base URL of your SAP system API endpoint
+              </p>
             </div>
 
             <div className="grid gap-2">
@@ -135,23 +158,33 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
             {formData.authType === 'basic' && (
               <>
                 <div className="grid gap-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="edit-username">Username</Label>
                   <Input
-                    id="username"
+                    id="edit-username"
+                    name="edit-username"
+                    autoComplete="off"
                     placeholder="Leave empty to keep existing"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    SAP technical user or communication user
+                  </p>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="edit-password">Password</Label>
                   <Input
-                    id="password"
+                    id="edit-password"
+                    name="edit-password"
                     type="password"
+                    autoComplete="new-password"
                     placeholder="Leave empty to keep existing"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Password for the technical user
+                  </p>
                 </div>
               </>
             )}
@@ -176,35 +209,44 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2TokenUrl">Token URL</Label>
+                  <Label htmlFor="edit-oauth2TokenUrl">Token URL</Label>
                   <Input
-                    id="oauth2TokenUrl"
+                    id="edit-oauth2TokenUrl"
+                    name="edit-oauth2TokenUrl"
+                    autoComplete="off"
+                    placeholder="https://auth.example.com/oauth/token"
                     value={formData.oauth2TokenUrl}
                     onChange={(e) => setFormData({ ...formData, oauth2TokenUrl: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2ClientId">Client ID</Label>
+                  <Label htmlFor="edit-oauth2ClientId">Client ID</Label>
                   <Input
-                    id="oauth2ClientId"
+                    id="edit-oauth2ClientId"
+                    name="edit-oauth2ClientId"
+                    autoComplete="off"
                     value={formData.oauth2ClientId}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientId: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2ClientSecret">Client Secret</Label>
+                  <Label htmlFor="edit-oauth2ClientSecret">Client Secret</Label>
                   <Input
-                    id="oauth2ClientSecret"
+                    id="edit-oauth2ClientSecret"
+                    name="edit-oauth2ClientSecret"
                     type="password"
+                    autoComplete="new-password"
                     placeholder="Leave empty to keep existing"
                     value={formData.oauth2ClientSecret}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientSecret: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2Scope">Scope</Label>
+                  <Label htmlFor="edit-oauth2Scope">Scope (optional)</Label>
                   <Input
-                    id="oauth2Scope"
+                    id="edit-oauth2Scope"
+                    name="edit-oauth2Scope"
+                    autoComplete="off"
                     value={formData.oauth2Scope}
                     onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
                   />
@@ -215,22 +257,33 @@ export function EditInstanceDialog({ instance, open, onOpenChange }: EditInstanc
             {formData.authType === 'custom' && (
               <>
                 <div className="grid gap-2">
-                  <Label htmlFor="customHeaderName">Header Name</Label>
+                  <Label htmlFor="edit-customHeaderName">Header Name</Label>
                   <Input
-                    id="customHeaderName"
-                    placeholder="Authorization"
+                    id="edit-customHeaderName"
+                    name="edit-customHeaderName"
+                    autoComplete="off"
+                    placeholder="APIKey"
                     value={formData.customHeaderName}
                     onChange={(e) => setFormData({ ...formData, customHeaderName: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    The HTTP header name used for authentication (e.g., APIKey, Authorization)
+                  </p>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="customHeaderValue">Header Value</Label>
+                  <Label htmlFor="edit-customHeaderValue">Header Value</Label>
                   <Input
-                    id="customHeaderValue"
+                    id="edit-customHeaderValue"
+                    name="edit-customHeaderValue"
+                    type="password"
+                    autoComplete="new-password"
                     placeholder="Leave empty to keep existing"
                     value={formData.customHeaderValue}
                     onChange={(e) => setFormData({ ...formData, customHeaderValue: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    The value sent with the header (e.g., your API key or &quot;Bearer token&quot;)
+                  </p>
                 </div>
               </>
             )}

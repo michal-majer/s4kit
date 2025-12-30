@@ -30,7 +30,12 @@ export function DropdownActions<T>({ config, item }: DropdownActionsProps<T>) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={(e) => e.stopPropagation()}
+        >
           <TriggerIcon className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -49,6 +54,7 @@ export function DropdownActions<T>({ config, item }: DropdownActionsProps<T>) {
                 <DropdownMenuItem asChild>
                   <Link
                     href={href}
+                    onClick={(e) => e.stopPropagation()}
                     className={cn(
                       'cursor-pointer',
                       action.variant === 'destructive' && 'text-destructive focus:text-destructive'
@@ -60,7 +66,10 @@ export function DropdownActions<T>({ config, item }: DropdownActionsProps<T>) {
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem
-                  onClick={() => action.onClick(item)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    action.onClick(item);
+                  }}
                   className={cn(
                     'cursor-pointer',
                     action.variant === 'destructive' && 'text-destructive focus:text-destructive'

@@ -177,6 +177,17 @@ export function useApiKeyForm({
         const sysService = sysServices.find(s => s.id === instService?.systemServiceId);
         const system = sys.find(s => s.id === sysService?.systemId);
 
+        // Get entities with proper fallback chain:
+        // 1. From instService.entities (resolved entities from backend - most reliable)
+        // 2. From full systemService record
+        // 3. From API response systemService
+        // 4. From nested instanceService.systemService
+        const entities = instService?.entities
+          || sysService?.entities
+          || g.systemService?.entities
+          || instService?.systemService?.entities
+          || [];
+
         return {
           id: g.id,
           instanceServiceId: g.instanceServiceId,
@@ -184,10 +195,13 @@ export function useApiKeyForm({
           preset: detectPreset(g.permissions),
           instanceService: instService,
           instance: g.instance || instService?.instance,
-          systemService: g.systemService ? {
-            ...g.systemService,
-            entities: g.systemService.entities || instService?.systemService?.entities
-          } : instService?.systemService,
+          systemService: {
+            ...(g.systemService || instService?.systemService || {}),
+            id: sysService?.id || g.systemService?.id || instService?.systemService?.id,
+            name: sysService?.name || g.systemService?.name || instService?.systemService?.name,
+            alias: sysService?.alias || g.systemService?.alias || instService?.systemService?.alias,
+            entities,
+          },
           systemName: system?.name || 'System',
           showEntities: false,
           entityFilter: ''

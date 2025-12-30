@@ -36,8 +36,8 @@ async function getStats() {
         return logDate >= date && logDate < nextDate;
       });
 
-      const successCount = dayLogs.filter((log) => log.statusCode >= 200 && log.statusCode < 400).length;
-      const errorCount = dayLogs.length - successCount;
+      const successCount = dayLogs.filter((log) => log.success).length;
+      const errorCount = dayLogs.filter((log) => !log.success).length;
       const avgResponseTime = dayLogs.length > 0
         ? dayLogs.reduce((sum, log) => sum + (log.responseTime || 0), 0) / dayLogs.length
         : 0;

@@ -121,6 +121,7 @@ export function RotateKeyDialog({
               value={newKeyName}
               onChange={(e) => setNewKeyName(e.target.value)}
               placeholder={`${apiKey.name} (Rotated)`}
+              autoComplete="off"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Leave empty to use "{apiKey.name} (Rotated)"
@@ -135,6 +136,7 @@ export function RotateKeyDialog({
               value={revokeReason}
               onChange={(e) => setRevokeReason(e.target.value)}
               placeholder="Scheduled rotation"
+              autoComplete="off"
             />
           </div>
         </div>

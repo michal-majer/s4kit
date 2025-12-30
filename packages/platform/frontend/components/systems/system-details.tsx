@@ -6,7 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { api, System, Instance, SystemService, InstanceService, SystemType, InstanceEnvironment } from '@/lib/api';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { api, System, Instance, SystemService, InstanceService, SystemType } from '@/lib/api';
+import { envLabels, envColors, envBorderColors, envBgColors, envBorderAllColors, envBadgeVariant, envOrder, TOTAL_ENVIRONMENTS } from '@/lib/environment';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, Pencil, Trash2, Server, Database, RefreshCw, Globe, Key, CheckCircle2, AlertCircle, Clock, Loader2, Settings, Search } from 'lucide-react';
@@ -21,61 +32,11 @@ import { InstanceServiceConfigDialog } from './instance-service-config-dialog';
 const systemTypeLabels: Record<SystemType, string> = {
   s4_public: 'SAP S/4HANA Cloud Public Edition',
   s4_private: 'SAP S/4HANA Cloud Private Edition',
+  s4_onprem: 'SAP S/4HANA On-Premise',
   btp: 'SAP BTP',
   other: 'Other',
 };
 
-const envLabels: Record<InstanceEnvironment, string> = {
-  sandbox: 'Sandbox',
-  dev: 'Development',
-  quality: 'Quality',
-  preprod: 'Pre-Production',
-  production: 'Production',
-};
-
-const envColors: Record<InstanceEnvironment, string> = {
-  sandbox: 'bg-purple-500',
-  dev: 'bg-blue-500',
-  quality: 'bg-amber-500',
-  preprod: 'bg-orange-500',
-  production: 'bg-green-500',
-};
-
-const envBorderColors: Record<InstanceEnvironment, string> = {
-  sandbox: 'border-t-purple-500',
-  dev: 'border-t-blue-500',
-  quality: 'border-t-amber-500',
-  preprod: 'border-t-orange-500',
-  production: 'border-t-green-500',
-};
-
-const envBgColors: Record<InstanceEnvironment, string> = {
-  sandbox: 'bg-purple-50 dark:bg-purple-950/30',
-  dev: 'bg-blue-50 dark:bg-blue-950/30',
-  quality: 'bg-amber-50 dark:bg-amber-950/30',
-  preprod: 'bg-orange-50 dark:bg-orange-950/30',
-  production: 'bg-green-50 dark:bg-green-950/30',
-};
-
-const envBadgeVariant: Record<InstanceEnvironment, 'outline' | 'secondary' | 'default'> = {
-  sandbox: 'outline',
-  dev: 'outline',
-  quality: 'secondary',
-  preprod: 'secondary',
-  production: 'default',
-};
-
-// Lifecycle order for sorting instances
-const envOrder: Record<InstanceEnvironment, number> = {
-  sandbox: 0,
-  dev: 1,
-  quality: 2,
-  preprod: 3,
-  production: 4,
-};
-
-// Total number of available environments
-const TOTAL_ENVIRONMENTS = Object.keys(envOrder).length;
 
 interface SystemDetailsProps {
   system: System;
@@ -101,6 +62,10 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     systemService: SystemService;
   } | null>(null);
   const [serviceSearch, setServiceSearch] = useState('');
+  const [deletingInstance, setDeletingInstance] = useState<Instance | null>(null);
+  const [deletingInstanceLoading, setDeletingInstanceLoading] = useState(false);
+  const [deletingService, setDeletingService] = useState<string | null>(null);
+  const [deletingServiceLoading, setDeletingServiceLoading] = useState(false);
 
   // Sort instances by lifecycle order (sandbox first, production last)
   const sortedInstances = [...instances].sort((a, b) => envOrder[a.environment] - envOrder[b.environment]);
@@ -113,23 +78,34 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     return byPriority[0];
   };
 
-  // Get active tab from URL or default to most important instance
-  // Support legacy ?instance=<id> param for backwards compatibility
-  const envParam = searchParams.get('env');
-  const legacyInstanceParam = searchParams.get('instance');
-  const activeInstance = envParam
-    ? sortedInstances.find(i => i.environment === envParam)
-    : legacyInstanceParam
-      ? sortedInstances.find(i => i.id === legacyInstanceParam)
-      : getDefaultInstance(sortedInstances);
-  const activeTab = activeInstance?.environment || 'empty';
+  // Get initial tab from URL or default to most important instance
+  const getInitialTab = () => {
+    const envParam = searchParams.get('env');
+    const legacyInstanceParam = searchParams.get('instance');
+    if (envParam) {
+      const found = sortedInstances.find(i => i.environment === envParam);
+      if (found) return found.environment;
+    }
+    if (legacyInstanceParam) {
+      const found = sortedInstances.find(i => i.id === legacyInstanceParam);
+      if (found) return found.environment;
+    }
+    return getDefaultInstance(sortedInstances)?.environment || 'empty';
+  };
+
+  // Use local state for instant tab switching
+  const [activeTab, setActiveTabState] = useState(getInitialTab);
 
   const setActiveTab = useCallback((env: string) => {
+    if (env === activeTab) return;
+    // Update local state immediately for instant UI response
+    setActiveTabState(env);
+    // Sync URL in background (non-blocking)
     const params = new URLSearchParams(searchParams.toString());
-    params.delete('instance'); // Remove old param if present
+    params.delete('instance');
     params.set('env', env);
-    router.replace(`?${params.toString()}`, { scroll: false });
-  }, [router, searchParams]);
+    window.history.replaceState(null, '', `?${params.toString()}`);
+  }, [searchParams, activeTab]);
 
   const handleInstanceCreated = useCallback(async (newInstance: Instance) => {
     // Add instance to local state immediately
@@ -138,7 +114,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     setActiveTab(newInstance.environment);
 
     // For S4HANA systems, services are auto-linked and verified automatically
-    if (system.type === 's4_public' || system.type === 's4_private') {
+    if (system.type === 's4_public' || system.type === 's4_private' || system.type === 's4_onprem') {
       setVerifyingInstanceId(newInstance.id);
 
       // Poll for updates until all services are verified or failed
@@ -216,14 +192,16 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     setTimeout(() => pollForUpdates(0), 500);
   }, [system.id]);
 
-  const handleDeleteInstance = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this instance? All linked services will be removed.')) return;
+  const handleDeleteInstance = async () => {
+    if (!deletingInstance) return;
+    setDeletingInstanceLoading(true);
     try {
-      await api.instances.delete(id);
-      const remainingInstances = instances.filter(i => i.id !== id);
+      await api.instances.delete(deletingInstance.id);
+      const remainingInstances = instances.filter(i => i.id !== deletingInstance.id);
       setInstances(remainingInstances);
-      setInstanceServices(prev => prev.filter(is => is.instanceId !== id));
+      setInstanceServices(prev => prev.filter(is => is.instanceId !== deletingInstance.id));
       toast.success('Instance deleted');
+      setDeletingInstance(null);
 
       // Navigate to default instance (most important one remaining)
       const defaultInstance = getDefaultInstance(remainingInstances);
@@ -235,6 +213,8 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       }
     } catch (error) {
       toast.error('Failed to delete instance');
+    } finally {
+      setDeletingInstanceLoading(false);
     }
   };
 
@@ -248,6 +228,10 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       ));
     } catch (error: any) {
       toast.error(error.message || 'Failed to refresh service');
+      // Update state to reflect failed verification
+      setInstanceServices(prev => prev.map(is =>
+        is.id === instanceServiceId ? { ...is, verificationStatus: 'failed', verificationError: error.message || 'Failed to refresh service', lastVerifiedAt: new Date().toISOString() } : is
+      ));
     } finally {
       setRefreshingInstanceServiceId(null);
     }
@@ -258,8 +242,21 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     try {
       const result = await api.instances.refreshAllServices(instanceId);
       toast.success(`Verified ${result.verified} services, ${result.failed} failed`);
-      const updated = await api.instanceServices.list();
-      setInstanceServices(updated);
+
+      // Update state directly from verification results for immediate UI update
+      setInstanceServices(prev => prev.map(is => {
+        const refreshResult = result.results.find(r => r.serviceId === is.id);
+        if (refreshResult) {
+          return {
+            ...is,
+            verificationStatus: refreshResult.status,
+            entityCount: refreshResult.entityCount ?? is.entityCount,
+            verificationError: refreshResult.error || null,
+            lastVerifiedAt: new Date().toISOString(),
+          };
+        }
+        return is;
+      }));
     } catch (error: any) {
       toast.error(error.message || 'Failed to verify services');
     } finally {
@@ -267,12 +264,14 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     }
   };
 
-  const handleDeleteService = async (instanceServiceId: string) => {
-    if (!confirm('Remove this service from the instance?')) return;
+  const handleDeleteService = async () => {
+    if (!deletingService) return;
+    setDeletingServiceLoading(true);
     try {
-      await api.instanceServices.delete(instanceServiceId);
+      await api.instanceServices.delete(deletingService);
       toast.success('Service removed');
-      setInstanceServices(prev => prev.filter(is => is.id !== instanceServiceId));
+      setInstanceServices(prev => prev.filter(is => is.id !== deletingService));
+      setDeletingService(null);
     } catch (error: any) {
       // Handle 409 conflict (service is used by API keys)
       let errorMessage = error.message || 'Failed to remove service';
@@ -287,15 +286,15 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
         // Not JSON, use original message
       }
       toast.error(errorMessage, { duration: 5000 });
+    } finally {
+      setDeletingServiceLoading(false);
     }
   };
 
-  // Load instance services if not provided
+  // Always refresh instance services on mount to get fresh status
   React.useEffect(() => {
-    if (!initialInstanceServices) {
-      api.instanceServices.list().then(setInstanceServices).catch(() => {});
-    }
-  }, [initialInstanceServices]);
+    api.instanceServices.list().then(setInstanceServices).catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -320,20 +319,6 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                 {system.description && <span> · {system.description}</span>}
               </p>
             </div>
-            <div className="flex gap-2">
-              {instances.length > 0 && (
-                <Button size="sm" variant="outline" onClick={() => setShowCreateService(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Service
-                </Button>
-              )}
-              {instances.length < TOTAL_ENVIRONMENTS && (
-                <Button size="sm" onClick={() => setShowCreateInstance(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Instance
-                </Button>
-              )}
-            </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
@@ -348,42 +333,55 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
               </Button>
             </div>
           ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
-              <TabsList className="w-full h-auto p-0 bg-transparent border-0">
-                {sortedInstances.map((instance) => {
-                  const linkedServices = instanceServices.filter(is => is.instanceId === instance.id);
-                  const isActive = activeTab === instance.environment;
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <div className="flex items-end border-b border-border">
+                <TabsList className="h-auto p-0 bg-transparent border-0 gap-0">
+                  {sortedInstances.map((instance) => {
+                    const linkedServices = instanceServices.filter(is => is.instanceId === instance.id);
+                    const isActive = activeTab === instance.environment;
 
-                  return (
-                    <TabsTrigger
-                      key={instance.environment}
-                      value={instance.environment}
-                      unstyled
-                      className={`flex-1 relative flex flex-col items-center gap-0.5 px-6 py-3 cursor-pointer border-t-2 transition-all rounded-t-lg ${
-                        isActive
-                          ? `${envBgColors[instance.environment]} ${envBorderColors[instance.environment]} border-x border-x-border`
-                          : 'border-t-transparent border-b border-b-border hover:bg-muted/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${envColors[instance.environment]}`} />
-                        <span className={isActive ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}>{envLabels[instance.environment]}</span>
-                      </div>
-                      <span className={`text-xs ${isActive ? 'text-muted-foreground' : 'text-muted-foreground/70'}`}>
-                        {linkedServices.length} services
-                      </span>
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
+                    return (
+                      <TabsTrigger
+                        key={instance.environment}
+                        value={instance.environment}
+                        unstyled
+                        className={`relative flex flex-col items-center gap-0.5 px-12 py-3 rounded-t-lg cursor-pointer transition-all ${
+                          isActive
+                            ? `${envBgColors[instance.environment]} border border-b-0 ${envBorderAllColors[instance.environment]} -mb-px`
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${envColors[instance.environment]}`} />
+                          <span className={isActive ? 'text-foreground font-medium' : ''}>{envLabels[instance.environment]}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {linkedServices.length} services
+                        </span>
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+                {/* Add Instance button */}
+                {instances.length < TOTAL_ENVIRONMENTS && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateInstance(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 ml-2 mb-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-all cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Instance</span>
+                  </button>
+                )}
+              </div>
 
               {sortedInstances.map((instance) => {
                 const linkedServices = instanceServices.filter(is => is.instanceId === instance.id);
 
                 return (
-                  <TabsContent key={instance.environment} value={instance.environment} className="mt-0">
-                    {/* Instance Panel - connects with active tab */}
-                    <div className={`rounded-b-lg rounded-tr-lg border border-t-4 shadow-sm overflow-hidden ${envBorderColors[instance.environment]}`}>
+                  <TabsContent key={instance.environment} value={instance.environment} className="-mt-[7px]">
+                    {/* Instance Panel */}
+                    <div className={`relative border border-t-0 rounded-b-lg shadow-sm overflow-hidden`}>
                       {/* Instance Header */}
                       <div className="p-5">
                         <div className="flex items-start justify-between">
@@ -416,7 +414,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => handleDeleteInstance(instance.id)}
+                              onClick={() => setDeletingInstance(instance)}
                               title="Delete instance"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -465,16 +463,14 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            {systemServices.length > linkedServices.length && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setShowCreateService(true)}
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Browse Catalog
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowCreateService(true)}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Service
+                            </Button>
                             {linkedServices.length > 0 && (
                               <Button
                                 size="sm"
@@ -502,20 +498,16 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                 <Database className="h-8 w-8 mx-auto mb-2 opacity-30" />
                                 <p className="text-sm font-medium">No services linked yet</p>
                                 <p className="text-xs mt-1 mb-3">
-                                  {systemServices.length > 0
-                                    ? `Browse ${systemServices.length} available APIs to add services to this instance`
-                                    : 'Add services to this instance'}
+                                  Add services from the catalog or create custom ones
                                 </p>
-                                {systemServices.length > 0 && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setShowCreateService(true)}
-                                  >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Browse API Catalog
-                                  </Button>
-                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setShowCreateService(true)}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Service
+                                </Button>
                               </>
                             )}
                           </div>
@@ -606,7 +598,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                             className="h-7 w-7 text-destructive hover:text-destructive"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              handleDeleteService(is.id);
+                                              setDeletingService(is.id);
                                             }}
                                             title="Remove service"
                                           >
@@ -646,6 +638,11 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
           instance={editingInstance}
           open={!!editingInstance}
           onOpenChange={(open: boolean) => !open && setEditingInstance(null)}
+          onUpdated={(updatedInstance) => {
+            setInstances(prev => prev.map(inst =>
+              inst.id === updatedInstance.id ? updatedInstance : inst
+            ));
+          }}
         />
       )}
 
@@ -669,6 +666,50 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
           onOpenChange={(open) => !open && setConfiguringService(null)}
         />
       )}
+
+      {/* Delete Instance Confirmation Dialog */}
+      <AlertDialog open={!!deletingInstance} onOpenChange={(open) => !open && setDeletingInstance(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Instance</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the {deletingInstance && envLabels[deletingInstance.environment]} instance? All linked services will be removed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingInstanceLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteInstance}
+              disabled={deletingInstanceLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingInstanceLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Service Confirmation Dialog */}
+      <AlertDialog open={!!deletingService} onOpenChange={(open) => !open && setDeletingService(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Service</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this service from the instance? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingServiceLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteService}
+              disabled={deletingServiceLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingServiceLoading ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -18,17 +18,22 @@ import type { ErrorCategory, Operation } from '@/lib/api';
 
 interface LogsFiltersProps {
   apiKeys?: Array<{ id: string; name: string }>;
+  systems?: Array<{ id: string; name: string }>;
 }
 
-export function LogsFilters({ apiKeys = [] }: LogsFiltersProps) {
+export function LogsFilters({ apiKeys = [], systems = [] }: LogsFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [filters, setFilters] = useState({
     apiKeyId: searchParams.get('apiKeyId') || '',
+    systemId: searchParams.get('systemId') || '',
+    environment: searchParams.get('environment') || '',
     entity: searchParams.get('entity') || '',
     operation: searchParams.get('operation') || '',
     success: searchParams.get('success') || '',
+    statusCode: searchParams.get('statusCode') || '',
+    requestId: searchParams.get('requestId') || '',
     errorCategory: searchParams.get('errorCategory') || '',
     from: searchParams.get('from') || '',
     to: searchParams.get('to') || '',
@@ -47,9 +52,13 @@ export function LogsFilters({ apiKeys = [] }: LogsFiltersProps) {
   const clearFilters = () => {
     setFilters({
       apiKeyId: '',
+      systemId: '',
+      environment: '',
       entity: '',
       operation: '',
       success: '',
+      statusCode: '',
+      requestId: '',
       errorCategory: '',
       from: '',
       to: '',
@@ -103,6 +112,50 @@ export function LogsFilters({ apiKeys = [] }: LogsFiltersProps) {
           </div>
         )}
 
+        {/* System Filter */}
+        {systems.length > 0 && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">System</Label>
+            <Select
+              value={filters.systemId}
+              onValueChange={(v) => updateFilter('systemId', v === 'all' ? '' : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="All Systems" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Systems</SelectItem>
+                {systems.map((system) => (
+                  <SelectItem key={system.id} value={system.id}>
+                    {system.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Environment Filter */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Environment</Label>
+          <Select
+            value={filters.environment}
+            onValueChange={(v) => updateFilter('environment', v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="All Environments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Environments</SelectItem>
+              <SelectItem value="sandbox">Sandbox</SelectItem>
+              <SelectItem value="dev">Development</SelectItem>
+              <SelectItem value="quality">Quality</SelectItem>
+              <SelectItem value="preprod">Pre-Production</SelectItem>
+              <SelectItem value="production">Production</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Entity Filter */}
         <div className="space-y-1.5">
           <Label className="text-xs">Entity</Label>
@@ -150,6 +203,29 @@ export function LogsFilters({ apiKeys = [] }: LogsFiltersProps) {
               <SelectItem value="false">Failed</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* HTTP Status Code Filter */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">HTTP Code</Label>
+          <Input
+            placeholder="e.g., 200, 404, 500"
+            value={filters.statusCode}
+            onChange={(e) => updateFilter('statusCode', e.target.value)}
+            className="h-9"
+            type="number"
+          />
+        </div>
+
+        {/* Request ID Filter */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Request ID</Label>
+          <Input
+            placeholder="Correlation ID"
+            value={filters.requestId}
+            onChange={(e) => updateFilter('requestId', e.target.value)}
+            className="h-9"
+          />
         </div>
 
         {/* Error Category Filter */}

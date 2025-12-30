@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <defs>
+    <linearGradient id="s4kit-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="40" fill="url(#s4kit-bg)"/>
+  <path d="M90 40L135 65V115L90 140L45 115V65L90 40Z" stroke="white" stroke-width="14" stroke-linejoin="round" fill="none"/>
+  <path d="M90 62.5L112.5 76V104L90 117.5L67.5 104V76L90 62.5Z" fill="white" fill-opacity="0.3"/>
+  <circle cx="90" cy="90" r="11" fill="white"/>
+</svg>

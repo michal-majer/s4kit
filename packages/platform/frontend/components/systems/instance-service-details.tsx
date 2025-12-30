@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { api, System, Instance, SystemService, InstanceService, InstanceEnvironment } from '@/lib/api';
+import { api, System, Instance, SystemService, InstanceService } from '@/lib/api';
+import { envLabels, envColors, envBorderLeftColors, envOrder } from '@/lib/environment';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -39,39 +40,6 @@ import Link from 'next/link';
 import { ServiceVerificationStatus } from './service-verification-status';
 import { InstanceServiceConfigDialog } from './instance-service-config-dialog';
 import { ApiTestTab } from './api-test-tab';
-
-const envLabels: Record<InstanceEnvironment, string> = {
-  sandbox: 'Sandbox',
-  dev: 'Development',
-  quality: 'Quality',
-  preprod: 'Pre-Production',
-  production: 'Production',
-};
-
-const envColors: Record<InstanceEnvironment, string> = {
-  sandbox: 'bg-purple-500',
-  dev: 'bg-blue-500',
-  quality: 'bg-amber-500',
-  preprod: 'bg-orange-500',
-  production: 'bg-green-500',
-};
-
-const envBorderColors: Record<InstanceEnvironment, string> = {
-  sandbox: 'border-l-purple-500',
-  dev: 'border-l-blue-500',
-  quality: 'border-l-amber-500',
-  preprod: 'border-l-orange-500',
-  production: 'border-l-green-500',
-};
-
-// Environment order for sorting
-const envOrder: Record<InstanceEnvironment, number> = {
-  sandbox: 0,
-  dev: 1,
-  quality: 2,
-  preprod: 3,
-  production: 4,
-};
 
 interface InstanceServiceDetailsProps {
   instanceService: InstanceService;

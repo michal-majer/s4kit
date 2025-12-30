@@ -13,10 +13,10 @@ import {
   LogOut,
   User,
   ChevronRight,
-  Hexagon,
   Cloud,
   type LucideIcon,
 } from 'lucide-react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -110,10 +110,14 @@ export function Sidebar({ user }: SidebarProps) {
       {/* Logo Section */}
       <div className="flex h-[56px] items-center gap-3 border-b border-sidebar-border/50 px-4">
         <div className="relative flex h-9 w-9 items-center justify-center">
-          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent to-accent/60 opacity-20" />
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/25">
-            <Hexagon className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
-          </div>
+          <Image
+            src="/logo.svg"
+            alt="S4Kit"
+            width={36}
+            height={36}
+            className="rounded-lg shadow-lg shadow-primary/25"
+            priority
+          />
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="text-lg font-bold tracking-tight">S4Kit</span>

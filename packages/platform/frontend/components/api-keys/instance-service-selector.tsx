@@ -54,7 +54,19 @@ export function InstanceServiceSelector({
   // Filter state
   const [versionFilter, setVersionFilter] = useState<ODataVersionFilter>('all');
   const [statusFilter, setStatusFilter] = useState<VerificationStatusFilter>('all');
+  const [environmentFilter, setEnvironmentFilter] = useState<string>('all');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+
+  // Get unique environments from options
+  const availableEnvironments = useMemo(() => {
+    const envs = new Set<string>();
+    options.forEach(opt => {
+      if (opt.environment) envs.add(opt.environment);
+    });
+    return Array.from(envs).sort((a, b) =>
+      (ENV_CONFIG[a]?.order ?? 99) - (ENV_CONFIG[b]?.order ?? 99)
+    );
+  }, [options]);
 
   // Group: System → Environment → Services
   const groupedOptions = useMemo(() => {
@@ -96,6 +108,11 @@ export function InstanceServiceSelector({
             if (!matchesSearch) return false;
           }
 
+          // Environment filter
+          if (environmentFilter !== 'all') {
+            if (s.environment !== environmentFilter) return false;
+          }
+
           // OData version filter
           if (versionFilter !== 'all') {
             if (s.odataVersion !== versionFilter) return false;
@@ -129,7 +146,7 @@ export function InstanceServiceSelector({
     });
 
     return filtered;
-  }, [groupedOptions, search, versionFilter, statusFilter, showSelectedOnly, selected]);
+  }, [groupedOptions, search, environmentFilter, versionFilter, statusFilter, showSelectedOnly, selected]);
 
   // Auto-expand when searching
   useMemo(() => {
@@ -249,6 +266,26 @@ export function InstanceServiceSelector({
             <span className="text-xs text-muted-foreground">Filters:</span>
           </div>
 
+          {/* Environment filter */}
+          {availableEnvironments.length > 1 && (
+            <Select value={environmentFilter} onValueChange={setEnvironmentFilter} disabled={disabled}>
+              <SelectTrigger className="h-7 w-[110px] text-xs">
+                <SelectValue placeholder="Instance" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All instances</SelectItem>
+                {availableEnvironments.map(env => {
+                  const config = ENV_CONFIG[env] || { short: env.toUpperCase() };
+                  return (
+                    <SelectItem key={env} value={env}>
+                      {config.short}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          )}
+
           {/* OData version filter */}
           <Select value={versionFilter} onValueChange={(v) => setVersionFilter(v as ODataVersionFilter)} disabled={disabled}>
             <SelectTrigger className="h-7 w-[90px] text-xs">
@@ -292,7 +329,7 @@ export function InstanceServiceSelector({
       </div>
 
       {/* Tree: System → Environment → Services */}
-      <ScrollArea className="h-[350px]">
+      <ScrollArea className="h-[calc(100vh-480px)] min-h-[300px] max-h-[600px]">
         <div className="p-2">
           {sortedSystems.length === 0 ? (
             <div className="px-4 py-10 text-center text-muted-foreground">

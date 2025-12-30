@@ -17,25 +17,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { api, SystemService, Instance, InstanceEnvironment } from '@/lib/api';
+import { api, SystemService, Instance } from '@/lib/api';
+import { envLabels, envColors, envOrder } from '@/lib/environment';
 import { toast } from 'sonner';
-import { Search, Package } from 'lucide-react';
-
-const envLabels: Record<InstanceEnvironment, string> = {
-  sandbox: 'Sandbox',
-  dev: 'Development',
-  quality: 'Quality',
-  preprod: 'Pre-Production',
-  production: 'Production',
-};
-
-const envColors: Record<InstanceEnvironment, string> = {
-  sandbox: 'bg-purple-500',
-  dev: 'bg-blue-500',
-  quality: 'bg-amber-500',
-  preprod: 'bg-orange-500',
-  production: 'bg-green-500',
-};
+import { Search, Package, Filter } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface InstanceServiceLink {
   instanceId: string;
@@ -75,18 +67,43 @@ export function CreateServiceDialog({
     servicePath: '',
     description: '',
   });
+  const [versionFilter, setVersionFilter] = useState<'all' | 'v2' | 'v4'>('all');
 
-  // Filter services by search query
+  // Filter services by search query and version
   const filteredServices = useMemo(() => {
-    if (!serviceSearch.trim()) return existingServices;
-    const query = serviceSearch.toLowerCase();
-    return existingServices.filter(
-      (s) =>
-        s.name?.toLowerCase().includes(query) ||
-        s.alias?.toLowerCase().includes(query) ||
-        s.description?.toLowerCase().includes(query)
-    );
-  }, [existingServices, serviceSearch]);
+    let services = existingServices;
+
+    // Filter by version
+    if (versionFilter !== 'all') {
+      services = services.filter(s => s.odataVersion === versionFilter);
+    }
+
+    // Filter by search query
+    if (serviceSearch.trim()) {
+      const query = serviceSearch.toLowerCase();
+      services = services.filter(
+        (s) =>
+          s.name?.toLowerCase().includes(query) ||
+          s.alias?.toLowerCase().includes(query) ||
+          s.description?.toLowerCase().includes(query)
+      );
+    }
+
+    return services;
+  }, [existingServices, serviceSearch, versionFilter]);
+
+  // Count services by version for filter display
+  const versionCounts = useMemo(() => {
+    const counts = { v2: 0, v4: 0 };
+    existingServices.forEach(s => {
+      if (s.odataVersion === 'v2') counts.v2++;
+      else if (s.odataVersion === 'v4') counts.v4++;
+    });
+    return counts;
+  }, [existingServices]);
+
+  // Only show version filter if there are multiple versions
+  const showVersionFilter = versionCounts.v2 > 0 && versionCounts.v4 > 0;
 
   // Toggle service selection
   const toggleServiceSelection = (serviceId: string, checked: boolean) => {
@@ -109,6 +126,11 @@ export function CreateServiceDialog({
 
   // Show multi-select only when instanceId is not provided and we have instances
   const showMultiSelect = !instanceId && instances.length > 0;
+
+  // Sort instances by environment order (sandbox first, production last)
+  const sortedInstances = useMemo(() => {
+    return [...instances].sort((a, b) => envOrder[a.environment] - envOrder[b.environment]);
+  }, [instances]);
 
   const toggleInstance = (id: string, checked: boolean) => {
     if (checked) {
@@ -211,22 +233,80 @@ export function CreateServiceDialog({
 
         <Tabs defaultValue={existingServices.length > 0 ? 'existing' : 'custom'}>
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="existing" disabled={existingServices.length === 0}>
+            <TabsTrigger value="existing" disabled={existingServices.length === 0} className="cursor-pointer">
               Existing ({existingServices.length})
             </TabsTrigger>
-            <TabsTrigger value="custom">Custom</TabsTrigger>
+            <TabsTrigger value="custom" className="cursor-pointer">Custom</TabsTrigger>
           </TabsList>
 
+          {/* Instance selection - shared between tabs */}
+          {showMultiSelect && (
+            <div className="grid gap-2 pt-4">
+              <Label>Link to Instances</Label>
+              <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                {sortedInstances.map((inst) => (
+                  <div key={inst.id} className="flex items-center gap-3">
+                    <Checkbox
+                      id={`inst-${inst.id}`}
+                      checked={selectedInstanceIds.includes(inst.id)}
+                      onCheckedChange={(checked) =>
+                        toggleInstance(inst.id, checked === true)
+                      }
+                    />
+                    <label
+                      htmlFor={`inst-${inst.id}`}
+                      className="flex items-center gap-2 flex-1 cursor-pointer"
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`}
+                      />
+                      <span className="text-sm font-medium">
+                        {envLabels[inst.environment]}
+                      </span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {inst.baseUrl}
+                      </span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+              {selectedInstanceIds.length === 0 && (
+                <p className="text-xs text-destructive">
+                  Select at least one instance
+                </p>
+              )}
+            </div>
+          )}
+
           <TabsContent value="existing" className="space-y-4 pt-4">
-            {/* Search input */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search APIs by name, alias, or description..."
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-                className="pl-9"
-              />
+            {/* Search and filter */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search APIs by name, alias, or description..."
+                  value={serviceSearch}
+                  onChange={(e) => setServiceSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {/* Version filter - only shown when there are multiple versions */}
+              {showVersionFilter && (
+                <Select
+                  value={versionFilter}
+                  onValueChange={(value) => setVersionFilter(value as 'all' | 'v2' | 'v4')}
+                >
+                  <SelectTrigger className="w-[150px]">
+                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All versions</SelectItem>
+                    <SelectItem value="v2">OData V2 ({versionCounts.v2})</SelectItem>
+                    <SelectItem value="v4">OData V4 ({versionCounts.v4})</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Service count */}
@@ -258,8 +338,10 @@ export function CreateServiceDialog({
                     return (
                       <div
                         key={service.id}
-                        className={`flex items-start gap-3 p-3 rounded-md hover:bg-muted/50 transition-colors ${
-                          isLinked ? 'opacity-50' : ''
+                        className={`flex items-start gap-3 p-3 rounded-md transition-colors ${
+                          isLinked
+                            ? 'bg-muted/40 opacity-60'
+                            : 'hover:bg-muted/50'
                         }`}
                       >
                         <Checkbox
@@ -304,45 +386,6 @@ export function CreateServiceDialog({
               </div>
             </ScrollArea>
 
-            {/* Instance selection (multi-select mode) */}
-            {showMultiSelect && (
-              <div className="grid gap-2">
-                <Label>Link to Instances</Label>
-                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                  {instances.map((inst) => (
-                    <div key={inst.id} className="flex items-center gap-3">
-                      <Checkbox
-                        id={`existing-inst-${inst.id}`}
-                        checked={selectedInstanceIds.includes(inst.id)}
-                        onCheckedChange={(checked) =>
-                          toggleInstance(inst.id, checked === true)
-                        }
-                      />
-                      <label
-                        htmlFor={`existing-inst-${inst.id}`}
-                        className="flex items-center gap-2 flex-1 cursor-pointer"
-                      >
-                        <span
-                          className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`}
-                        />
-                        <span className="text-sm font-medium">
-                          {envLabels[inst.environment]}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate">
-                          {inst.baseUrl}
-                        </span>
-                      </label>
-                    </div>
-                  ))}
-                </div>
-                {selectedInstanceIds.length === 0 && (
-                  <p className="text-xs text-destructive">
-                    Select at least one instance
-                  </p>
-                )}
-              </div>
-            )}
-
             <DialogFooter>
               <Button
                 type="button"
@@ -372,31 +415,6 @@ export function CreateServiceDialog({
 
           <TabsContent value="custom" className="pt-4">
             <form onSubmit={handleCreateCustom} className="space-y-4">
-              {showMultiSelect && (
-                <div className="grid gap-2">
-                  <Label>Link to Instances</Label>
-                  <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                    {instances.map(inst => (
-                      <div key={inst.id} className="flex items-center gap-3">
-                        <Checkbox
-                          id={`custom-inst-${inst.id}`}
-                          checked={selectedInstanceIds.includes(inst.id)}
-                          onCheckedChange={(checked) => toggleInstance(inst.id, checked === true)}
-                        />
-                        <label htmlFor={`custom-inst-${inst.id}`} className="flex items-center gap-2 cursor-pointer flex-1">
-                          <span className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`} />
-                          <span className="text-sm font-medium">{envLabels[inst.environment]}</span>
-                          <span className="text-xs text-muted-foreground truncate">{inst.baseUrl}</span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedInstanceIds.length === 0 && (
-                    <p className="text-xs text-destructive">Select at least one instance</p>
-                  )}
-                </div>
-              )}
-
               <div className="grid gap-2">
                 <Label htmlFor="name">Service Name *</Label>
                 <Input

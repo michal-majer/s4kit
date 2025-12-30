@@ -1,18 +1,39 @@
 'use client';
 
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/empty-state';
-import { RequestLog } from '@/lib/api';
+import { RequestLog, InstanceEnvironment } from '@/lib/api';
 import { format } from 'date-fns';
 import {
   FileText,
-  CheckCircle2,
-  XCircle,
   Clock,
   ArrowRight,
   Database,
+  Server,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { envShortLabels, envBadgeColors } from '@/lib/environment';
+
+interface LogsTableProps {
+  logs: RequestLog[];
+  systems?: Array<{ id: string; name: string }>;
+  instances?: Array<{ id: string; systemId: string; environment: string }>;
+  pagination?: {
+    currentPage: number;
+    totalPages: number;
+    total: number;
+  };
+}
 
 const methodColors: Record<string, string> = {
   GET: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -27,16 +48,20 @@ const statusColors: Record<string, string> = {
   error: 'text-red-600 border-red-200 bg-red-50',
 };
 
-const errorCategoryLabels: Record<string, string> = {
-  auth: 'Authentication',
-  permission: 'Permission',
-  validation: 'Validation',
-  server: 'Server Error',
-  network: 'Network',
-  timeout: 'Timeout',
-};
+export function LogsTable({ logs, systems = [], instances = [], pagination }: LogsTableProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-export function LogsTable({ logs }: { logs: RequestLog[] }) {
+  // Create lookup maps for efficient name resolution
+  const systemMap = new Map(systems.map((s) => [s.id, s.name]));
+  const instanceMap = new Map(instances.map((i) => [i.id, i.environment]));
+
+  const goToPage = (page: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', page.toString());
+    router.push(`/logs?${params.toString()}`);
+  };
+
   if (logs.length === 0) {
     return (
       <EmptyState
@@ -49,18 +74,6 @@ export function LogsTable({ logs }: { logs: RequestLog[] }) {
 
   const columns: Column<RequestLog>[] = [
     {
-      id: 'status',
-      header: 'Status',
-      accessorFn: (log) => (log.success ? 'success' : 'error'),
-      cell: (log) =>
-        log.success ? (
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-        ) : (
-          <XCircle className="h-4 w-4 text-red-600" />
-        ),
-      className: 'w-12',
-    },
-    {
       id: 'method',
       header: 'Method',
       accessorKey: 'method',
@@ -70,6 +83,49 @@ export function LogsTable({ logs }: { logs: RequestLog[] }) {
         </Badge>
       ),
       className: 'w-20',
+    },
+    {
+      id: 'system',
+      header: 'System / Instance',
+      accessorFn: (log) => log.systemId || '',
+      cell: (log) => {
+        const systemName = log.systemId ? systemMap.get(log.systemId) : null;
+        const instanceEnv = log.instanceId ? instanceMap.get(log.instanceId) : null;
+
+        if (!systemName && !instanceEnv) {
+          return <span className="text-muted-foreground text-sm">-</span>;
+        }
+
+        return (
+          <TooltipProvider>
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Server className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm truncate max-w-[100px]">
+                      {systemName || '-'}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                {systemName && (
+                  <TooltipContent side="top">
+                    <p>{systemName}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              {instanceEnv && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] px-1.5 py-0 h-4 font-medium ${envBadgeColors[instanceEnv as InstanceEnvironment] || ''}`}
+                >
+                  {envShortLabels[instanceEnv as InstanceEnvironment] || instanceEnv.toUpperCase()}
+                </Badge>
+              )}
+            </div>
+          </TooltipProvider>
+        );
+      },
     },
     {
       id: 'entity',
@@ -132,17 +188,6 @@ export function LogsTable({ logs }: { logs: RequestLog[] }) {
       className: 'w-28',
     },
     {
-      id: 'error',
-      header: 'Error',
-      accessorKey: 'errorCategory',
-      cell: (log) =>
-        log.errorCategory ? (
-          <Badge variant="destructive" className="text-xs">
-            {errorCategoryLabels[log.errorCategory] || log.errorCategory}
-          </Badge>
-        ) : null,
-    },
-    {
       id: 'createdAt',
       header: 'Time',
       accessorKey: 'createdAt',
@@ -155,16 +200,57 @@ export function LogsTable({ logs }: { logs: RequestLog[] }) {
   ];
 
   return (
-    <DataTable
-      data={logs}
-      columns={columns}
-      searchPlaceholder="Search logs..."
-      searchableColumns={['entity', 'path', 'errorMessage']}
-      getRowId={(log) => log.id}
-      pageSize={20}
-      pageSizeOptions={[20, 50, 100]}
-      expandableContent={(log) => <LogDetails log={log} />}
-    />
+    <div className="space-y-4">
+      <DataTable
+        data={logs}
+        columns={columns}
+        searchPlaceholder="Search logs..."
+        searchableColumns={['entity', 'path', 'errorMessage']}
+        getRowId={(log) => log.id}
+        pageSize={50}
+        pageSizeOptions={[50]}
+        expandableContent={(log) => <LogDetails log={log} />}
+        showPagination={false}
+      />
+
+      {/* Server-side Pagination */}
+      {pagination && (
+        <div className="flex items-center justify-between px-2">
+          <p className="text-sm text-muted-foreground">
+            {pagination.total > 0 ? (
+              <>Showing {((pagination.currentPage - 1) * 50) + 1} to {Math.min(pagination.currentPage * 50, pagination.total)} of {pagination.total} logs</>
+            ) : (
+              <>0 logs</>
+            )}
+          </p>
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(pagination.currentPage - 1)}
+                disabled={pagination.currentPage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground px-2">
+                Page {pagination.currentPage} of {pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(pagination.currentPage + 1)}
+                disabled={pagination.currentPage >= pagination.totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

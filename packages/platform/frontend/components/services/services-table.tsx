@@ -3,35 +3,10 @@
 import { useMemo } from 'react';
 import { ConfigurableTable, ConfigurableTableConfig } from '@/components/ui/configurable-table';
 import { EmptyState } from '@/components/common/empty-state';
-import { SystemService, System, InstanceService, InstanceEnvironment } from '@/lib/api';
+import { SystemService, System, InstanceService } from '@/lib/api';
+import { envShortLabels, envLabels, envOrder, allEnvironments } from '@/lib/environment';
 import { Database, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
-
-const envLabels: Record<InstanceEnvironment, string> = {
-  sandbox: 'SBX',
-  dev: 'DEV',
-  quality: 'QA',
-  preprod: 'PRE',
-  production: 'PRD',
-};
-
-const envFullLabels: Record<InstanceEnvironment, string> = {
-  sandbox: 'Sandbox',
-  dev: 'Development',
-  quality: 'Quality',
-  preprod: 'Pre-Production',
-  production: 'Production',
-};
-
-const envOrder: Record<InstanceEnvironment, number> = {
-  sandbox: 0,
-  dev: 1,
-  quality: 2,
-  preprod: 3,
-  production: 4,
-};
-
-const allEnvironments: InstanceEnvironment[] = ['sandbox', 'dev', 'quality', 'preprod', 'production'];
 
 interface ServicesTableProps {
   services: SystemService[];
@@ -58,7 +33,7 @@ export function ServicesTable({ services, systems, instanceServices = [] }: Serv
   );
 
   const envOptions = useMemo(() =>
-    allEnvironments.map(env => ({ value: env, label: envFullLabels[env] })),
+    allEnvironments.map(env => ({ value: env, label: envLabels[env] })),
     []
   );
 
@@ -131,9 +106,9 @@ export function ServicesTable({ services, systems, instanceServices = [] }: Serv
                     key={is.id}
                     href={`/systems/${service.systemId}/instance-services/${is.id}`}
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted hover:bg-muted/80 transition-colors"
-                    title={`${envFullLabels[env]}: ${status || 'pending'}`}
+                    title={`${envLabels[env]}: ${status || 'pending'}`}
                   >
-                    <span className="font-medium">{envLabels[env]}</span>
+                    <span className="font-medium">{envShortLabels[env]}</span>
                     <StatusIcon className={`h-3 w-3 ${statusColor}`} />
                   </Link>
                 );
@@ -170,6 +145,22 @@ export function ServicesTable({ services, systems, instanceServices = [] }: Serv
       },
     ],
     filters: [
+      {
+        type: 'select',
+        id: 'deployment',
+        placeholder: 'Deployment',
+        width: '150px',
+        allValue: 'all',
+        defaultValue: 'deployed',
+        options: [
+          { value: 'deployed', label: 'Deployed' },
+          { value: 'not-deployed', label: 'Not Deployed' },
+        ],
+        getItemValue: (service) => {
+          const envServices = instanceServicesBySystemService.get(service.id) || [];
+          return envServices.length > 0 ? 'deployed' : 'not-deployed';
+        },
+      },
       {
         type: 'multi-select',
         id: 'system',

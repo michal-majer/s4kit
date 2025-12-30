@@ -58,6 +58,7 @@ export interface DataTableProps<T> {
   getRowId?: (row: T) => string;
   expandableContent?: (row: T) => React.ReactNode;
   isExpandable?: (row: T) => boolean;
+  showPagination?: boolean;
 }
 
 type SortDirection = 'asc' | 'desc' | null;
@@ -81,6 +82,7 @@ export function DataTable<T extends Record<string, any>>({
   getRowId,
   expandableContent,
   isExpandable,
+  showPagination: showPaginationProp,
 }: DataTableProps<T>) {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortConfig, setSortConfig] = React.useState<SortConfig>({
@@ -198,7 +200,7 @@ export function DataTable<T extends Record<string, any>>({
     return <ArrowDown className="ml-1 h-3.5 w-3.5 text-foreground" />;
   };
 
-  const showPagination = data.length > pageSizeOptions[0];
+  const showPagination = showPaginationProp !== undefined ? showPaginationProp : data.length > pageSizeOptions[0];
   const showSearch = data.length > 5;
   const totalColumns = columns.length + (hasExpandableRows ? 1 : 0);
 

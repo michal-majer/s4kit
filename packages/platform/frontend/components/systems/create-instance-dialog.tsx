@@ -194,7 +194,9 @@ export function CreateInstanceDialog({
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="environment">Environment</Label>
+              <Label htmlFor="environment">
+                Environment <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={formData.environment}
                 onValueChange={(value) =>
@@ -202,7 +204,7 @@ export function CreateInstanceDialog({
                 }
                 required
               >
-                <SelectTrigger>
+                <SelectTrigger className={!formData.environment ? 'border-muted-foreground/50' : ''}>
                   <SelectValue placeholder="Select environment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -213,10 +215,15 @@ export function CreateInstanceDialog({
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Choose the environment type for this instance (e.g., Development, Production)
+              </p>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="baseUrl">Base URL</Label>
+              <Label htmlFor="baseUrl">
+                Base URL <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="baseUrl"
                 placeholder="https://my-system.s4hana.ondemand.com"
@@ -224,6 +231,9 @@ export function CreateInstanceDialog({
                 onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                The base URL of your SAP system API endpoint
+              </p>
             </div>
 
             <div className="grid gap-2">
@@ -247,21 +257,37 @@ export function CreateInstanceDialog({
             {formData.authType === 'basic' && (
               <>
                 <div className="grid gap-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="create-username">
+                    Username <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    id="username"
+                    id="create-username"
+                    name="create-username"
+                    autoComplete="off"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    SAP technical user or communication user
+                  </p>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="create-password">
+                    Password <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    id="password"
+                    id="create-password"
+                    name="create-password"
                     type="password"
+                    autoComplete="new-password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Password for the technical user
+                  </p>
                 </div>
               </>
             )}
@@ -313,35 +339,43 @@ export function CreateInstanceDialog({
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2TokenUrl">Token URL</Label>
+                  <Label htmlFor="create-oauth2TokenUrl">Token URL</Label>
                   <Input
-                    id="oauth2TokenUrl"
+                    id="create-oauth2TokenUrl"
+                    name="create-oauth2TokenUrl"
+                    autoComplete="off"
                     placeholder="https://auth.example.com/oauth/token"
                     value={formData.oauth2TokenUrl}
                     onChange={(e) => setFormData({ ...formData, oauth2TokenUrl: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2ClientId">Client ID</Label>
+                  <Label htmlFor="create-oauth2ClientId">Client ID</Label>
                   <Input
-                    id="oauth2ClientId"
+                    id="create-oauth2ClientId"
+                    name="create-oauth2ClientId"
+                    autoComplete="off"
                     value={formData.oauth2ClientId}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientId: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2ClientSecret">Client Secret</Label>
+                  <Label htmlFor="create-oauth2ClientSecret">Client Secret</Label>
                   <Input
-                    id="oauth2ClientSecret"
+                    id="create-oauth2ClientSecret"
+                    name="create-oauth2ClientSecret"
                     type="password"
+                    autoComplete="new-password"
                     value={formData.oauth2ClientSecret}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientSecret: e.target.value })}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="oauth2Scope">Scope (optional)</Label>
+                  <Label htmlFor="create-oauth2Scope">Scope (optional)</Label>
                   <Input
-                    id="oauth2Scope"
+                    id="create-oauth2Scope"
+                    name="create-oauth2Scope"
+                    autoComplete="off"
                     value={formData.oauth2Scope}
                     onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
                   />
@@ -352,22 +386,39 @@ export function CreateInstanceDialog({
             {formData.authType === 'custom' && (
               <>
                 <div className="grid gap-2">
-                  <Label htmlFor="customHeaderName">Header Name</Label>
+                  <Label htmlFor="create-customHeaderName">
+                    Header Name <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    id="customHeaderName"
-                    placeholder="Authorization"
+                    id="create-customHeaderName"
+                    name="create-customHeaderName"
+                    autoComplete="off"
+                    placeholder="APIKey"
                     value={formData.customHeaderName}
                     onChange={(e) => setFormData({ ...formData, customHeaderName: e.target.value })}
+                    required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    The HTTP header name used for authentication (e.g., APIKey, Authorization)
+                  </p>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="customHeaderValue">Header Value</Label>
+                  <Label htmlFor="create-customHeaderValue">
+                    Header Value <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    id="customHeaderValue"
-                    placeholder="Bearer your-token-here"
+                    id="create-customHeaderValue"
+                    name="create-customHeaderValue"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="your-api-key-or-token"
                     value={formData.customHeaderValue}
                     onChange={(e) => setFormData({ ...formData, customHeaderValue: e.target.value })}
+                    required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    The value sent with the header (e.g., your API key or &quot;Bearer token&quot;)
+                  </p>
                 </div>
               </>
             )}

@@ -160,7 +160,7 @@ export function RequestLogsTable({ logs: initialLogs }: RequestLogsTableProps) {
       data={initialLogs}
       columns={columns}
       searchPlaceholder="Search logs..."
-      searchableColumns={['path', 'method']}
+      searchableColumns={['id', 'path', 'method']}
       getRowId={(log) => log.id}
       rowClassName={(log) => (log.statusCode >= 500 ? 'bg-destructive/5' : '')}
       expandableContent={renderExpandedContent}

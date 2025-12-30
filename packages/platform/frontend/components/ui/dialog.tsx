@@ -79,7 +79,7 @@ function DialogContent({
           <DialogPrimitive.Close
             data-slot="dialog-close"
             className={cn(
-              "absolute top-5 right-5 rounded-xl p-2",
+              "absolute top-5 right-5 rounded-xl p-2 cursor-pointer",
               "text-muted-foreground hover:text-foreground",
               "hover:bg-muted transition-all duration-200",
               "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",

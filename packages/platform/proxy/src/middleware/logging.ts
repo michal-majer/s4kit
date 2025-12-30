@@ -29,12 +29,22 @@ export const loggingMiddleware = createMiddleware<{ Variables: Variables }>(asyn
   const logData = c.get('logData');
   if (!logData) return; // No log data available
 
+  // Get context for compliance reporting
+  const instance = c.get('instance');
+  const systemService = c.get('systemService');
+  const instanceService = c.get('instanceService');
+
   // Determine success based on status code
   const success = c.res.status >= 200 && c.res.status < 400;
 
   // Fire and forget logging - never blocks response
   db.insert(requestLogs).values({
     apiKeyId: apiKey.id,
+
+    // Context for compliance reporting
+    systemId: systemService?.systemId || null,
+    instanceId: instance?.id || null,
+    instanceServiceId: instanceService?.id || null,
 
     // Request metadata
     method: c.req.method,

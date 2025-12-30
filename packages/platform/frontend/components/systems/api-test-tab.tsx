@@ -35,6 +35,7 @@ import {
   Zap,
   Terminal,
   Database,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface ApiTestTabProps {
@@ -51,6 +52,7 @@ interface TestResponse {
   sapResponseTime?: number;
   data?: any;
   recordCount?: number;
+  bodyHidden?: boolean;
   error?: {
     code: string;
     message: string;
@@ -392,7 +394,7 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
                   </CardDescription>
                 </div>
               </div>
-              {response.data && (
+              {response.data && !response.bodyHidden && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -472,7 +474,24 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
             )}
 
             {/* Response Body */}
-            {response.data && (
+            {response.bodyHidden ? (
+              <div className="overflow-hidden rounded-lg border border-amber-500/30 bg-amber-500/5">
+                <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
+                  <ShieldAlert className="h-4 w-4 text-amber-500" />
+                  <span className="font-mono text-sm font-semibold text-amber-600">
+                    Response Body Hidden
+                  </span>
+                </div>
+                <div className="p-4">
+                  <p className="text-sm text-amber-600">
+                    Response body is hidden for production instances to protect sensitive data.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    The request was successful. Use record count and response time to verify functionality.
+                  </p>
+                </div>
+              </div>
+            ) : response.data && (
               <div className="overflow-hidden rounded-lg border bg-slate-950">
                 <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/50 px-4 py-2">
                   <span className="font-mono text-xs text-slate-400">Response Body</span>

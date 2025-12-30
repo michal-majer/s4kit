@@ -29,6 +29,7 @@ import { Plus } from 'lucide-react';
 const systemTypes: { value: SystemType; label: string; description: string }[] = [
   { value: 's4_public', label: 'SAP S/4HANA Cloud Public Edition', description: 'Multi-tenant cloud with predefined services' },
   { value: 's4_private', label: 'SAP S/4HANA Cloud Private Edition', description: 'Single-tenant cloud with predefined services' },
+  { value: 's4_onprem', label: 'SAP S/4HANA On-Premise', description: 'On-premise deployment with predefined services' },
   { value: 'btp', label: 'SAP BTP', description: 'Business Technology Platform - custom services' },
   { value: 'other', label: 'Other', description: 'Generic OData endpoint' },
 ];
@@ -55,7 +56,7 @@ export function CreateSystemDialog() {
         description: formData.description || undefined,
       });
       toast.success('System created successfully');
-      if (formData.type === 's4_public' || formData.type === 's4_private') {
+      if (formData.type === 's4_public' || formData.type === 's4_private' || formData.type === 's4_onprem') {
         toast.info('Predefined services have been added to your system');
       }
       setOpen(false);
@@ -93,9 +94,13 @@ export function CreateSystemDialog() {
                 id="name"
                 placeholder="My SAP System"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value.slice(0, 100) })}
                 required
+                maxLength={100}
               />
+              <p className="text-xs text-muted-foreground">
+                {formData.name.length}/100 characters
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="type">System Type</Label>

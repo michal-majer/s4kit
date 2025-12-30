@@ -93,6 +93,7 @@ export function RevokeKeyDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Security concern, no longer needed, etc."
+              autoComplete="off"
             />
           </div>
         </div>

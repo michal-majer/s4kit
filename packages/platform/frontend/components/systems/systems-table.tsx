@@ -3,7 +3,18 @@
 import { useState } from 'react';
 import { ConfigurableTable, ConfigurableTableConfig } from '@/components/ui/configurable-table';
 import { Badge } from '@/components/ui/badge';
-import { api, System, SystemType } from '@/lib/api';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { api, SystemWithInstances, SystemType } from '@/lib/api';
+import { envShortLabels, envColors, envOrder } from '@/lib/environment';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -14,6 +25,7 @@ import { Pencil, Server, ExternalLink, Trash2 } from 'lucide-react';
 const systemTypeLabels: Record<SystemType, string> = {
   s4_public: 'S/4HANA Cloud Public',
   s4_private: 'S/4HANA Cloud Private',
+  s4_onprem: 'S/4HANA On-Premise',
   btp: 'SAP BTP',
   other: 'Other',
 };
@@ -21,26 +33,33 @@ const systemTypeLabels: Record<SystemType, string> = {
 const systemTypeBadgeVariant: Record<SystemType, 'default' | 'secondary' | 'outline'> = {
   s4_public: 'default',
   s4_private: 'default',
+  s4_onprem: 'default',
   btp: 'secondary',
   other: 'outline',
 };
 
-export function SystemsTable({ systems }: { systems: System[] }) {
+export function SystemsTable({ systems }: { systems: SystemWithInstances[] }) {
   const router = useRouter();
-  const [editingSystem, setEditingSystem] = useState<System | null>(null);
+  const [editingSystem, setEditingSystem] = useState<SystemWithInstances | null>(null);
+  const [deletingSystem, setDeletingSystem] = useState<SystemWithInstances | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this system? All instances and services will be deleted.')) return;
+  const handleDelete = async () => {
+    if (!deletingSystem) return;
+    setDeleteLoading(true);
     try {
-      await api.systems.delete(id);
+      await api.systems.delete(deletingSystem.id);
       toast.success('System deleted');
+      setDeletingSystem(null);
       router.refresh();
     } catch {
       toast.error('Failed to delete system');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
-  const config: ConfigurableTableConfig<System> = {
+  const config: ConfigurableTableConfig<SystemWithInstances> = {
     columns: [
       {
         id: 'name',
@@ -63,6 +82,31 @@ export function SystemsTable({ systems }: { systems: System[] }) {
           <Badge variant={systemTypeBadgeVariant[system.type]}>
             {systemTypeLabels[system.type]}
           </Badge>
+        ),
+      },
+      {
+        id: 'instances',
+        header: 'Instances',
+        accessorKey: 'instances',
+        cell: (system) => (
+          <div className="flex flex-wrap gap-1.5">
+            {!system.instances || system.instances.length === 0 ? (
+              <span className="text-muted-foreground text-sm">No instances</span>
+            ) : (
+              [...system.instances]
+                .sort((a, b) => envOrder[a.environment] - envOrder[b.environment])
+                .map((inst) => (
+                  <Link
+                    key={inst.id}
+                    href={`/systems/${system.id}?env=${inst.environment}`}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-muted border hover:bg-accent transition-colors"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`} />
+                    {envShortLabels[inst.environment]}
+                  </Link>
+                ))
+            )}
+          </div>
         ),
       },
       {
@@ -95,7 +139,7 @@ export function SystemsTable({ systems }: { systems: System[] }) {
           label: 'Delete',
           icon: Trash2,
           variant: 'destructive',
-          onClick: (system) => handleDelete(system.id),
+          onClick: (system) => setDeletingSystem(system),
         },
       ],
     },
@@ -120,6 +164,26 @@ export function SystemsTable({ systems }: { systems: System[] }) {
           onOpenChange={(open: boolean) => !open && setEditingSystem(null)}
         />
       )}
+      <AlertDialog open={!!deletingSystem} onOpenChange={(open) => !open && setDeletingSystem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete System</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{deletingSystem?.name}&quot;? All instances and services will be permanently deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

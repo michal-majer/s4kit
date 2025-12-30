@@ -24,8 +24,6 @@ import {
   ChevronRight,
   Server,
   Loader2,
-  Copy,
-  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RotateKeyDialog } from './rotate-key-dialog';
@@ -101,7 +99,6 @@ export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
   const router = useRouter();
   const [rotateOpen, setRotateOpen] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [accessGrants, setAccessGrants] = useState<AccessGrantWithDetails[]>([]);
   const [loadingGrants, setLoadingGrants] = useState(true);
   const [expandedGrants, setExpandedGrants] = useState<Set<string>>(new Set());
@@ -115,13 +112,6 @@ export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
       .catch(() => toast.error('Failed to load access grants'))
       .finally(() => setLoadingGrants(false));
   }, [apiKey.id]);
-
-  const handleCopyKey = () => {
-    navigator.clipboard.writeText(apiKey.displayKey);
-    setCopied(true);
-    toast.success('Key copied to clipboard');
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const toggleGrant = (grantId: string) => {
     setExpandedGrants(prev => {
@@ -196,29 +186,49 @@ export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
                 <ShieldOff className="mr-2 h-4 w-4" />
                 Revoke
               </Button>
+              <Button asChild>
+                <Link href={`/api-keys/${apiKey.id}/edit`}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </Link>
+              </Button>
             </>
           )}
-          <Button asChild>
-            <Link href={`/api-keys/${apiKey.id}/edit`}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Link>
-          </Button>
         </div>
       </div>
 
+      {/* Revocation Info */}
+      {apiKey.revoked && (
+        <Card className="p-4 border-destructive/50 bg-destructive/5">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-destructive/10">
+              <ShieldOff className="h-5 w-5 text-destructive" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-destructive">Key Revoked</h3>
+              <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+                {apiKey.revokedAt && (
+                  <p>Revoked on {formatDate(apiKey.revokedAt)}</p>
+                )}
+                {apiKey.revokedReason && (
+                  <p>Reason: {apiKey.revokedReason}</p>
+                )}
+                {!apiKey.revokedReason && (
+                  <p>No reason provided</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Key Display */}
       <Card className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Key className="h-5 w-5 text-muted-foreground" />
-            <code className="text-sm bg-muted px-3 py-1.5 rounded-md font-mono">
-              {apiKey.displayKey}
-            </code>
-          </div>
-          <Button variant="ghost" size="icon" onClick={handleCopyKey}>
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          </Button>
+        <div className="flex items-center gap-3">
+          <Key className="h-5 w-5 text-muted-foreground" />
+          <code className="text-sm bg-muted px-3 py-1.5 rounded-md font-mono">
+            {apiKey.displayKey}
+          </code>
         </div>
       </Card>
 
