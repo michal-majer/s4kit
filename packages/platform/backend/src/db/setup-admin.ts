@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
-import * as schema from './schema';
+import * as schema from '@s4kit/shared/db/schema';
 import * as authSchema from './auth-schema';
 import { config } from '../config/mode';
 import { hashPassword } from 'better-auth/crypto';

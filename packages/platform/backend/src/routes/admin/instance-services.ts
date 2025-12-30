@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { db } from '../../db';
-import { systems, instanceServices, systemServices, instances, apiKeyAccess } from '../../db/schema';
+import { db, systems, instanceServices, systemServices, instances, apiKeyAccess } from '../../db';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { sapClient, type ResolvedAuthConfig } from '../../services/sap-client';

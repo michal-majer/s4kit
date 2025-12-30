@@ -1,6 +1,6 @@
 import ky from 'ky';
 import { db } from '../db';
-import { instances } from '../db/schema';
+import { instances } from '@s4kit/shared/db/schema';
 import { eq } from 'drizzle-orm';
 import { encryption } from './encryption';
 import { redis } from '../cache/redis';

@@ -2,7 +2,54 @@
 // S4Kit Query Builder - Complete OData Query Support
 // ============================================================================
 
-import type { QueryOptions, OrderByClause, ExpandOptions, FilterOperator } from './types';
+import type {
+  QueryOptions,
+  OrderByObject,
+  OrderBy,
+  ExpandNestedOptions,
+  ExpandObject,
+  Expand,
+  FilterOperator,
+  Filter,
+  FilterValue,
+  FilterCondition,
+  FilterExpression,
+} from './types';
+
+/**
+ * Extract navigation property select paths from expand options
+ * Returns paths like ['Products', 'Category'] or ['Products/ProductID', 'Products/ProductName']
+ */
+function getExpandSelectPaths(expand: Expand<any>): string[] {
+  const paths: string[] = [];
+
+  // String array: ['Products', 'Category']
+  if (Array.isArray(expand)) {
+    for (const item of expand) {
+      paths.push(item);
+    }
+    return paths;
+  }
+
+  // Object format: { Products: true } or { Products: { select: [...] } }
+  for (const [property, value] of Object.entries(expand)) {
+    if (value === true) {
+      // Simple include: { Products: true }
+      paths.push(property);
+    } else if (isExpandNestedOptions(value)) {
+      // Nested options: { Products: { select: ['ProductID'] } }
+      if (value.select?.length) {
+        for (const field of value.select) {
+          paths.push(`${property}/${field}`);
+        }
+      } else {
+        paths.push(property);
+      }
+    }
+  }
+
+  return paths;
+}
 
 /**
  * Build OData query parameters from QueryOptions
@@ -12,14 +59,41 @@ export function buildQuery(options?: QueryOptions<any>): Record<string, string> 
 
   const params: Record<string, string> = {};
 
-  // $select - field selection
-  if (options.select?.length) {
-    params['$select'] = (options.select as string[]).join(',');
+  // Collect select fields
+  let selectFields: string[] = options.select ? [...(options.select as string[])] : [];
+
+  // $expand - navigation properties (supports string[], object, or legacy array)
+  // Process expand first to merge navigation properties into select
+  if (options.expand) {
+    const isArrayWithLength = Array.isArray(options.expand) && options.expand.length > 0;
+    const isObjectWithKeys = !Array.isArray(options.expand) && typeof options.expand === 'object' && Object.keys(options.expand).length > 0;
+    if (isArrayWithLength || isObjectWithKeys) {
+      params['$expand'] = buildExpand(options.expand);
+
+      // If select is being used, ensure navigation properties are included
+      // This is required for OData v2 compatibility
+      if (selectFields.length > 0) {
+        const expandPaths = getExpandSelectPaths(options.expand);
+        for (const path of expandPaths) {
+          if (!selectFields.includes(path)) {
+            selectFields.push(path);
+          }
+        }
+      }
+    }
   }
 
-  // $filter - filtering
-  if (options.filter) {
-    params['$filter'] = options.filter;
+  // $select - field selection (with merged expand paths)
+  if (selectFields.length > 0) {
+    params['$select'] = selectFields.join(',');
+  }
+
+  // $filter - filtering (supports string, object, or array)
+  if (options.filter !== undefined && options.filter !== null) {
+    const filterStr = buildFilter(options.filter);
+    if (filterStr) {
+      params['$filter'] = filterStr;
+    }
   }
 
   // $top - limit results
@@ -32,14 +106,9 @@ export function buildQuery(options?: QueryOptions<any>): Record<string, string> 
     params['$skip'] = String(options.skip);
   }
 
-  // $orderby - sorting
+  // $orderby - sorting (supports string, object, or array)
   if (options.orderBy) {
     params['$orderby'] = buildOrderBy(options.orderBy);
-  }
-
-  // $expand - navigation properties
-  if (options.expand?.length) {
-    params['$expand'] = buildExpand(options.expand);
   }
 
   // $count - inline count
@@ -57,58 +126,307 @@ export function buildQuery(options?: QueryOptions<any>): Record<string, string> 
 
 /**
  * Build $orderby string from various formats
+ * @example
+ * - String: "Name desc" → "Name desc"
+ * - Object: { Name: 'desc' } → "Name desc"
+ * - Object: { Price: 'asc', Name: 'desc' } → "Price asc,Name desc"
+ * - Array: [{ Name: 'desc' }, { Price: 'asc' }] → "Name desc,Price asc"
  */
-function buildOrderBy(orderBy: string | OrderByClause<any> | Array<OrderByClause<any>>): string {
+function buildOrderBy(orderBy: OrderBy<any>): string {
+  // String passthrough
   if (typeof orderBy === 'string') {
     return orderBy;
   }
 
+  // Array of objects
   if (Array.isArray(orderBy)) {
-    return orderBy
-      .map(clause => `${clause.field}${clause.direction ? ' ' + clause.direction : ''}`)
-      .join(',');
+    return orderBy.map(obj => buildOrderByObject(obj)).join(',');
   }
 
-  // Single OrderByClause
-  return `${orderBy.field}${orderBy.direction ? ' ' + orderBy.direction : ''}`;
+  // Single object
+  return buildOrderByObject(orderBy);
+}
+
+/**
+ * Build orderBy from object format: { Name: 'desc', Price: 'asc' }
+ */
+function buildOrderByObject(obj: OrderByObject<any>): string {
+  return Object.entries(obj)
+    .map(([field, direction]) => `${field}${direction ? ' ' + direction : ''}`)
+    .join(',');
+}
+
+// ============================================================================
+// Filter Builder - Multi-format Support
+// ============================================================================
+
+/**
+ * Format a value for OData filter expression
+ */
+function formatFilterValue(value: any): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return String(value);
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+/**
+ * Check if a value is a filter condition object (has operator keys)
+ */
+function isFilterCondition(value: any): value is FilterCondition {
+  if (value === null || typeof value !== 'object' || value instanceof Date) {
+    return false;
+  }
+  const operators = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'startswith', 'endswith', 'in', 'between'];
+  return Object.keys(value).some(key => operators.includes(key));
+}
+
+/**
+ * Build filter conditions for a single field
+ */
+function buildFieldConditions(field: string, value: FilterValue): string[] {
+  // Direct value = equality
+  if (!isFilterCondition(value)) {
+    return [`${field} eq ${formatFilterValue(value)}`];
+  }
+
+  // Condition object with operators
+  const conditions: string[] = [];
+  const condition = value as Record<string, any>;
+
+  for (const [op, val] of Object.entries(condition)) {
+    if (val === undefined) continue;
+
+    switch (op) {
+      case 'eq':
+      case 'ne':
+      case 'gt':
+      case 'ge':
+      case 'lt':
+      case 'le':
+        conditions.push(`${field} ${op} ${formatFilterValue(val)}`);
+        break;
+
+      case 'contains':
+        conditions.push(`contains(${field},${formatFilterValue(val)})`);
+        break;
+
+      case 'startswith':
+        conditions.push(`startswith(${field},${formatFilterValue(val)})`);
+        break;
+
+      case 'endswith':
+        conditions.push(`endswith(${field},${formatFilterValue(val)})`);
+        break;
+
+      case 'in':
+        if (Array.isArray(val)) {
+          const inValues = val.map(v => formatFilterValue(v)).join(',');
+          conditions.push(`${field} in (${inValues})`);
+        }
+        break;
+
+      case 'between':
+        if (Array.isArray(val) && val.length === 2) {
+          conditions.push(`${field} ge ${formatFilterValue(val[0])} and ${field} le ${formatFilterValue(val[1])}`);
+        }
+        break;
+    }
+  }
+
+  return conditions;
+}
+
+/** Logical operator keys */
+const LOGICAL_OPERATORS = ['$or', '$and', '$not'] as const;
+
+/**
+ * Check if a key is a logical operator
+ */
+function isLogicalOperator(key: string): key is '$or' | '$and' | '$not' {
+  return LOGICAL_OPERATORS.includes(key as any);
+}
+
+/**
+ * Build filter from a FilterExpression (fields + logical operators)
+ */
+function buildFilterExpression(filter: FilterExpression<any>): string {
+  const parts: string[] = [];
+
+  // Process field conditions (non-logical keys)
+  const fieldConditions: string[] = [];
+  for (const [key, value] of Object.entries(filter)) {
+    if (value === undefined) continue;
+    if (isLogicalOperator(key)) continue; // Skip logical operators for now
+
+    fieldConditions.push(...buildFieldConditions(key, value as FilterValue));
+  }
+
+  if (fieldConditions.length > 0) {
+    // Multiple field conditions are ANDed together
+    if (fieldConditions.length === 1) {
+      parts.push(fieldConditions[0]!);
+    } else {
+      parts.push(fieldConditions.join(' and '));
+    }
+  }
+
+  // Process $and - explicit AND
+  if (filter.$and && Array.isArray(filter.$and)) {
+    const andParts = filter.$and
+      .map(expr => buildFilterExpression(expr))
+      .filter((s): s is string => Boolean(s));
+    if (andParts.length > 0) {
+      const andStr = andParts.length === 1
+        ? andParts[0]!
+        : `(${andParts.join(' and ')})`;
+      parts.push(andStr);
+    }
+  }
+
+  // Process $or - OR conditions
+  if (filter.$or && Array.isArray(filter.$or)) {
+    const orParts = filter.$or
+      .map(expr => buildFilterExpression(expr))
+      .filter((s): s is string => Boolean(s));
+    if (orParts.length > 0) {
+      const orStr = orParts.length === 1
+        ? orParts[0]!
+        : `(${orParts.join(' or ')})`;
+      parts.push(orStr);
+    }
+  }
+
+  // Process $not - negation
+  if (filter.$not) {
+    const notExpr = buildFilterExpression(filter.$not);
+    if (notExpr) {
+      parts.push(`not (${notExpr})`);
+    }
+  }
+
+  // Combine all parts with AND
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0]!;
+  return parts.join(' and ');
+}
+
+/**
+ * Build $filter string from various formats
+ * @example
+ * - String: "Name eq 'John'" → "Name eq 'John'"
+ * - Object: { Name: 'John' } → "Name eq 'John'"
+ * - Object: { Price: { gt: 100 } } → "Price gt 100"
+ * - Object: { Name: 'John', Active: true } → "Name eq 'John' and Active eq true"
+ * - Array: [{ Name: 'John' }, { Age: { gt: 18 } }] → "Name eq 'John' and Age gt 18"
+ * - OR: { $or: [{ A: 1 }, { B: 2 }] } → "(A eq 1 or B eq 2)"
+ * - NOT: { $not: { Status: 'deleted' } } → "not (Status eq 'deleted')"
+ * - Complex: { A: 1, $or: [{ B: 2 }, { C: 3 }] } → "A eq 1 and (B eq 2 or C eq 3)"
+ */
+export function buildFilter(filter: Filter<any>): string {
+  // String passthrough
+  if (typeof filter === 'string') {
+    return filter;
+  }
+
+  // Array of filter expressions (AND them together)
+  if (Array.isArray(filter)) {
+    const parts = filter
+      .map(f => buildFilterExpression(f))
+      .filter((s): s is string => Boolean(s));
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0]!;
+    return parts.join(' and ');
+  }
+
+  // Single filter expression
+  return buildFilterExpression(filter);
+}
+
+/**
+ * Check if value is an ExpandNestedOptions object (has query options)
+ */
+function isExpandNestedOptions(value: any): value is ExpandNestedOptions {
+  if (value === true || value === null || typeof value !== 'object') {
+    return false;
+  }
+  const optionKeys = ['select', 'filter', 'top', 'skip', 'orderBy', 'expand'];
+  return Object.keys(value).some(key => optionKeys.includes(key));
+}
+
+/**
+ * Build nested options string for an expanded property
+ * Note: We skip $select here because it's handled via path-qualified fields in the main $select
+ * (e.g., Products/ProductID) for OData v2 compatibility
+ */
+function buildNestedExpandOptions(options: ExpandNestedOptions): string {
+  const parts: string[] = [];
+
+  // Note: $select is intentionally NOT included here - we use path-qualified fields
+  // in the main $select clause (e.g., Products/ProductID) for OData v2 compatibility.
+  // This approach works on both OData v2 and v4.
+
+  if (options.filter !== undefined && options.filter !== null) {
+    const filterStr = typeof options.filter === 'string'
+      ? options.filter
+      : buildFilter(options.filter);
+    if (filterStr) {
+      parts.push(`$filter=${filterStr}`);
+    }
+  }
+  if (options.top !== undefined) {
+    parts.push(`$top=${options.top}`);
+  }
+  if (options.skip !== undefined) {
+    parts.push(`$skip=${options.skip}`);
+  }
+  if (options.orderBy) {
+    const orderByStr = typeof options.orderBy === 'string'
+      ? options.orderBy
+      : buildOrderBy(options.orderBy);
+    parts.push(`$orderby=${orderByStr}`);
+  }
+  if (options.expand) {
+    parts.push(`$expand=${buildExpand(options.expand)}`);
+  }
+
+  return parts.length > 0 ? `(${parts.join(';')})` : '';
 }
 
 /**
  * Build $expand string with nested options support
+ *
+ * @example
+ * - String array: ['Products', 'Category'] → "Products,Category"
+ * - Object (simple): { Products: true } → "Products"
+ * - Object (nested): { Products: { select: ['Name'], top: 5 } } → "Products($top=5)"
+ * - Object (deep): { Category: { expand: { Products: true } } } → "Category($expand=Products)"
  */
-function buildExpand(expand: string[] | ExpandOptions<any>[]): string {
-  return expand
-    .map(item => {
-      if (typeof item === 'string') {
-        return item;
+function buildExpand(expand: Expand<any>): string {
+  // String array: ['Products', 'Category']
+  if (Array.isArray(expand)) {
+    return expand.join(',');
+  }
+
+  // Object format: { Products: true } or { Products: { select: [...] } }
+  return Object.entries(expand)
+    .map(([property, value]) => {
+      // Simple include: { Products: true }
+      if (value === true) {
+        return property;
       }
 
-      // ExpandOptions with nested query
-      let result = item.property;
-      const nested: string[] = [];
-
-      if (item.select?.length) {
-        nested.push(`$select=${item.select.join(',')}`);
-      }
-      if (item.filter) {
-        nested.push(`$filter=${item.filter}`);
-      }
-      if (item.top !== undefined) {
-        nested.push(`$top=${item.top}`);
-      }
-      if (item.orderBy) {
-        nested.push(`$orderby=${item.orderBy}`);
-      }
-      if (item.expand?.length) {
-        nested.push(`$expand=${buildExpand(item.expand)}`);
+      // Nested options: { Products: { select: [...], top: 5 } }
+      if (isExpandNestedOptions(value)) {
+        return property + buildNestedExpandOptions(value);
       }
 
-      if (nested.length > 0) {
-        result += `(${nested.join(';')})`;
-      }
-
-      return result;
+      // Just property name if value is falsy
+      return property;
     })
+    .filter(Boolean)
     .join(',');
 }
 
@@ -354,8 +672,16 @@ export class QueryBuilder<T> implements FluentQuery<T> {
    * Expand navigation property with optional nested query
    */
   expand(property: string, nested?: (q: FluentQuery<any>) => FluentQuery<any>): this {
-    if (!this.options.expand) {
-      this.options.expand = [];
+    // Initialize as ExpandObject if not set
+    if (!this.options.expand || Array.isArray(this.options.expand)) {
+      // Convert string array to object if needed
+      const existing = this.options.expand as string[] | undefined;
+      this.options.expand = {} as ExpandObject;
+      if (existing) {
+        for (const prop of existing) {
+          (this.options.expand as ExpandObject)[prop] = true;
+        }
+      }
     }
 
     if (nested) {
@@ -363,15 +689,15 @@ export class QueryBuilder<T> implements FluentQuery<T> {
       nested(nestedBuilder);
       const nestedOptions = nestedBuilder.buildOptions();
 
-      (this.options.expand as ExpandOptions<any>[]).push({
-        property,
+      // Build ExpandNestedOptions
+      (this.options.expand as ExpandObject)[property] = {
         select: nestedOptions.select as string[],
         filter: nestedOptions.filter,
         top: nestedOptions.top,
-        orderBy: typeof nestedOptions.orderBy === 'string' ? nestedOptions.orderBy : undefined,
-      });
+        orderBy: nestedOptions.orderBy,
+      };
     } else {
-      (this.options.expand as string[]).push(property);
+      (this.options.expand as ExpandObject)[property] = true;
     }
 
     return this;

@@ -24,6 +24,8 @@ import {
   ChevronRight,
   Server,
   Loader2,
+  Download,
+  FileCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RotateKeyDialog } from './rotate-key-dialog';
@@ -102,6 +104,31 @@ export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
   const [accessGrants, setAccessGrants] = useState<AccessGrantWithDetails[]>([]);
   const [loadingGrants, setLoadingGrants] = useState(true);
   const [expandedGrants, setExpandedGrants] = useState<Set<string>>(new Set());
+  const [generatingTypes, setGeneratingTypes] = useState(false);
+
+  const handleDownloadTypes = async () => {
+    setGeneratingTypes(true);
+    try {
+      const types = await api.apiKeys.getTypes(apiKey.id);
+
+      // Create and download file
+      const blob = new Blob([types], { type: 'application/typescript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `s4kit-types-${apiKey.name.toLowerCase().replace(/\s+/g, '-')}.d.ts`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('TypeScript types downloaded');
+    } catch (error) {
+      toast.error('Failed to generate types: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setGeneratingTypes(false);
+    }
+  };
 
   const status = getKeyStatus(apiKey);
   const isActive = status === 'active';
@@ -174,6 +201,18 @@ export function ApiKeyViewPage({ apiKey }: ApiKeyViewPageProps) {
         <div className="flex items-center gap-2">
           {isActive && (
             <>
+              <Button
+                variant="outline"
+                onClick={handleDownloadTypes}
+                disabled={generatingTypes}
+              >
+                {generatingTypes ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileCode className="mr-2 h-4 w-4" />
+                )}
+                Generate Types
+              </Button>
               <Button variant="outline" onClick={() => setRotateOpen(true)}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Rotate

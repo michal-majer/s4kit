@@ -1,4 +1,4 @@
-import { apiKeys, systems, instances, systemServices, instanceServices, apiKeyAccess, predefinedServices } from './db/schema';
+import { apiKeys, systems, instances, systemServices, instanceServices, apiKeyAccess, predefinedServices } from '@s4kit/shared/db/schema';
 import type { InferSelectModel } from 'drizzle-orm';
 
 export type ApiKey = InferSelectModel<typeof apiKeys>;

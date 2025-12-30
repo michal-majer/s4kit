@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { db } from '../../db';
-import { instances, systems, systemServices, instanceServices } from '../../db/schema';
+import { db, instances, systems, systemServices, instanceServices } from '../../db';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { serviceBindingParser } from '../../services/service-binding-parser';

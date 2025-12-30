@@ -147,6 +147,9 @@ app.all('/*', async (c) => {
     const rawQueryParams = c.req.query();
     const queryParams: Record<string, string> = {};
 
+    // Determine OData version from service config (default to v4)
+    const odataVersion = systemService.odataVersion || 'v4';
+
     // Convert all query params to strings (Hono may return string | string[])
     for (const [key, value] of Object.entries(rawQueryParams)) {
       if (Array.isArray(value)) {
@@ -154,6 +157,15 @@ app.all('/*', async (c) => {
         queryParams[key] = value.join(',');
       } else if (value !== undefined && value !== null) {
         queryParams[key] = String(value);
+      }
+    }
+
+    // Translate OData v4 params to v2 if needed
+    if (odataVersion === 'v2') {
+      // $count=true → $inlinecount=allpages
+      if (queryParams['$count'] === 'true') {
+        delete queryParams['$count'];
+        queryParams['$inlinecount'] = 'allpages';
       }
     }
 

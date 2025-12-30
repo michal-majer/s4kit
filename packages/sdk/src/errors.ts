@@ -296,6 +296,15 @@ export function parseHttpError(
 export function parseODataError(body: any): ODataError | undefined {
   if (!body) return undefined;
 
+  // OData v2 format: { error: { message: { value: '...' } } }
+  // Check this FIRST because v4 check would also match
+  if (body.error?.message?.value) {
+    return {
+      code: body.error.code ?? 'UNKNOWN',
+      message: body.error.message.value,
+    };
+  }
+
   // OData v4 format: { error: { code, message, ... } }
   if (body.error) {
     return {
@@ -304,14 +313,6 @@ export function parseODataError(body: any): ODataError | undefined {
       target: body.error.target,
       details: body.error.details,
       innererror: body.error.innererror,
-    };
-  }
-
-  // OData v2 format: { error: { message: { value: '...' } } }
-  if (body.error?.message?.value) {
-    return {
-      code: body.error.code ?? 'UNKNOWN',
-      message: body.error.message.value,
     };
   }
 

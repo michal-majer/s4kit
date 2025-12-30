@@ -99,6 +99,11 @@ export function countRecords(response: unknown): number | undefined {
 
   const obj = response as Record<string, unknown>;
 
+  // Normalized proxy format: { data: [...] }
+  if (Array.isArray(obj.data)) {
+    return obj.data.length;
+  }
+
   // OData v4 format: { value: [...] }
   if (Array.isArray(obj.value)) {
     return obj.value.length;
@@ -112,9 +117,14 @@ export function countRecords(response: unknown): number | undefined {
     }
   }
 
-  // Single entity response
-  if (!Array.isArray(obj)) {
+  // Single entity response (has data but data is an object, not array)
+  if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) {
     return 1;
+  }
+
+  // Raw array response
+  if (Array.isArray(obj)) {
+    return (obj as unknown[]).length;
   }
 
   return undefined;

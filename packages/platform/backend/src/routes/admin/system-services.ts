@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { db } from '../../db';
-import { systems, systemServices, predefinedServices, instances, instanceServices, apiKeyAccess } from '../../db/schema';
+import { db, systems, systemServices, predefinedServices, instances, instanceServices, apiKeyAccess } from '../../db';
 import { encryption } from '../../services/encryption';
 import { metadataParser } from '../../services/metadata-parser';
 import { z } from 'zod';

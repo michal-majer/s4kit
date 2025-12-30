@@ -21,6 +21,11 @@ export default defineConfig({
     timeout: 5000, // 5s for assertions
   },
 
+  // Clean up leftover test data before tests start
+  globalSetup: './e2e/global-setup.ts',
+  // Clean up test data after all tests complete
+  globalTeardown: './e2e/global-teardown.ts',
+
   use: {
     baseURL: 'http://localhost:3001',
     trace: 'on-first-retry',

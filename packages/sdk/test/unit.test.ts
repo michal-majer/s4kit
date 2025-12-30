@@ -59,17 +59,17 @@ describe("buildQuery", () => {
   });
 
   test("builds $orderby correctly from object", () => {
-    const result = buildQuery({ orderBy: { field: 'Name', direction: 'asc' } } as any);
+    const result = buildQuery({ orderBy: { Name: 'asc' } });
     expect(result).toEqual({ '$orderby': 'Name asc' });
   });
 
   test("builds $orderby correctly from array", () => {
     const result = buildQuery({
       orderBy: [
-        { field: 'Name', direction: 'asc' },
-        { field: 'Price', direction: 'desc' }
+        { Name: 'asc' },
+        { Price: 'desc' }
       ]
-    } as any);
+    });
     expect(result).toEqual({ '$orderby': 'Name asc,Price desc' });
   });
 
@@ -78,19 +78,64 @@ describe("buildQuery", () => {
     expect(result).toEqual({ '$expand': 'Products,Supplier' });
   });
 
-  test("builds $expand with nested options", () => {
+  test("builds $expand from object with true (simple)", () => {
+    const result = buildQuery({ expand: { Products: true, Category: true } });
+    expect(result['$expand']).toBe('Products,Category');
+  });
+
+  test("builds $expand from object with nested options", () => {
     const result = buildQuery({
-      expand: [{
-        property: 'Products',
-        select: ['Name', 'Price'],
-        filter: "Price gt 100",
-        top: 5
-      }]
+      select: ['ID'],  // Need a main select to merge expand paths into
+      expand: {
+        Products: {
+          select: ['Name', 'Price'],
+          top: 10,
+          orderBy: { Price: 'desc' }
+        }
+      }
     } as any);
     expect(result['$expand']).toContain('Products');
-    expect(result['$expand']).toContain('$select=Name,Price');
+    // Note: $select is handled via path-qualified fields in main $select, not nested
+    expect(result['$expand']).toContain('$top=10');
+    expect(result['$expand']).toContain('$orderby=Price desc');
+    // Check that select fields are added to main $select
+    expect(result['$select']).toContain('Products/Name');
+    expect(result['$select']).toContain('Products/Price');
+  });
+
+  test("builds $expand from object with filter object", () => {
+    const result = buildQuery({
+      expand: {
+        Products: {
+          filter: { Price: { gt: 100 } }
+        }
+      }
+    } as any);
+    expect(result['$expand']).toContain('Products');
     expect(result['$expand']).toContain('$filter=Price gt 100');
-    expect(result['$expand']).toContain('$top=5');
+  });
+
+  test("builds $expand with deep nesting", () => {
+    const result = buildQuery({
+      expand: {
+        Category: {
+          expand: { Products: true }
+        }
+      }
+    } as any);
+    expect(result['$expand']).toContain('Category');
+    expect(result['$expand']).toContain('$expand=Products');
+  });
+
+  test("builds $expand with multiple properties", () => {
+    const result = buildQuery({
+      select: ['ID'],  // Need a main select to merge expand paths into
+      expand: { Products: true, Category: { select: ['Name'] } }
+    } as any);
+    expect(result['$expand']).toContain('Products');
+    expect(result['$expand']).toContain('Category');
+    // Category/Name should be in select
+    expect(result['$select']).toContain('Category/Name');
   });
 
   test("builds $count correctly", () => {
@@ -115,7 +160,8 @@ describe("buildQuery", () => {
       search: 'laptop'
     });
 
-    expect(result['$select']).toBe('Name,Price');
+    // When using expand with select, navigation property paths are auto-added
+    expect(result['$select']).toBe('Name,Price,Supplier');
     expect(result['$filter']).toBe("Category eq 'Electronics'");
     expect(result['$top']).toBe('10');
     expect(result['$skip']).toBe('0');

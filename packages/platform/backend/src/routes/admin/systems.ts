@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { db } from '../../db';
-import { systems, systemServices, predefinedServices, instances } from '../../db/schema';
+import { db, systems, systemServices, predefinedServices, instances } from '../../db';
 import { z } from 'zod';
 import { desc, eq, and, inArray } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';

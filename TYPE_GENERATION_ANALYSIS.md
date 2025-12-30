@@ -1,5 +1,44 @@
 # Analiza użyteczności wygenerowanych typów TypeScript
 
+ 1. Proxy Service - New /api/proxy/$types Endpoint
+
+  Created three new files in the proxy:
+  - src/services/metadata-parser.ts - Fetches and parses OData $metadata from SAP
+  - src/services/type-generator.ts - Generates TypeScript interfaces from metadata
+  - src/routes/types.ts - Handles API key auth and returns generated types
+
+  2. SDK CLI Updated
+
+  The CLI now calls the proxy endpoint with API key auth:
+  # Generate types using your API key
+  bun run src/cli.ts generate-types --api-key sk_live_xxx --base-url http://localhost:3002 --output ./types
+
+  3. Dashboard UI - "Generate Types" Button
+
+  Added to the API key detail page (/api-keys/[id]):
+  - Button shows spinner while generating
+  - Downloads .d.ts file directly to browser
+  - Uses session auth via backend
+
+  How to Test
+
+  Via Dashboard:
+  1. Go to any API key detail page
+  2. Click "Generate Types" button
+  3. The TypeScript definitions file downloads automatically
+
+  Via CLI:
+  cd packages/sdk
+  API_KEY=s4k_live_xxx bun run src/cli.ts generate-types \
+    --base-url http://localhost:3002 \
+    --output ./my-types
+
+  Via SDK (for programmatic use):
+  curl -H "Authorization: Bearer sk_live_xxx" \
+    http://localhost:3002/api/proxy/\$types
+
+  Would you like me to test the feature now or make any adjustments?
+
 ## Obecny stan SDK
 
 ### 1. Brak type safety

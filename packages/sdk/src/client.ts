@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { HttpClient, type HttpClientConfig } from './http-client';
-import { createProxy } from './proxy';
+import { createProxy, createEntityHandler } from './proxy';
 import type {
   S4KitConfig,
   EntityHandler,
@@ -16,6 +16,52 @@ import type {
 } from './types';
 
 // ============================================================================
+// Client Interface for TypeScript
+// ============================================================================
+
+/**
+ * S4Kit client methods (interceptors, batch operations)
+ */
+export interface S4KitMethods {
+  onRequest(interceptor: RequestInterceptor): S4KitClient;
+  onResponse(interceptor: ResponseInterceptor): S4KitClient;
+  onError(interceptor: ErrorInterceptor): S4KitClient;
+  batch<T = any>(operations: BatchOperation<T>[]): Promise<BatchResult<T>[]>;
+  changeset<T = any>(changeset: Changeset): Promise<BatchResult<T>[]>;
+}
+
+/**
+ * Augmentable interface for typed entity access.
+ * Generated type files augment this interface to provide type-safe entity properties.
+ *
+ * @example
+ * ```ts
+ * // In generated types file:
+ * declare module 's4kit' {
+ *   interface S4KitClient {
+ *     Customers: EntityHandler<Customer>;
+ *   }
+ * }
+ * // Now client.Customers.list() returns Customer[]
+ * ```
+ */
+export interface S4KitClient extends S4KitMethods {
+  // This interface is augmented by generated type files.
+  // Properties are added via module augmentation.
+}
+
+/**
+ * S4Kit client type with dynamic entity access.
+ * Combines the augmentable interface with an index signature for runtime flexibility.
+ *
+ * @example client.Products.list() or client.A_BusinessPartner.get('123')
+ */
+export type S4KitClientWithDynamicAccess = S4KitClient & {
+  /** Access any entity by name (fallback for non-augmented entities) */
+  [entityName: string]: EntityHandler<any>;
+};
+
+// ============================================================================
 // Main Client Class
 // ============================================================================
 
@@ -24,48 +70,40 @@ import type {
  *
  * @example
  * ```ts
- * import { S4Kit } from '@s4kit/sdk';
+ * import { S4Kit } from 's4kit';
  *
  * const client = new S4Kit({
  *   apiKey: 'sk_live_xxx',
- *   connection: 'my-sap-system',
  * });
  *
- * // List business partners
- * const partners = await client.sap.A_BusinessPartner.list({
+ * // List entities - clean, simple API
+ * const partners = await client.A_BusinessPartner.list({
  *   top: 10,
  *   select: ['BusinessPartner', 'BusinessPartnerFullName'],
  * });
  *
- * // Get single partner
- * const partner = await client.sap.A_BusinessPartner.get('BP001');
+ * // Get single entity
+ * const partner = await client.A_BusinessPartner.get('BP001');
  *
- * // Create partner
- * const created = await client.sap.A_BusinessPartner.create({
+ * // Create entity
+ * const created = await client.A_BusinessPartner.create({
  *   BusinessPartnerFullName: 'Acme Corp',
  * });
  *
- * // Update partner
- * const updated = await client.sap.A_BusinessPartner.update('BP001', {
+ * // Update entity
+ * const updated = await client.A_BusinessPartner.update('BP001', {
  *   BusinessPartnerFullName: 'Acme Corporation',
  * });
  *
- * // Delete partner
- * await client.sap.A_BusinessPartner.delete('BP001');
+ * // Delete entity
+ * await client.A_BusinessPartner.delete('BP001');
  * ```
  */
-export class S4Kit {
-  private httpClient: HttpClient;
-
-  /**
-   * Dynamic proxy for accessing SAP entities
-   * Use `client.sap.EntityName` to access any entity
-   */
-  public readonly sap: Record<string, EntityHandler<any>>;
+class S4KitBase {
+  protected httpClient: HttpClient;
 
   constructor(config: S4KitConfig | HttpClientConfig) {
     this.httpClient = new HttpClient(config as HttpClientConfig);
-    this.sap = createProxy(this.httpClient);
   }
 
   // ==========================================================================
@@ -168,6 +206,58 @@ export class S4Kit {
 }
 
 // ============================================================================
+// Proxied S4Kit Class
+// ============================================================================
+
+// Methods that should NOT be proxied to entity handlers
+const RESERVED_METHODS = new Set([
+  'onRequest',
+  'onResponse',
+  'onError',
+  'batch',
+  'changeset',
+  'constructor',
+  'httpClient',
+  // Internal properties
+  'then',
+  'catch',
+  'finally',
+]);
+
+/**
+ * Create S4Kit client with dynamic entity access
+ * Allows: client.Products.list() instead of client.sap.Products.list()
+ */
+export function S4Kit(config: S4KitConfig | HttpClientConfig): S4KitClient {
+  const base = new S4KitBase(config);
+
+  return new Proxy(base, {
+    get(target, prop: string | symbol) {
+      // Handle symbols (like Symbol.toStringTag)
+      if (typeof prop === 'symbol') {
+        return (target as any)[prop];
+      }
+
+      // Return base class methods/properties
+      if (RESERVED_METHODS.has(prop) || prop in target) {
+        const value = (target as any)[prop];
+        // Bind methods to preserve 'this' context
+        if (typeof value === 'function') {
+          return value.bind(target);
+        }
+        return value;
+      }
+
+      // Everything else is an entity name - create handler dynamically
+      return createEntityHandler(target['httpClient'], prop);
+    },
+  }) as unknown as S4KitClient;
+}
+
+// Make S4Kit look like a class for instanceof checks and typing
+S4Kit.prototype = S4KitBase.prototype;
+
+// ============================================================================
 // Factory Function
 // ============================================================================
 
@@ -176,14 +266,15 @@ export class S4Kit {
  *
  * @example
  * ```ts
- * import { createClient } from '@s4kit/sdk';
+ * import { createClient } from 's4kit';
  *
  * const client = createClient({
  *   apiKey: 'sk_live_xxx',
- *   connection: 'my-sap-system',
  * });
+ *
+ * const products = await client.Products.list({ top: 10 });
  * ```
  */
-export function createClient(config: S4KitConfig): S4Kit {
-  return new S4Kit(config);
+export function createClient(config: S4KitConfig): S4KitClient {
+  return S4Kit(config);
 }

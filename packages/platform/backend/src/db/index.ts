@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from './schema';
+import * as schema from '@s4kit/shared/db/schema';
 import * as authSchema from './auth-schema';
 
 // Get database URL from environment
@@ -25,7 +25,7 @@ const allSchemas = { ...schema, ...authSchema };
 export const db = drizzle(queryClient, { schema: allSchemas });
 
 // Export schemas for use in other files
-export * from './schema';
+export * from '@s4kit/shared/db/schema';
 export * from './auth-schema';
 
 // Graceful shutdown

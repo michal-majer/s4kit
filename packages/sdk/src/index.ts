@@ -3,7 +3,7 @@
 // ============================================================================
 
 // Core client
-export { S4Kit, createClient } from './client';
+export { S4Kit, createClient, type S4KitClient, type S4KitClientWithDynamicAccess } from './client';
 
 // Types
 export type {
@@ -12,8 +12,21 @@ export type {
 
   // Query options
   QueryOptions,
-  OrderByClause,
-  ExpandOptions,
+  OrderDirection,
+  OrderByObject,
+  OrderBy,
+  Filter,
+  FilterObject,
+  FilterValue,
+  FilterCondition,
+  FilterExpression,
+  FilterLogical,
+  FilterComparisonOperator,
+  FilterStringOperator,
+  ExpandNestedOptions,
+  ExpandValue,
+  ExpandObject,
+  Expand,
   ListResponse,
   ODataResponse,
   PaginateOptions,
@@ -75,6 +88,7 @@ export {
 // Query building
 export {
   buildQuery,
+  buildFilter,
   createFilter,
   FilterBuilder,
   query,
@@ -82,21 +96,3 @@ export {
   formatKey,
   buildFunctionParams,
 } from './query-builder';
-
-// Typed helpers
-export {
-  // Individual functions
-  typedList,
-  typedListWithCount,
-  typedGet,
-  typedCount,
-  typedCreate,
-  typedCreateDeep,
-  typedUpdate,
-  typedReplace,
-  typedDelete,
-
-  // Wrappers
-  useEntity,
-  createRepository,
-} from './typed-helpers';

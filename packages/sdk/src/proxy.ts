@@ -39,7 +39,8 @@ function formatId(id: EntityKey): string {
  */
 function extractData<T>(response: any): T[] {
   if (Array.isArray(response)) return response;
-  if (response?.value && Array.isArray(response.value)) return response.value;
+  if (response?.data && Array.isArray(response.data)) return response.data; // S4Kit proxy format
+  if (response?.value && Array.isArray(response.value)) return response.value; // OData v4
   if (response?.d?.results && Array.isArray(response.d.results)) return response.d.results; // OData v2
   return [];
 }
@@ -48,6 +49,7 @@ function extractData<T>(response: any): T[] {
  * Extract single entity from OData response
  */
 function extractSingle<T>(response: any): T {
+  if (response?.data && !Array.isArray(response.data)) return response.data; // S4Kit proxy format
   if (response?.d) return response.d; // OData v2
   return response;
 }
@@ -56,9 +58,14 @@ function extractSingle<T>(response: any): T {
  * Extract count from OData response
  */
 function extractCount(response: any): number | undefined {
+  // S4Kit proxy format (normalized)
+  if (response?.count !== undefined) return Number(response.count);
+  // OData v4 format
   if (response?.['@odata.count'] !== undefined) return response['@odata.count'];
   if (response?.['odata.count'] !== undefined) return parseInt(response['odata.count'], 10);
-  if (response?.__count !== undefined) return parseInt(response.__count, 10); // OData v2
+  // OData v2 format (raw)
+  if (response?.__count !== undefined) return parseInt(response.__count, 10);
+  if (response?.d?.__count !== undefined) return parseInt(response.d.__count, 10);
   return undefined;
 }
 
@@ -66,7 +73,7 @@ function extractCount(response: any): number | undefined {
 // Entity Handler Implementation
 // ============================================================================
 
-function createEntityHandler<T = any>(
+export function createEntityHandler<T = any>(
   client: HttpClient,
   entityName: string
 ): EntityHandler<T> {

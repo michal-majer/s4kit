@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
-import * as schema from './schema';
+import * as schema from '@s4kit/shared/db/schema';
 import { getApisForSystemType, type SapApiDefinition } from '../scripts/sap-apis-generated';
 
 // Demo organization ID - must be a valid UUID format

@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { db } from '../../db';
-import { apiKeys, apiKeyAccess, instanceServices, instances, systemServices, systems } from '../../db/schema';
+import { db, apiKeys, apiKeyAccess, instanceServices, instances, systemServices, systems } from '../../db';
 import { apiKeyService } from '../../services/api-key';
 import { metadataParser, type ODataEntityType } from '../../services/metadata-parser';
 import { generateTypeScriptFile, filterEntityTypes } from '../../services/type-generator';

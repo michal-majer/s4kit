@@ -27,8 +27,13 @@ export interface QueryOptions<T = any> {
   /** Select specific fields - type-safe when T is provided */
   select?: Array<keyof T & string>;
 
-  /** OData filter expression (e.g., "Name eq 'John'") */
-  filter?: string;
+  /**
+   * Filter expression - supports multiple formats:
+   * - String: `"Name eq 'John'"` (raw OData)
+   * - Object: `{ Name: 'John' }` (eq implied) or `{ Price: { gt: 100 } }`
+   * - Array: `[{ Category: 'A' }, { Price: { gt: 100 } }]` (AND)
+   */
+  filter?: Filter<T>;
 
   /** Maximum number of results to return */
   top?: number;
@@ -36,11 +41,20 @@ export interface QueryOptions<T = any> {
   /** Number of results to skip (for pagination) */
   skip?: number;
 
-  /** Sort expression (e.g., "Name desc" or "Name asc, Date desc") */
-  orderBy?: string | OrderByClause<T> | Array<OrderByClause<T>>;
+  /**
+   * Sort expression - supports multiple formats:
+   * - String: `"Name desc"` or `"Price asc, Name desc"`
+   * - Object: `{ Name: 'desc' }` (type-safe)
+   * - Array: `[{ Price: 'desc' }, { Name: 'asc' }]`
+   */
+  orderBy?: OrderBy<T>;
 
-  /** Navigation properties to expand */
-  expand?: string[] | ExpandOptions<T>[];
+  /**
+   * Expand navigation properties - supports multiple formats:
+   * - Array: `['Products', 'Category']`
+   * - Object: `{ Products: true }` or `{ Products: { select: ['Name'], top: 5 } }`
+   */
+  expand?: Expand<T>;
 
   /** Request inline count of total matching entities */
   count?: boolean;
@@ -59,24 +73,220 @@ export interface QueryOptions<T = any> {
 }
 
 /**
- * Type-safe orderBy clause
+ * Sort direction
  */
-export type OrderByClause<T = any> = {
-  field: keyof T & string;
-  direction?: 'asc' | 'desc';
+export type OrderDirection = 'asc' | 'desc';
+
+/**
+ * Type-safe orderBy object
+ * @example { Name: 'desc' } or { Price: 'asc', Name: 'desc' }
+ */
+export type OrderByObject<T = any> = {
+  [K in keyof T & string]?: OrderDirection;
 };
 
 /**
- * Expand options with nested query support
+ * All supported orderBy formats
+ * @example
+ * ```ts
+ * // String (simple)
+ * orderBy: 'Name desc'
+ * orderBy: 'Price asc, Name desc'
+ *
+ * // Object (type-safe, recommended)
+ * orderBy: { Name: 'desc' }
+ * orderBy: { Price: 'asc' }
+ *
+ * // Array of objects (multiple sort criteria)
+ * orderBy: [{ Price: 'desc' }, { Name: 'asc' }]
+ * ```
  */
-export interface ExpandOptions<T = any> {
-  property: string;
-  select?: string[];
-  filter?: string;
-  top?: number;
-  orderBy?: string;
-  expand?: ExpandOptions<any>[];
+export type OrderBy<T = any> =
+  | string
+  | OrderByObject<T>
+  | Array<OrderByObject<T>>;
+
+// ============================================================================
+// Filter Types
+// ============================================================================
+
+/**
+ * Filter comparison operators
+ */
+export type FilterComparisonOperator = 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le';
+
+/**
+ * Filter string operators
+ */
+export type FilterStringOperator = 'contains' | 'startswith' | 'endswith';
+
+/**
+ * Filter condition with operator
+ * @example { gt: 100 } or { contains: 'Pro' }
+ */
+export type FilterCondition =
+  | { [K in FilterComparisonOperator]?: string | number | boolean | null | Date }
+  | { [K in FilterStringOperator]?: string }
+  | { in?: (string | number)[] }
+  | { between?: [number, number] | [Date, Date] };
+
+/**
+ * Filter value - either direct value (eq implied) or condition object
+ * @example 'John' (equals 'John') or { gt: 100 } (greater than 100)
+ */
+export type FilterValue = string | number | boolean | null | Date | FilterCondition;
+
+/**
+ * Type-safe filter object
+ * @example
+ * ```ts
+ * // Simple equality (eq implied)
+ * filter: { Name: 'John' }
+ * filter: { Active: true, Category: 'Electronics' }
+ *
+ * // With operators
+ * filter: { Price: { gt: 100 } }
+ * filter: { Name: { contains: 'Pro' } }
+ * filter: { Status: { in: ['active', 'pending'] } }
+ *
+ * // Combined
+ * filter: { Category: 'Electronics', Price: { gt: 100, lt: 500 } }
+ * ```
+ */
+export type FilterObject<T = any> = {
+  [K in keyof T & string]?: FilterValue;
+};
+
+/**
+ * Logical operators for complex filters
+ * @example
+ * ```ts
+ * // OR conditions
+ * filter: { $or: [{ Status: 'active' }, { Role: 'admin' }] }
+ *
+ * // NOT condition
+ * filter: { $not: { Status: 'deleted' } }
+ *
+ * // Combined
+ * filter: {
+ *   Category: 'Electronics',
+ *   $or: [{ Price: { lt: 100 } }, { OnSale: true }]
+ * }
+ * ```
+ */
+export interface FilterLogical<T = any> {
+  /** OR - any condition matches */
+  $or?: FilterExpression<T>[];
+  /** AND - all conditions match (explicit, fields are implicitly ANDed) */
+  $and?: FilterExpression<T>[];
+  /** NOT - negate the condition */
+  $not?: FilterExpression<T>;
 }
+
+/**
+ * Complete filter expression (fields + logical operators)
+ */
+export type FilterExpression<T = any> = FilterObject<T> & FilterLogical<T>;
+
+/**
+ * All supported filter formats
+ * @example
+ * ```ts
+ * // String (OData syntax)
+ * filter: "Name eq 'John' and Price gt 100"
+ *
+ * // Object (type-safe, recommended)
+ * filter: { Name: 'John' }                    // eq implied
+ * filter: { Price: { gt: 100 } }              // with operator
+ * filter: { Category: 'A', Price: { lt: 50 }} // multiple (AND)
+ *
+ * // Array (multiple conditions, AND implied)
+ * filter: [
+ *   { Category: 'Electronics' },
+ *   { Price: { gt: 100 } }
+ * ]
+ *
+ * // OR conditions
+ * filter: { $or: [{ Status: 'active' }, { Role: 'admin' }] }
+ *
+ * // NOT condition
+ * filter: { $not: { Status: 'deleted' } }
+ *
+ * // Complex nested
+ * filter: {
+ *   Category: 'Electronics',
+ *   $or: [
+ *     { Price: { lt: 100 } },
+ *     { $and: [{ OnSale: true }, { Stock: { gt: 0 } }] }
+ *   ]
+ * }
+ * ```
+ */
+export type Filter<T = any> =
+  | string
+  | FilterExpression<T>
+  | FilterExpression<T>[];
+
+/**
+ * Expand nested options (for object syntax)
+ * @example { select: ['Name'], filter: { Active: true }, top: 10 }
+ */
+export interface ExpandNestedOptions {
+  /** Select specific fields from expanded entity */
+  select?: string[];
+  /** Filter expanded entities */
+  filter?: Filter<any>;
+  /** Limit expanded results */
+  top?: number;
+  /** Skip expanded results */
+  skip?: number;
+  /** Order expanded results */
+  orderBy?: OrderBy<any>;
+  /** Nested expand */
+  expand?: Expand<any>;
+}
+
+/**
+ * Expand value - true for simple include, or options object
+ */
+export type ExpandValue = true | ExpandNestedOptions;
+
+/**
+ * Object-style expand (Prisma-like)
+ * @example { Products: true } or { Products: { select: ['Name'], top: 5 } }
+ */
+export type ExpandObject = Record<string, ExpandValue>;
+
+/**
+ * All supported expand formats
+ * @example
+ * ```ts
+ * // Simple array
+ * expand: ['Products', 'Category']
+ *
+ * // Object with boolean (simple include)
+ * expand: { Products: true, Category: true }
+ *
+ * // Object with options
+ * expand: {
+ *   Products: {
+ *     select: ['Name', 'Price'],
+ *     filter: { Active: true },
+ *     top: 10,
+ *     orderBy: { Name: 'asc' }
+ *   }
+ * }
+ *
+ * // Nested expand
+ * expand: {
+ *   Products: {
+ *     select: ['Name'],
+ *     expand: { Supplier: true }
+ *   }
+ * }
+ * ```
+ */
+export type Expand<T = any> = string[] | ExpandObject;
 
 // ============================================================================
 // Response Types

@@ -81,12 +81,14 @@ export function buildODataPath(entity: string, key?: string | number): string {
  * Handles both OData v2 (d.results) and v4 (value) formats
  */
 export function parseODataResponse<T = any>(rawResponse: any): ODataResponse<T> {
-  // OData v4 format
+  // OData v4 format (handle both @odata.count and odata.count variants)
   if ('value' in rawResponse) {
+    // Some services return odata.count (Northwind), others return @odata.count
+    const count = rawResponse['@odata.count'] ?? rawResponse['odata.count'];
     return {
       data: rawResponse.value,
-      count: rawResponse['@odata.count'],
-      nextLink: rawResponse['@odata.nextLink'],
+      count: count !== undefined ? Number(count) : undefined,
+      nextLink: rawResponse['@odata.nextLink'] ?? rawResponse['odata.nextLink'],
     };
   }
 

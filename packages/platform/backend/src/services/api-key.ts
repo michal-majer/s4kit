@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { apiKeys } from '../db/schema';
+import { apiKeys } from '@s4kit/shared/db/schema';
 import { eq } from 'drizzle-orm';
 import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
@@ -313,7 +313,7 @@ export const apiKeyService = {
     }
 
     // Copy all access grants from old key to new key
-    const { apiKeyAccess } = await import('../db/schema');
+    const { apiKeyAccess } = await import('@s4kit/shared/db/schema');
     const oldGrants = await db.query.apiKeyAccess.findMany({
       where: eq(apiKeyAccess.apiKeyId, oldKeyId)
     });

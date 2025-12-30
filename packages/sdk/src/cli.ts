@@ -107,8 +107,8 @@ async function generateTypes(options: CLIOptions): Promise<void> {
   console.log(`  Output: ${output}`);
 
   try {
-    // Fetch types from the platform
-    const response = await fetch(`${baseUrl}/admin/types`, {
+    // Fetch types from the proxy service using API key auth
+    const response = await fetch(`${baseUrl}/api/proxy/$types`, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/typescript',

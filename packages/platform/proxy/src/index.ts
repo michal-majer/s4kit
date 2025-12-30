@@ -4,6 +4,7 @@ import { createDbClient } from '@s4kit/shared/db';
 import { createRedisClient } from '@s4kit/shared/cache';
 import proxyRoute from './routes/proxy.ts';
 import healthRoute from './routes/health.ts';
+import typesRoute from './routes/types.ts';
 
 // Initialize shared clients
 const databaseUrl = process.env.DATABASE_URL;
@@ -37,6 +38,7 @@ app.use('/api/proxy/*', cors({
 app.route('/health', healthRoute);
 
 // API routes
+app.route('/api/proxy/$types', typesRoute);
 app.route('/api/proxy', proxyRoute);
 
 // Start server

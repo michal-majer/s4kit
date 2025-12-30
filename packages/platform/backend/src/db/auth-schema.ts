@@ -1,5 +1,5 @@
 import { pgTable, uuid, varchar, timestamp, boolean, text, pgEnum, unique } from 'drizzle-orm/pg-core';
-import { organizations } from './schema';
+import { organizations } from '@s4kit/shared/db/schema';
 
 // User roles enum
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'developer']);

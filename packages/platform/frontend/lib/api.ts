@@ -637,6 +637,24 @@ export const api = {
         };
         warning: string;
       }>(`/admin/api-keys/${id}/rotate`, { method: 'POST', body: JSON.stringify(options || {}) }),
+    getTypes: async (id: string): Promise<string> => {
+      const headers: Record<string, string> = {
+        'Accept': 'application/typescript',
+      };
+      if (serverCookieHeader) {
+        headers['Cookie'] = serverCookieHeader;
+      }
+      const res = await fetch(`${API_URL}/admin/api-keys/${id}/types`, {
+        headers,
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const error = await res.text().catch(() => 'Unknown error');
+        throw new Error(error || `API Error: ${res.status}`);
+      }
+      return res.text();
+    },
   },
 
   logs: {
