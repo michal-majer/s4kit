@@ -17,10 +17,7 @@ npm install s4kit
 ```typescript
 import { S4Kit } from 's4kit';
 
-const client = S4Kit({
-  apiKey: 'sk_live_...',
-  baseUrl: 'https://api.s4kit.com/api/proxy'
-});
+const client = S4Kit({ apiKey: 'sk_live_...' });
 
 // List
 const customers = await client.Customers.list({ top: 10 });
@@ -47,6 +44,9 @@ Generate types for full autocomplete and type checking:
 
 ```bash
 npx s4kit generate-types --api-key sk_live_... --output ./types
+
+# Self-hosted
+npx s4kit generate-types --api-key sk_live_... --base-url http://localhost:3002 --output ./types
 ```
 
 ```typescript
@@ -169,11 +169,11 @@ try {
 
 ```typescript
 const client = S4Kit({
-  apiKey: 'sk_live_...',           // Required
-  baseUrl: 'https://...',          // Platform URL
-  connection: 'prod',              // Default SAP instance
-  timeout: 30000,                  // Request timeout (ms)
-  retries: 3,                      // Retry on failure
+  apiKey: 'sk_live_...',                           // Required
+  baseUrl: 'https://api.s4kit.com/api/proxy',      // Default (or self-hosted)
+  connection: 'prod',                              // Default SAP instance
+  timeout: 30000,                                  // Request timeout (ms)
+  retries: 3,                                      // Retry on failure
 });
 
 // Override per request

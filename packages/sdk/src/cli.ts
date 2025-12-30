@@ -65,7 +65,7 @@ Commands:
 
 Options:
   -k, --api-key     API key for S4Kit platform
-  -u, --base-url    Base URL for S4Kit API (default: https://api.s4kit.com)
+  -u, --base-url    Proxy URL (default: https://api.s4kit.com/api/proxy)
   -c, --connection  SAP connection alias
   -o, --output      Output directory for generated files
 
@@ -93,7 +93,7 @@ function showVersion(): void {
 
 async function generateTypes(options: CLIOptions): Promise<void> {
   const apiKey = options.apiKey || process.env.S4KIT_API_KEY;
-  const baseUrl = options.baseUrl || process.env.S4KIT_BASE_URL || 'https://api.s4kit.com';
+  const baseUrl = options.baseUrl || process.env.S4KIT_BASE_URL || 'https://api.s4kit.com/api/proxy';
   const output = options.output || './s4kit-types';
 
   if (!apiKey) {
@@ -108,7 +108,7 @@ async function generateTypes(options: CLIOptions): Promise<void> {
 
   try {
     // Fetch types from the proxy service using API key auth
-    const response = await fetch(`${baseUrl}/api/proxy/$types`, {
+    const response = await fetch(`${baseUrl}/$types`, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/typescript',
