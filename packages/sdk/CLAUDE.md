@@ -2,7 +2,7 @@
 
 ## Package Overview
 
-The S4Kit SDK (`s4kit`) is a lightweight, type-safe TypeScript client for SAP S/4HANA integration via the S4Kit platform. It provides a clean API for CRUD operations on SAP OData entities.
+The S4Kit SDK (`s4kit`) is a lightweight, type-safe TypeScript client for SAP S/4HANA integration via the S4Kit platform. It provides a clean API for CRUD operations on SAP OData entities, plus a CLI for code generation.
 
 ## Architecture
 
@@ -11,6 +11,9 @@ S4Kit (client.ts)
     ├── HttpClient (http-client.ts)  - HTTP requests via ky
     ├── Proxy (proxy.ts)             - Dynamic entity handlers
     └── QueryBuilder (query-builder.ts) - OData query params
+
+CLI (cli.ts)
+    └── Type generation commands
 ```
 
 ### Key Design Patterns
@@ -33,6 +36,7 @@ client.sap.SalesOrder.get('12345')   // Any entity name works
 src/
 ├── index.ts          # Public exports
 ├── client.ts         # S4Kit main class
+├── cli.ts            # CLI entry point
 ├── http-client.ts    # HTTP client wrapper (ky)
 ├── proxy.ts          # Dynamic entity proxy
 ├── query-builder.ts  # OData query string builder
@@ -61,6 +65,16 @@ The SDK builds to `dist/` with dual format:
 - `dist/index.js` - CommonJS
 - `dist/index.mjs` - ES Module
 - `dist/index.d.ts` - TypeScript declarations
+- `dist/cli.js` / `dist/cli.mjs` - CLI entry points
+
+## CLI Usage
+
+The SDK includes a CLI available via `npx s4kit` or after global install:
+
+```bash
+# After publishing: npx s4kit <command>
+# During development: bun run src/cli.ts <command>
+```
 
 ## Core Interfaces
 
@@ -193,6 +207,11 @@ formatId(12345) → "12345"
 1. Add method to `HttpClient` in `http-client.ts`
 2. Add corresponding method to handler in `proxy.ts`
 3. Update `EntityHandler` interface in `types.ts`
+
+### Adding a new CLI command
+1. Add command handler in `cli.ts`
+2. Update help text
+3. Add to package.json bin if needed
 
 ## Dependencies
 

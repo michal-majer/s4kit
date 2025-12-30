@@ -1,28 +1,30 @@
-# S4Kit Backend - AI Assistant Guide
+# S4Kit Admin Backend - AI Assistant Guide
 
 ## Package Overview
 
-The backend is a Hono.js API server that acts as a secure proxy between the S4Kit SDK and SAP S/4HANA systems. It handles authentication, rate limiting, access control, and request logging.
+The admin backend (`@s4kit/admin`) is a Hono.js API server that provides the management layer for the S4Kit platform. It handles user authentication, organization management, and CRUD operations for systems, instances, services, and API keys.
+
+**Note:** The SAP proxy functionality has been moved to the separate `@s4kit/proxy` package.
 
 ## Architecture
 
 ```
 Request Flow:
 ┌────────────────────────────────────────────────────────────────────┐
-│  SDK Request → /api/proxy/* → Auth → RateLimit → Logging → SAP   │
+│  Frontend → /admin/* → Session Auth → Admin Routes → Database     │
 └────────────────────────────────────────────────────────────────────┘
 
 Layers:
 ┌─────────────────┐
-│   Routes        │  src/routes/ - API endpoints
+│   Routes        │  src/routes/admin/ - Admin API endpoints
 ├─────────────────┤
-│   Middleware    │  src/middleware/ - Auth, rate limit, logging
+│   Auth          │  src/auth/ - better-auth integration
+├─────────────────┤
+│   Middleware    │  src/middleware/ - Session auth
 ├─────────────────┤
 │   Services      │  src/services/ - Business logic
 ├─────────────────┤
-│   Database      │  src/db/ - Drizzle ORM + PostgreSQL
-├─────────────────┤
-│   Cache         │  src/cache/ - Redis for CSRF tokens, rate limits
+│   Database      │  Uses @s4kit/shared for schema + client
 └─────────────────┘
 ```
 
@@ -31,46 +33,56 @@ Layers:
 ```
 src/
 ├── index.ts                    # Hono app entry, route registration
-├── types.ts                    # TypeScript types (inferred from schema)
-├── routes/
-│   ├── api/
-│   │   └── proxy.ts            # /api/proxy/* - SAP request proxy
-│   └── admin/
-│       ├── systems.ts          # System CRUD
-│       ├── instances.ts        # Instance CRUD
-│       ├── system-services.ts  # System service management
-│       ├── instance-services.ts # Instance service management
-│       ├── api-keys.ts         # API key management
-│       └── logs.ts             # Request logs
+├── types.ts                    # TypeScript types
+├── auth/
+│   └── index.ts                # better-auth configuration
+├── config/
+│   └── mode.ts                 # Platform mode (SaaS vs standalone)
+├── routes/admin/
+│   ├── systems.ts              # System CRUD
+│   ├── instances.ts            # Instance CRUD
+│   ├── system-services.ts      # System service management
+│   ├── instance-services.ts    # Instance service management
+│   ├── api-keys.ts             # API key management
+│   ├── logs.ts                 # Request logs
+│   ├── organization.ts         # Organization management
+│   ├── profile.ts              # User profile
+│   ├── sessions.ts             # Session management
+│   └── platform-info.ts        # Platform info endpoint
 ├── middleware/
-│   ├── auth.ts                 # API key validation, access resolution
-│   ├── rate-limit.ts           # Redis-based rate limiting
-│   └── logging.ts              # Request/response logging
+│   └── session-auth.ts         # Session authentication middleware
 ├── services/
 │   ├── sap-client.ts           # SAP HTTP client with auth
-│   ├── api-key.ts              # Key generation, hashing, validation
-│   ├── access-resolver.ts      # Permission checking
-│   ├── encryption.ts           # libsodium encryption wrapper
+│   ├── api-key.ts              # Key generation, hashing
+│   ├── encryption.ts           # libsodium wrapper
 │   ├── odata.ts                # OData response parsing
+│   ├── oauth-token.ts          # OAuth token management
 │   ├── metadata-parser.ts      # CSDL/OData metadata parsing
-│   └── type-generator.ts       # TypeScript type generation
+│   ├── type-generator.ts       # TypeScript type generation
+│   └── service-binding-parser.ts # BTP service binding parser
 ├── db/
 │   ├── index.ts                # Drizzle client initialization
-│   ├── schema.ts               # Database schema definition
+│   ├── schema.ts               # Local schema (auth tables)
+│   ├── auth-schema.ts          # better-auth schema
 │   ├── migrate.ts              # Migration runner
 │   ├── seed.ts                 # Database seeding
-│   └── recreate.ts             # Database reset
+│   ├── recreate.ts             # Database reset
+│   └── setup-admin.ts          # Admin user setup (standalone)
 ├── cache/
 │   └── redis.ts                # Redis client singleton
+├── scripts/
+│   ├── fetch-sap-apis.ts       # SAP API catalog fetcher
+│   └── sap-apis-generated.ts   # Generated API list
 └── utils/
-    └── header-sanitizer.ts     # Sensitive header removal
+    ├── header-sanitizer.ts     # Sensitive header removal
+    └── log-helpers.ts          # Logging utilities
 ```
 
 ## Development Commands
 
 ```bash
 bun install                    # Install dependencies
-bun run dev                    # Start with hot reload
+bun run dev                    # Start with hot reload (port 3000)
 
 # Database management
 bun run db:generate            # Generate migrations from schema
@@ -80,36 +92,46 @@ bun run db:studio              # Open Drizzle Studio GUI
 bun run db:seed                # Seed initial data
 bun run db:reset               # Reset and re-seed (blocked in production!)
 bun run db:recreate            # Full database recreation
+bun run db:setup-admin         # Create admin user (standalone mode)
 
 # SAP API catalog management
 bun run fetch-sap-apis         # Fetch API catalog from SAP Hub
 bun run db:refresh-apis        # Update predefined_services only (production-safe)
 ```
 
-## SAP API Catalog
+## Authentication
 
-The backend includes a catalog of **1,049 predefined SAP OData APIs** (deprecated APIs are excluded):
+### better-auth Integration
+The backend uses better-auth for user authentication:
+- Email/password authentication
+- Session-based auth with cookies
+- Organization support
 
-| Edition | System Type | APIs | Source Package |
-|---------|-------------|------|----------------|
-| Public Cloud | `s4_public` | 503 | `SAPS4HANACloud` |
-| Private/On-Premise | `s4_private` | 546 | `S4HANAOPAPI` |
-
-To refresh the API catalog from SAP Business Accelerator Hub:
-
-```bash
-bun run fetch-sap-apis    # Fetch latest APIs from SAP Hub
-bun run db:refresh-apis   # Update predefined_services only (safe for production)
+### Session Middleware
+Admin routes are protected by session authentication:
+```typescript
+app.use('/admin/*', sessionMiddleware)
+app.use('/admin/*', adminAuthMiddleware)
 ```
 
-> **Warning:** `db:reset` is blocked in production - it would delete all data!
-
-See `src/scripts/SAP_APIS.md` for detailed documentation.
+### Platform Modes
+The backend supports two modes (configured via `PLATFORM_MODE`):
+- **saas**: Multi-tenant with user signup
+- **standalone**: Single-tenant with admin setup
 
 ## Database Schema
 
-### Core Tables
+The main schema is in `@s4kit/shared`. Backend-specific auth tables:
 
+### Auth Tables (auth-schema.ts)
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts |
+| `sessions` | Active sessions |
+| `accounts` | OAuth accounts |
+| `verifications` | Email verifications |
+
+### Core Tables (from @s4kit/shared)
 | Table | Purpose |
 |-------|---------|
 | `organizations` | Multi-tenant organizations |
@@ -122,66 +144,46 @@ See `src/scripts/SAP_APIS.md` for detailed documentation.
 | `apiKeyAccess` | API key → instance service permissions |
 | `requestLogs` | Request audit trail |
 
-### Key Relationships
+## SAP API Catalog
 
-```
-Organization
-    └── System (1:N)
-           └── Instance (1:N) - each env (dev/prod)
-           └── SystemService (1:N)
-                  └── InstanceService (N:M link)
-                         └── ApiKeyAccess (permissions)
-```
+The backend includes a catalog of **1,049 predefined SAP OData APIs**:
 
-### Enums
+| Edition | System Type | APIs | Source Package |
+|---------|-------------|------|----------------|
+| Public Cloud | `s4_public` | 503 | `SAPS4HANACloud` |
+| Private/On-Premise | `s4_private` | 546 | `S4HANAOPAPI` |
 
-```typescript
-systemType: 's4_public' | 's4_private' | 'btp' | 'other'
-instanceEnvironment: 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production'
-authType: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom'
+To refresh the API catalog:
+```bash
+bun run fetch-sap-apis    # Fetch latest APIs from SAP Hub
+bun run db:refresh-apis   # Update predefined_services only
 ```
 
-## Authentication Flow
+## API Routes
 
-### API Key Validation (auth.ts)
-1. Extract `Bearer` token from Authorization header
-2. Hash token, find matching `apiKey` record
-3. Check not revoked, not expired
-4. Resolve instance + service from headers
-5. Load permissions from `apiKeyAccess`
-6. Store in Hono context for handlers
-
-### Multi-level Auth Inheritance
+### Auth Routes (`/api/auth/*`)
+Handled by better-auth:
 ```
-Priority (highest to lowest):
-1. InstanceService auth (if set)
-2. SystemService auth (if set)
-3. Instance auth (default)
+POST /api/auth/sign-in/email
+POST /api/auth/sign-up/email
+POST /api/auth/sign-out
+GET  /api/auth/session
 ```
 
-### Supported Auth Types
-- `none` - No authentication
-- `basic` - Username/password with CSRF token
-- `api_key` - Custom header with API key
-- `custom` - Arbitrary header name/value
-- `oauth2` - (Planned, not yet implemented)
-
-## Rate Limiting
-
-Redis-based with two counters:
-- Per-minute limit (default: 60)
-- Per-day limit (default: 10000)
-
-Keys: `rate:minute:{keyId}`, `rate:day:{keyId}`
-
-## Request Logging
-
-Every proxy request is logged with:
-- Method, path, status code
-- Request/response timing (total + SAP)
-- Truncated request/response bodies (10KB limit)
-- Sanitized headers (auth removed)
-- Error messages
+### Admin Routes (`/admin/*`)
+Protected by session auth:
+```
+/admin/systems              # System CRUD
+/admin/instances            # Instance CRUD (query: ?systemId=)
+/admin/system-services      # System service CRUD (query: ?systemId=)
+/admin/instance-services    # Instance service CRUD (query: ?instanceId=)
+/admin/api-keys             # API key management
+/admin/logs                 # Request logs (query: ?apiKeyId=)
+/admin/organization         # Organization settings
+/admin/profile              # User profile
+/admin/sessions             # Session management
+/admin/platform-info        # Platform mode info
+```
 
 ## Environment Variables
 
@@ -191,22 +193,12 @@ NODE_ENV=development
 DATABASE_URL=postgresql://s4kit:s4kit_dev_password@localhost:5433/s4kit
 REDIS_URL=redis://localhost:6379
 ENCRYPTION_KEY=<32-byte hex key for libsodium>
+FRONTEND_URL=http://localhost:3001
+PLATFORM_MODE=saas  # or 'standalone'
+BETTER_AUTH_SECRET=<secret for better-auth>
 ```
 
 ## Key Services
-
-### sap-client.ts
-Handles SAP HTTP requests:
-- Auth header generation (Basic, API Key, Custom)
-- CSRF token fetching and caching
-- OData query string building
-- Response parsing and error handling
-
-### encryption.ts
-libsodium wrapper for:
-- Encrypting credentials at rest
-- Decrypting before SAP requests
-- Uses `ENCRYPTION_KEY` from env
 
 ### api-key.ts
 Stripe-like key management:
@@ -214,38 +206,16 @@ Stripe-like key management:
 - Hash with SHA-256 for storage
 - Store prefix + last 4 for display
 
-### access-resolver.ts
-Permission checking:
-- `methodToOperation()` - GET→read, POST→create, etc.
-- `checkEntityPermission()` - Verify entity+operation allowed
+### encryption.ts
+libsodium wrapper for:
+- Encrypting credentials at rest
+- Decrypting before SAP requests
 
-## API Routes
-
-### Proxy Route (`/api/proxy/*`)
-```
-GET /api/proxy/A_BusinessPartner         # List entities
-GET /api/proxy/A_BusinessPartner('123')  # Get single entity
-POST /api/proxy/A_BusinessPartner        # Create entity
-PATCH /api/proxy/A_BusinessPartner('123') # Update entity
-DELETE /api/proxy/A_BusinessPartner('123') # Delete entity
-```
-
-Headers:
-- `Authorization: Bearer sk_live_...` - Required
-- `X-S4Kit-Service: business-partner` - Service alias (optional)
-- `X-S4Kit-Instance: prod` - Instance env (optional)
-- `X-S4Kit-Raw: true` - Return raw OData response
-- `X-S4Kit-Strip-Metadata: false` - Keep OData metadata
-
-### Admin Routes
-```
-/admin/systems          # System CRUD
-/admin/instances        # Instance CRUD (query: ?systemId=)
-/admin/system-services  # System service CRUD (query: ?systemId=)
-/admin/instance-services # Instance service CRUD (query: ?instanceId=)
-/admin/api-keys         # API key management
-/admin/logs             # Request logs (query: ?apiKeyId=)
-```
+### sap-client.ts
+SAP HTTP client for admin operations:
+- Metadata fetching
+- Service verification
+- Entity discovery
 
 ## Code Conventions
 
@@ -260,21 +230,12 @@ Headers:
 }
 ```
 
-### OData Error Handling
-SAP OData errors are parsed and re-thrown with:
-- `error.odataError` - Parsed OData error structure
-- `error.status` - HTTP status code
-- `error.code` - OData error code
-
 ### Hono Context Variables
 ```typescript
 type Variables = {
-  apiKey: ApiKey;
-  instance: Instance;
-  systemService: SystemService;
-  instanceService: InstanceService;
-  entityPermissions: EntityPermissions;
-  logData?: { ... };
+  user: User;
+  session: Session;
+  organizationId: string;
 };
 ```
 
@@ -288,27 +249,23 @@ type Variables = {
 ### Adding a new middleware
 1. Create file in `src/middleware/`
 2. Export middleware function
-3. Add to proxy route chain in `src/routes/api/proxy.ts`
+3. Add to route chain in `src/index.ts`
 
 ### Modifying database schema
-1. Edit `src/db/schema.ts`
-2. Run `bun run db:generate`
-3. Run `bun run db:migrate`
-4. Update `src/types.ts` if needed (usually auto-inferred)
-
-### Adding new auth type
-1. Add to `authTypeEnum` in `schema.ts`
-2. Handle in `sap-client.ts` → `requestWithAuth()`
-3. Handle in `proxy.ts` → `resolveAuth()`
+1. Edit `@s4kit/shared/src/db/schema.ts` (for shared tables)
+2. Or edit `src/db/auth-schema.ts` (for auth tables)
+3. Run `bun run db:generate`
+4. Run `bun run db:migrate`
 
 ## Dependencies
 
 | Package | Purpose |
 |---------|---------|
 | hono | Web framework |
+| better-auth | Authentication |
+| @s4kit/shared | Shared schema, DB, cache |
 | drizzle-orm | Type-safe ORM |
-| postgres | PostgreSQL driver |
-| ioredis | Redis client |
+| drizzle-kit | Migration tooling |
 | ky | HTTP client for SAP |
 | libsodium-wrappers | Encryption |
 | fast-xml-parser | OData metadata parsing |
