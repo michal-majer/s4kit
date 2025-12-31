@@ -90,6 +90,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@s4kit/shared": "workspace:*",
+        "drizzle-orm": "^0.45.1",
         "fast-xml-parser": "^5.3.3",
         "hono": "^4.11.1",
         "ky": "^1.14.1",
@@ -100,7 +101,7 @@
     },
     "packages/sdk": {
       "name": "s4kit",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "ky": "^1.2.0",
       },
@@ -114,7 +115,6 @@
       "name": "@s4kit/shared",
       "version": "0.1.0",
       "dependencies": {
-        "drizzle-orm": "^0.45.1",
         "ioredis": "^5.8.2",
         "libsodium-wrappers": "^0.7.15",
         "postgres": "^3.4.7",
@@ -123,6 +123,10 @@
         "@types/bun": "latest",
         "@types/ioredis": "^5.0.0",
         "@types/libsodium-wrappers": "^0.7.14",
+        "drizzle-orm": "^0.45.1",
+      },
+      "peerDependencies": {
+        "drizzle-orm": "^0.45.0",
       },
     },
   },

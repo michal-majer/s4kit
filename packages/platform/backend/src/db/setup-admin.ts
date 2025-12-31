@@ -42,7 +42,7 @@ export async function setupAdmin() {
       SELECT id, name FROM organizations LIMIT 1
     `);
 
-    if (existingOrg.length > 0) {
+    if (existingOrg.length > 0 && existingOrg[0]) {
       organizationId = existingOrg[0].id as string;
       console.log(`Using existing organization: ${existingOrg[0].name}`);
     } else {
@@ -61,7 +61,7 @@ export async function setupAdmin() {
 
     let userId: string;
 
-    if (existingUser.length > 0) {
+    if (existingUser.length > 0 && existingUser[0]) {
       userId = existingUser[0].id as string;
       console.log(`Admin user ${adminEmail} already exists (${userId})`);
 

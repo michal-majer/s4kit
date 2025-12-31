@@ -27,9 +27,8 @@ jobs:
       - name: Type check SDK
         run: cd packages/sdk && bun run type-check
 
-      # TODO: Fix drizzle-orm duplication in monorepo causing type incompatibility
-      # - name: Type check Backend
-      #   run: cd packages/platform/backend && bun run type-check
+      - name: Type check Backend
+        run: cd packages/platform/backend && bun run type-check
 
       - name: Type check Proxy
         run: cd packages/platform/proxy && bun run type-check

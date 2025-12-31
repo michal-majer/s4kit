@@ -12,14 +12,17 @@
     "./types": "./src/types.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.1",
     "ioredis": "^5.8.2",
     "libsodium-wrappers": "^0.7.15",
     "postgres": "^3.4.7"
   },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.0"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/ioredis": "^5.0.0",
-    "@types/libsodium-wrappers": "^0.7.14"
+    "@types/libsodium-wrappers": "^0.7.14",
+    "drizzle-orm": "^0.45.1"
   }
 }

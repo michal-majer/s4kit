@@ -131,10 +131,11 @@ app.get('/', requirePermission('logs:read'), async (c) => {
   const offset = Math.max(parseInt(offsetParam || '0'), 0);
 
   // Get total count for pagination
-  const [{ total }] = await db
+  const countResult = await db
     .select({ total: count() })
     .from(requestLogs)
     .where(and(...conditions));
+  const total = countResult[0]?.total ?? 0;
 
   // Execute query
   const logs = await db

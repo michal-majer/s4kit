@@ -404,12 +404,12 @@ async function main() {
 // Entity lists will be populated on-demand when services are configured
 
 export type SapApiDefinition = {
-  name: string;
-  alias: string;
-  servicePath: string;
-  description: string;
-  odataVersion: 'v2' | 'v4';
-  defaultEntities: string[];
+  readonly name: string;
+  readonly alias: string;
+  readonly servicePath: string;
+  readonly description: string;
+  readonly odataVersion: 'v2' | 'v4';
+  readonly defaultEntities: readonly string[];
 };
 
 `;

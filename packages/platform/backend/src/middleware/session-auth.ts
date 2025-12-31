@@ -91,7 +91,7 @@ export const sessionMiddleware = createMiddleware<{ Variables: SessionVariables 
           where: eq(members.userId, session.user.id),
         });
 
-        if (userMemberships.length === 1) {
+        if (userMemberships.length === 1 && userMemberships[0]) {
           // User belongs to exactly one org, auto-select it
           orgId = userMemberships[0].organizationId;
           c.set('organizationId', orgId);
