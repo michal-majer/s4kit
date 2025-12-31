@@ -27,6 +27,7 @@ export type {
   ExpandValue,
   ExpandObject,
   Expand,
+  NavigationPropsOf,
   ListResponse,
   ODataResponse,
   PaginateOptions,

@@ -22,11 +22,19 @@ export interface ODataProperty {
   scale?: number;
 }
 
+export interface ODataNavigationProperty {
+  name: string;
+  type: string;
+  isCollection: boolean;
+  targetEntity: string;
+}
+
 export interface ODataEntityType {
   name: string;
   fullName: string;
   properties: ODataProperty[];
   keyProperties: string[];
+  navigationProperties: ODataNavigationProperty[];
 }
 
 export interface ODataMetadataFull {
@@ -184,11 +192,39 @@ function parseFullMetadataXml(xml: string): ODataMetadataFull {
           }
         }
 
+        // Parse NavigationProperty elements
+        const navigationProperties: ODataNavigationProperty[] = [];
+        const navPropertyArray = entityType.NavigationProperty
+          ? (Array.isArray(entityType.NavigationProperty) ? entityType.NavigationProperty : [entityType.NavigationProperty])
+          : [];
+
+        for (const navProp of navPropertyArray) {
+          if (!navProp || !navProp['@_Name']) continue;
+
+          const navType = navProp['@_Type'] || '';
+          // OData v4: Collection(Namespace.EntityType) or Namespace.EntityType
+          // OData v2: uses Relationship attribute instead
+          const isCollection = navType.startsWith('Collection(');
+          const targetType = isCollection
+            ? navType.slice(11, -1)  // Remove "Collection(" and ")"
+            : navType;
+          // Extract just the entity name from full namespace
+          const targetEntity = targetType.split('.').pop() || targetType;
+
+          navigationProperties.push({
+            name: navProp['@_Name'],
+            type: navType,
+            isCollection,
+            targetEntity,
+          });
+        }
+
         entityTypes.push({
           name: entityTypeName,
           fullName,
           properties,
           keyProperties,
+          navigationProperties,
         });
       }
     }

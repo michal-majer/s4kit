@@ -3,7 +3,7 @@
  * Converts OData metadata to TypeScript type definitions
  */
 
-import type { ODataEntityType, ODataProperty, ODataEntity } from './metadata-parser.ts';
+import type { ODataEntityType, ODataProperty, ODataEntity, ODataNavigationProperty } from './metadata-parser.ts';
 
 /**
  * Map OData Edm types to TypeScript types
@@ -46,7 +46,7 @@ function sanitizeTypeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
-function generateEntityInterface(entityType: ODataEntityType): string {
+function generateEntityInterface(entityType: ODataEntityType, allEntityTypes: ODataEntityType[]): string {
   const interfaceName = sanitizeTypeName(entityType.name);
   const lines: string[] = [];
 
@@ -70,9 +70,44 @@ function generateEntityInterface(entityType: ODataEntityType): string {
     lines.push(`  ${propName}${optional}: ${tsType};`);
   }
 
+  // Add navigation properties
+  if (entityType.navigationProperties && entityType.navigationProperties.length > 0) {
+    lines.push('');
+    lines.push('  // Navigation properties (use with expand)');
+
+    for (const navProp of entityType.navigationProperties) {
+      const propName = sanitizeTypeName(navProp.name);
+      // Try to find the target entity type
+      const targetType = findTargetEntityType(navProp.targetEntity, allEntityTypes);
+      const tsType = targetType ? sanitizeTypeName(targetType.name) : 'any';
+      const fullType = navProp.isCollection ? `${tsType}[]` : tsType;
+
+      lines.push(`  /** Navigation: ${navProp.isCollection ? 'Collection' : 'Single'} */`);
+      lines.push(`  ${propName}?: ${fullType};`);
+    }
+  }
+
+  // Add phantom property for navigation props (enables expand autocomplete)
+  if (entityType.navigationProperties && entityType.navigationProperties.length > 0) {
+    const navPropNames = entityType.navigationProperties
+      .map(np => `'${sanitizeTypeName(np.name)}'`)
+      .join(' | ');
+    lines.push('');
+    lines.push('  /** @internal Phantom property for expand autocomplete - do not use directly */');
+    lines.push(`  readonly __navigationProps?: ${navPropNames};`);
+  }
+
   lines.push('}');
 
   return lines.join('\n');
+}
+
+function findTargetEntityType(targetName: string, allEntityTypes: ODataEntityType[]): ODataEntityType | undefined {
+  return allEntityTypes.find(et =>
+    et.name === targetName ||
+    et.fullName.endsWith(`.${targetName}`) ||
+    sanitizeTypeName(et.name) === targetName
+  );
 }
 
 function generateCreateRequestType(entityType: ODataEntityType): string {
@@ -123,10 +158,10 @@ function generateUpdateRequestType(entityType: ODataEntityType): string {
   return lines.join('\n');
 }
 
-function generateTypesForEntity(entityType: ODataEntityType): string {
+function generateTypesForEntity(entityType: ODataEntityType, allEntityTypes: ODataEntityType[]): string {
   const parts: string[] = [];
 
-  parts.push(generateEntityInterface(entityType));
+  parts.push(generateEntityInterface(entityType, allEntityTypes));
   parts.push('');
   parts.push(generateCreateRequestType(entityType));
   parts.push('');
@@ -257,7 +292,7 @@ export function generateTypeScriptFile(
     }
 
     generatedTypes.add(interfaceName);
-    lines.push(generateTypesForEntity(entityType));
+    lines.push(generateTypesForEntity(entityType, entityTypes));
     lines.push('');
   }
 
