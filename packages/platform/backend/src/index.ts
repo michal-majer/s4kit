@@ -14,6 +14,7 @@ import organizationRoute from './routes/admin/organization'
 import profileRoute from './routes/admin/profile'
 import sessionsRoute from './routes/admin/sessions'
 import platformInfoRoute from './routes/admin/platform-info'
+import meRoute from './routes/admin/me'
 
 const app = new Hono()
 
@@ -65,5 +66,6 @@ app.route('/admin/organization', organizationRoute)
 app.route('/admin/profile', profileRoute)
 app.route('/admin/sessions', sessionsRoute)
 app.route('/admin/platform-info', platformInfoRoute)
+app.route('/admin/me', meRoute)
 
 export default app

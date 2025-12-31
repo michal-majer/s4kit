@@ -59,14 +59,38 @@ async function getOrganization() {
   }
 }
 
+async function getCurrentUserMembership() {
+  try {
+    const cookieHeader = await getCookieHeader();
+
+    const res = await fetch(`${API_URL}/admin/me`, {
+      headers: {
+        Cookie: cookieHeader,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to get current user membership:', error);
+    return null;
+  }
+}
+
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [session, organization] = await Promise.all([
+  const [session, organization, membership] = await Promise.all([
     getSession(),
     getOrganization(),
+    getCurrentUserMembership(),
   ]);
 
   if (!session?.user) {
@@ -75,7 +99,7 @@ export default async function DashboardLayout({
 
   const organizationId = organization?.id || session.session?.activeOrganizationId || '';
   const organizationName = organization?.name || 'Organization';
-  const userRole = 'owner'; // TODO: Fetch from membership
+  const userRole = membership?.role || 'developer';
 
   return (
     <AuthProvider

@@ -21,10 +21,11 @@ playwright-report/
 playwright/.cache/
 test-results/
 
-# Environment variables
+# Environment variables (never commit secrets)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
 
 # Logs (be specific to avoid matching app/logs directory)
 /logs/
