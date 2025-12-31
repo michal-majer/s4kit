@@ -201,22 +201,36 @@ function parseFullMetadataXml(xml: string): ODataMetadataFull {
         for (const navProp of navPropertyArray) {
           if (!navProp || !navProp['@_Name']) continue;
 
-          const navType = navProp['@_Type'] || '';
-          // OData v4: Collection(Namespace.EntityType) or Namespace.EntityType
-          // OData v2: uses Relationship attribute instead
-          const isCollection = navType.startsWith('Collection(');
-          const targetType = isCollection
-            ? navType.slice(11, -1)  // Remove "Collection(" and ")"
-            : navType;
-          // Extract just the entity name from full namespace
-          const targetEntity = targetType.split('.').pop() || targetType;
+          let isCollection = false;
+          let targetEntity = '';
 
-          navigationProperties.push({
-            name: navProp['@_Name'],
-            type: navType,
-            isCollection,
-            targetEntity,
-          });
+          // OData v4: Uses Type attribute like "Collection(Namespace.EntityType)" or "Namespace.EntityType"
+          const navType = navProp['@_Type'] || '';
+          if (navType) {
+            isCollection = navType.startsWith('Collection(');
+            const targetType = isCollection
+              ? navType.slice(11, -1)  // Remove "Collection(" and ")"
+              : navType;
+            targetEntity = targetType.split('.').pop() || targetType;
+          } else {
+            // OData v2: Uses Relationship/ToRole attributes
+            // ToRole typically contains the plural/singular form indicating collection
+            const toRole = navProp['@_ToRole'] || '';
+            // Use ToRole as target entity hint - it's typically the EntitySet name
+            targetEntity = toRole;
+            // In v2, we can't easily determine if it's a collection without parsing Association
+            // Use heuristic: if ToRole ends with 's' and is not the same as the current entity, likely a collection
+            isCollection = toRole !== entityTypeName && (toRole.endsWith('s') || toRole.endsWith('ies'));
+          }
+
+          if (targetEntity) {
+            navigationProperties.push({
+              name: navProp['@_Name'],
+              type: navType || navProp['@_Relationship'] || '',
+              isCollection,
+              targetEntity,
+            });
+          }
         }
 
         entityTypes.push({
