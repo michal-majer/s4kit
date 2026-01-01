@@ -90,12 +90,7 @@ jobs:
           DATABASE_URL: postgresql://s4kit:s4kit_test_password@localhost:5432/s4kit_test
           ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
 
-      - name: Run Proxy tests
-        run: cd packages/platform/proxy && bun test
-        env:
-          DATABASE_URL: postgresql://s4kit:s4kit_test_password@localhost:5432/s4kit_test
-          REDIS_URL: redis://localhost:6379
-          ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      # Proxy tests skipped - no test files exist yet
 
   build:
     name: Build
