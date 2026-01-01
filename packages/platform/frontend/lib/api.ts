@@ -89,7 +89,7 @@ export interface Instance {
     scope?: string;
     authorizationUrl?: string;
     clientId?: string;
-    [key: string]: any;
+    [key: string]: string | undefined;
   };
   createdAt: string;
   updatedAt: string;
@@ -112,7 +112,7 @@ export interface SystemService {
     scope?: string;
     authorizationUrl?: string;
     clientId?: string;
-    [key: string]: any;
+    [key: string]: string | undefined;
   };
   createdAt: string;
   updatedAt: string;
@@ -141,7 +141,7 @@ export interface InstanceService {
     scope?: string;
     authorizationUrl?: string;
     clientId?: string;
-    [key: string]: any;
+    [key: string]: string | undefined;
   };
 }
 
@@ -574,12 +574,12 @@ export const api = {
       statusCode: number;
       responseTime: number;
       sapResponseTime?: number;
-      data?: any;
+      data?: unknown;
       recordCount?: number;
       error?: {
         code: string;
         message: string;
-        details?: any;
+        details?: unknown;
       };
       request: {
         method: string;

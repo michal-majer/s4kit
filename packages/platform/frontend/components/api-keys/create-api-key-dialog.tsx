@@ -48,14 +48,8 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
   const [creatingInstanceService, setCreatingInstanceService] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('basic');
-  const [selectedCombinations, setSelectedCombinations] = useState<string[]>([]);
   const router = useRouter();
   
-  // Ensure arrays are always defined
-  const safeInstanceServices = instanceServices || [];
-  const safeInstances = instances || [];
-  const safeSystemServices = systemServices || [];
-
   // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -65,9 +59,13 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
 
   // Compute available instance-service combinations
   const availableCombinations = useMemo(() => {
+    const safeInstanceServices = instanceServices || [];
+    const safeInstances = instances || [];
+    const safeSystemServices = systemServices || [];
+
     const combinations: InstanceServiceOption[] = [];
     const existingMap = new Map<string, string>(); // Map of "instanceId:systemServiceId" -> instanceServiceId
-    
+
     // Map existing instance-services
     safeInstanceServices.forEach(is => {
       if (is.instanceId && is.systemServiceId) {
@@ -82,7 +80,7 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
         if (instance.systemId === systemService.systemId) {
           const key = `${instance.id}:${systemService.id}`;
           const existingId = existingMap.get(key);
-          
+
           combinations.push({
             instanceId: instance.id,
             systemServiceId: systemService.id,
@@ -95,7 +93,7 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
     });
 
     return combinations;
-  }, [safeInstances, safeSystemServices, safeInstanceServices]);
+  }, [instances, systemServices, instanceServices]);
 
   // Filter out combinations that are already in access grants
   const availableOptions = useMemo(() => {
@@ -115,7 +113,6 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
     setRateLimitPerDay(10000);
     setAccessGrants([]);
     setActiveTab('basic');
-    setSelectedCombinations([]);
   };
 
   const handleSelectCombination = async (combinationKey: string): Promise<string | null> => {
@@ -179,8 +176,8 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
       });
 
       return instanceServiceId;
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create instance-service');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create instance-service');
       return null;
     }
   };
@@ -216,8 +213,6 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
       if (newlySelected.length > 0) {
         router.refresh();
       }
-
-      setSelectedCombinations(selectedKeys);
     } finally {
       setCreatingInstanceService(false);
     }
@@ -262,31 +257,6 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
     updatePermissions(isId, entity, newPerms);
   };
 
-  const setAllPermissions = (isId: string, perm: string, enabled: boolean) => {
-    const grant = accessGrants.find(g => g.instanceServiceId === isId);
-    if (!grant) return;
-    
-    const entities = grant.instanceService?.systemService?.entities || [];
-    const allEntities = ['*', ...entities];
-    
-    setAccessGrants(prevGrants => prevGrants.map(g => {
-      if (g.instanceServiceId !== isId) return g;
-      const newPerms = { ...g.permissions };
-      
-      allEntities.forEach(entity => {
-        const current = newPerms[entity] || [];
-        if (enabled && !current.includes(perm)) {
-          newPerms[entity] = [...current, perm];
-        } else if (!enabled) {
-          newPerms[entity] = current.filter(p => p !== perm);
-          if (newPerms[entity].length === 0) delete newPerms[entity];
-        }
-      });
-      
-      return { ...g, permissions: newPerms };
-    }));
-  };
-
   const handleSubmit = async () => {
     if (!name.trim()) {
       toast.error('Name is required');
@@ -313,8 +283,8 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
       });
       setNewKey(result.secretKey);
       toast.success('API key created');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create API key');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create API key');
     } finally {
       setLoading(false);
     }
@@ -419,7 +389,7 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
                 searchPlaceholder="Search instance-services..."
                 emptyMessage={
                   availableOptions.length === 0
-                    ? safeInstances.length === 0 || safeSystemServices.length === 0
+                    ? (instances?.length ?? 0) === 0 || (systemServices?.length ?? 0) === 0
                       ? "Create instances and system-services first to link them."
                       : "All combinations have been added."
                     : "No instance-services match your search"
@@ -442,7 +412,6 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
                     onToggleEntities={() => toggleShowEntities(grant.instanceServiceId)}
                     onSetEntityFilter={(filter) => setEntityFilter(grant.instanceServiceId, filter)}
                     onTogglePermission={(entity, perm) => togglePermission(grant.instanceServiceId, entity, perm)}
-                    onSetAllPermissions={(perm, enabled) => setAllPermissions(grant.instanceServiceId, perm, enabled)}
                   />
                 ))
               )}
@@ -489,24 +458,25 @@ export function CreateApiKeyDialog({ instanceServices, systems, instances, syste
 }
 
 // Separate component for better performance
-function AccessGrantCard({ 
-  grant, 
-  onRemove, 
+function AccessGrantCard({
+  grant,
+  onRemove,
   onToggleEntities,
   onSetEntityFilter,
   onTogglePermission,
-  onSetAllPermissions
-}: { 
+}: {
   grant: AccessGrant;
   onRemove: () => void;
   onToggleEntities: () => void;
   onSetEntityFilter: (filter: string) => void;
   onTogglePermission: (entity: string, perm: string) => void;
-  onSetAllPermissions: (perm: string, enabled: boolean) => void;
 }) {
-  const entities = grant.instanceService?.systemService?.entities || [];
+  const entities = useMemo(() =>
+    grant.instanceService?.systemService?.entities || [],
+    [grant.instanceService?.systemService?.entities]
+  );
   const entityCount = entities.length;
-  
+
   const filteredEntities = useMemo(() => {
     if (!grant.entityFilter) return entities;
     const lower = grant.entityFilter.toLowerCase();

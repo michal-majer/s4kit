@@ -50,12 +50,14 @@ interface TestResponse {
   statusCode: number;
   responseTime: number;
   sapResponseTime?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any;
   recordCount?: number;
   bodyHidden?: boolean;
   error?: {
     code: string;
     message: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     details?: any;
   };
   request: {
@@ -136,8 +138,9 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
       if (result.success) {
         toast.success(`Request completed in ${result.responseTime}ms`);
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send request');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send request';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -394,7 +397,7 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
                   </CardDescription>
                 </div>
               </div>
-              {response.data && !response.bodyHidden && (
+              {response.data !== undefined && !response.bodyHidden && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -452,7 +455,7 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
             </div>
 
             {/* Error Display */}
-            {response.error && (
+            {response.error !== undefined && (
               <div className="overflow-hidden rounded-lg border border-red-500/30 bg-red-500/5">
                 <div className="flex items-center gap-2 border-b border-red-500/20 bg-red-500/10 px-4 py-2">
                   <AlertTriangle className="h-4 w-4 text-red-500" />
@@ -462,7 +465,7 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
                 </div>
                 <div className="p-4">
                   <p className="text-sm text-red-600">{response.error.message}</p>
-                  {response.error.details && (
+                  {response.error.details !== undefined && (
                     <pre className="mt-3 overflow-x-auto rounded bg-red-500/5 p-3 font-mono text-xs text-red-500/80">
                       {typeof response.error.details === 'string'
                         ? response.error.details

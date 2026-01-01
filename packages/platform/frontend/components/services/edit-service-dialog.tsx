@@ -96,7 +96,23 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
     }
 
     try {
-      const updateData: any = {
+      const updateData: {
+        name: string;
+        alias: string;
+        servicePath: string;
+        description?: string;
+        entities: string[];
+        authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
+        username?: string;
+        password?: string;
+        apiKey?: string;
+        apiKeyHeaderName?: string;
+        oauth2ClientId?: string;
+        oauth2ClientSecret?: string;
+        oauth2TokenUrl?: string;
+        oauth2Scope?: string;
+        oauth2AuthorizationUrl?: string;
+      } = {
         name: formData.name,
         alias: formData.alias,
         servicePath: formData.servicePath,
@@ -110,7 +126,7 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
       if (formData.authType === 'inherit') {
         updateData.authType = null;
       } else {
-        updateData.authType = formData.authType;
+        updateData.authType = formData.authType as 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
         
         if (formData.authType === 'basic') {
           if (formData.username) updateData.username = formData.username;
@@ -131,8 +147,8 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
       toast.success('Service updated');
       onOpenChange(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update service');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update service');
     } finally {
       setLoading(false);
     }
@@ -202,7 +218,7 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold mb-3">Service Authentication</h3>
             <p className="text-xs text-muted-foreground mb-4">
-              Configure dedicated authentication for this service. Leave as "Inherit from instance" to use the instance's authentication settings.
+              Configure dedicated authentication for this service. Leave as &quot;Inherit from instance&quot; to use the instance&apos;s authentication settings.
             </p>
             
             <div className="space-y-4">
@@ -210,7 +226,7 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
                 <Label htmlFor="authType">Authentication Type</Label>
                 <Select
                   value={formData.authType}
-                  onValueChange={(value) => setFormData({ ...formData, authType: value as any })}
+                  onValueChange={(value) => setFormData({ ...formData, authType: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />

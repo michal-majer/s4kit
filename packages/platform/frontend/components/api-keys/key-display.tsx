@@ -19,7 +19,7 @@ export function KeyDisplay({ secretKey, onClose }: { secretKey: string; onClose:
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
-        Make sure to copy your API key now. You won't be able to see it again!
+        Make sure to copy your API key now. You won&apos;t be able to see it again!
       </div>
       <div className="flex gap-2">
         <Input value={secretKey} readOnly className="font-mono text-sm" />
@@ -28,7 +28,7 @@ export function KeyDisplay({ secretKey, onClose }: { secretKey: string; onClose:
         </Button>
       </div>
       <Button onClick={onClose} className="w-full">
-        I've saved the key
+        I&apos;ve saved the key
       </Button>
     </div>
   );

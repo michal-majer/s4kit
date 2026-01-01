@@ -38,8 +38,8 @@ export function RevokeKeyDialog({
       toast.success(`API key "${apiKey.name}" has been revoked`);
       onSuccess();
       onOpenChange(false);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to revoke API key');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to revoke API key');
     } finally {
       setLoading(false);
     }

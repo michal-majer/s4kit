@@ -148,17 +148,24 @@ export function InstanceServiceSelector({
     return filtered;
   }, [groupedOptions, search, environmentFilter, versionFilter, statusFilter, showSelectedOnly, selected]);
 
-  // Auto-expand when searching
-  useMemo(() => {
+  // Derive effective expanded state: auto-expand all when searching
+  const effectiveExpandedSystems = useMemo(() => {
     if (search.trim()) {
-      setExpandedSystems(new Set(Object.keys(filteredGroups)));
+      return new Set(Object.keys(filteredGroups));
+    }
+    return expandedSystems;
+  }, [search, filteredGroups, expandedSystems]);
+
+  const effectiveExpandedEnvs = useMemo(() => {
+    if (search.trim()) {
       const allEnvKeys = new Set<string>();
       Object.entries(filteredGroups).forEach(([sys, envs]) => {
         Object.keys(envs).forEach(env => allEnvKeys.add(`${sys}:${env}`));
       });
-      setExpandedEnvs(allEnvKeys);
+      return allEnvKeys;
     }
-  }, [search, filteredGroups]);
+    return expandedEnvs;
+  }, [search, filteredGroups, expandedEnvs]);
 
   // Selected options info
   const selectedOptions = useMemo(() => {
@@ -338,7 +345,7 @@ export function InstanceServiceSelector({
           ) : (
             sortedSystems.map(sys => {
               const envs = filteredGroups[sys];
-              const isSystemExpanded = expandedSystems.has(sys);
+              const isSystemExpanded = effectiveExpandedSystems.has(sys);
               const sortedEnvs = Object.keys(envs).sort((a, b) => 
                 (ENV_CONFIG[a]?.order ?? 99) - (ENV_CONFIG[b]?.order ?? 99)
               );
@@ -374,7 +381,7 @@ export function InstanceServiceSelector({
                       {sortedEnvs.map(env => {
                         const envKey = `${sys}:${env}`;
                         const services = envs[env];
-                        const isEnvExpanded = expandedEnvs.has(envKey);
+                        const isEnvExpanded = effectiveExpandedEnvs.has(envKey);
                         const config = ENV_CONFIG[env] || { label: env, short: env.toUpperCase(), color: 'bg-gray-100 text-gray-700', order: 99 };
                         const selectedInEnv = services.filter(s => selected.includes(s.id)).length;
 
@@ -471,5 +478,6 @@ export function InstanceServiceSelector({
     </TooltipProvider>
   );
 }
+
 
 

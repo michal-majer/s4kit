@@ -63,8 +63,8 @@ export function CreateServiceDialog({ systems, trigger }: CreateServiceDialogPro
       setOpen(false);
       setFormData({ systemId: '', name: '', alias: '', servicePath: '', description: '' });
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create service');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create service');
     } finally {
       setLoading(false);
     }

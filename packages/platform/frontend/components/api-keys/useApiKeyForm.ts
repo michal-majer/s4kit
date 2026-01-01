@@ -51,8 +51,9 @@ export function validateServiceAliases(
     let systemId: string | undefined;
 
     // Try to get systemId from the full SystemService (has systemId)
-    if ('systemId' in grantSystemService && (grantSystemService as any).systemId) {
-      systemId = (grantSystemService as any).systemId;
+    const serviceWithSystemId = grantSystemService as { systemId?: string };
+    if ('systemId' in grantSystemService && serviceWithSystemId.systemId) {
+      systemId = serviceWithSystemId.systemId;
     }
 
     // Look up systemId from systemServices array using the service id
@@ -172,7 +173,7 @@ export function useApiKeyForm({
       setSystemServices(sysServices);
       setInstances(inst);
 
-      setAccessGrants(grants.map((g: any) => {
+      setAccessGrants(grants.map((g: { id: string; instanceServiceId: string; permissions: Record<string, string[]>; systemService?: { entities?: string[]; id?: string; name?: string; alias?: string } | null; instance?: { id: string; environment: string } | null }) => {
         const instService = is.find(i => i.id === g.instanceServiceId);
         const sysService = sysServices.find(s => s.id === instService?.systemServiceId);
         const system = sys.find(s => s.id === sysService?.systemId);
@@ -211,6 +212,7 @@ export function useApiKeyForm({
     }).catch(() => {
       toast.error('Failed to load data');
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, apiKey?.id]);
 
   // Sync apiKey prop changes (for edit mode)
@@ -369,8 +371,9 @@ export function useApiKeyForm({
       });
 
       return instanceServiceId;
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to add service');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add service';
+      toast.error(message);
       return null;
     }
   };
@@ -478,7 +481,8 @@ export function useApiKeyForm({
     let newPerms: Record<string, string[]>;
 
     if (preset === 'custom') {
-      const { '*': _, ...specificPerms } = grant.permissions;
+      const { '*': _wildcardPerms, ...specificPerms } = grant.permissions;
+      void _wildcardPerms; // Unused but needed for destructuring
       newPerms = specificPerms;
     } else {
       const presetPerms = PRESET_CONFIG[preset].permissions;
@@ -492,8 +496,9 @@ export function useApiKeyForm({
         setAccessGrants(prev => prev.map(g =>
           g.id === grant.id ? { ...g, preset, permissions: newPerms, showEntities: preset === 'custom' } : g
         ));
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to update permissions');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to update permissions';
+        toast.error(message);
       } finally {
         setSavingGrant(null);
       }
@@ -528,7 +533,8 @@ export function useApiKeyForm({
     );
     if (!grant) return;
 
-    const { '*': wildcardPerms, ...entityPerms } = grant.permissions;
+    const { '*': _wildcardPerms, ...entityPerms } = grant.permissions;
+    void _wildcardPerms; // Unused but needed for destructuring
     const newPerms = { ...entityPerms };
     const currentPerms = newPerms[entity] || [];
 
@@ -546,8 +552,9 @@ export function useApiKeyForm({
         setAccessGrants(prev => prev.map(g =>
           g.id === grant.id ? { ...g, permissions: newPerms, preset: 'custom' } : g
         ));
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to update permissions');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to update permissions';
+        toast.error(message);
       } finally {
         setSavingGrant(null);
       }
@@ -625,14 +632,14 @@ export function useApiKeyForm({
         setNewKey(result.secretKey);
         toast.success('API key created');
       }
-    } catch (error: any) {
-      let errorMessage = error.message || `Failed to ${isEditMode ? 'update' : 'create'} API key`;
+    } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : `Failed to ${isEditMode ? 'update' : 'create'} API key`;
       try {
         const parsedError = JSON.parse(errorMessage);
         if (parsedError.error) {
           errorMessage = parsedError.details || parsedError.error;
         }
-      } catch { }
+      } catch { /* ignore parse errors */ }
       toast.error(errorMessage, { duration: 5000 });
     } finally {
       setLoading(false);

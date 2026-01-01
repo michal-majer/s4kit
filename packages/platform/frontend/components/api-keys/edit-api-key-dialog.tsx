@@ -39,7 +39,6 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
   const [activeTab, setActiveTab] = useState('basic');
   const [instanceServices, setInstanceServices] = useState<InstanceService[]>([]);
   const [accessGrants, setAccessGrants] = useState<AccessGrant[]>([]);
-  const [selectedInstanceServices, setSelectedInstanceServices] = useState<string[]>([]);
   const router = useRouter();
 
   const [name, setName] = useState(apiKey.name);
@@ -52,13 +51,12 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
 
   useEffect(() => {
     if (open) {
-      setSelectedInstanceServices([]);
       Promise.all([
         api.instanceServices.list(),
         api.apiKeys.getAccess(apiKey.id)
       ]).then(([is, grants]) => {
         setInstanceServices(is);
-        setAccessGrants(grants.map((g: any) => {
+        setAccessGrants(grants.map((g: AccessGrant & { id: string; instance?: { id: string; environment: InstanceEnvironment } | null; systemService?: { id: string; name: string; alias: string; entities?: string[] } | null }) => {
           const instService = is.find(i => i.id === g.instanceServiceId);
           return {
             id: g.id,
@@ -111,8 +109,8 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
         showEntities: false,
         entityFilter: ''
       }]);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to add access grant');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to add access grant');
     }
   };
 
@@ -134,8 +132,6 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
     for (const grant of toRemove) {
       await removeAccessGrant(grant.id);
     }
-    
-    setSelectedInstanceServices(selectedIds);
   };
 
   const removeAccessGrant = async (grantId: string) => {
@@ -144,8 +140,8 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
       await api.apiKeys.deleteAccessGrant(apiKey.id, grantId);
       setAccessGrants(accessGrants.filter(g => g.id !== grantId));
       toast.success('Access grant removed');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to remove access grant');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove access grant');
     }
   };
 
@@ -177,8 +173,8 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
       setAccessGrants(accessGrants.map(g => 
         g.id === grantId ? { ...g, permissions: newPerms } : g
       ));
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update permissions');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update permissions');
     }
   };
 
@@ -213,16 +209,12 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
       toast.success('API key updated');
       onOpenChange(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update API key');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update API key');
     } finally {
       setLoading(false);
     }
   };
-
-  const availableInstanceServices = instanceServices.filter(
-    is => !accessGrants.some(g => g.instanceServiceId === is.id)
-  );
 
   const multiSelectOptions = instanceServices.map(is => ({
     value: is.id,
@@ -232,9 +224,6 @@ export function EditApiKeyDialog({ apiKey, open, onOpenChange }: EditApiKeyDialo
   const currentSelectedIds = accessGrants.map(g => g.instanceServiceId);
 
   const handleOpenChange = (isOpen: boolean) => {
-    if (!isOpen) {
-      setSelectedInstanceServices([]);
-    }
     onOpenChange(isOpen);
   };
 
@@ -364,9 +353,12 @@ function EditAccessGrantCard({
   onSetEntityFilter: (filter: string) => void;
   onTogglePermission: (entity: string, perm: string) => void;
 }) {
-  const entities = grant.systemService?.entities || grant.instanceService?.systemService?.entities || [];
+  const entities = useMemo(() =>
+    grant.systemService?.entities || grant.instanceService?.systemService?.entities || [],
+    [grant.systemService?.entities, grant.instanceService?.systemService?.entities]
+  );
   const entityCount = entities.length;
-  
+
   const filteredEntities = useMemo(() => {
     if (!grant.entityFilter) return entities;
     const lower = grant.entityFilter.toLowerCase();

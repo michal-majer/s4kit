@@ -106,7 +106,7 @@ export function EditInstanceDialog({ instance, open, onOpenChange, onUpdated }: 
       onOpenChange(false);
       onUpdated?.(updatedInstance);
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error('Failed to update instance');
     } finally {
       setLoading(false);
@@ -141,7 +141,7 @@ export function EditInstanceDialog({ instance, open, onOpenChange, onUpdated }: 
               <Label htmlFor="authType">Authentication</Label>
               <Select
                 value={formData.authType}
-                onValueChange={(value) => setFormData({ ...formData, authType: value as any })}
+                onValueChange={(value) => setFormData({ ...formData, authType: value as typeof formData.authType })}
               >
                 <SelectTrigger>
                   <SelectValue />

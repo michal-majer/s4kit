@@ -30,10 +30,8 @@ import { api, type Organization } from '@/lib/api';
 const organizationSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(255),
   defaultLogLevel: z.enum(['minimal', 'standard', 'extended']),
-  logRetentionDays: z.coerce.number().int().min(1).max(365),
+  logRetentionDays: z.number().int().min(1).max(365),
 });
-
-type OrganizationFormValues = z.infer<typeof organizationSchema>;
 
 interface OrganizationFormProps {
   organization: Organization;
@@ -43,7 +41,7 @@ export function OrganizationForm({ organization }: OrganizationFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const form = useForm<OrganizationFormValues>({
+  const form = useForm({
     resolver: zodResolver(organizationSchema),
     defaultValues: {
       name: organization.name,
@@ -52,13 +50,13 @@ export function OrganizationForm({ organization }: OrganizationFormProps) {
     },
   });
 
-  const onSubmit = async (data: OrganizationFormValues) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     setIsLoading(true);
     try {
       await api.organization.update({
-        name: data.name,
-        defaultLogLevel: data.defaultLogLevel,
-        logRetentionDays: data.logRetentionDays,
+        name: data.name as string,
+        defaultLogLevel: data.defaultLogLevel as 'minimal' | 'standard' | 'extended',
+        logRetentionDays: Number(data.logRetentionDays),
       });
       toast.success('Organization updated successfully');
       router.refresh();
@@ -71,7 +69,7 @@ export function OrganizationForm({ organization }: OrganizationFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="name"

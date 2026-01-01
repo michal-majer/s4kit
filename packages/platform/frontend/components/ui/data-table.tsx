@@ -36,7 +36,7 @@ export interface Column<T> {
   id: string;
   header: string;
   accessorKey?: keyof T;
-  accessorFn?: (row: T) => any;
+  accessorFn?: (row: T) => unknown;
   cell?: (row: T) => React.ReactNode;
   sortable?: boolean;
   searchable?: boolean;
@@ -68,7 +68,7 @@ interface SortConfig {
   direction: SortDirection;
 }
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends object>({
   data,
   columns,
   searchPlaceholder = 'Search...',
@@ -97,7 +97,7 @@ export function DataTable<T extends Record<string, any>>({
 
   // Get value from row using accessor
   const getValue = React.useCallback(
-    (row: T, column: Column<T>): any => {
+    (row: T, column: Column<T>): unknown => {
       if (column.accessorFn) {
         return column.accessorFn(row);
       }
@@ -275,7 +275,7 @@ export function DataTable<T extends Record<string, any>>({
             paginatedData.map((row, index) => {
               const rowId = getRowId
                 ? getRowId(row)
-                : row.id || `row-${startIndex + index}`;
+                : (row as { id?: string }).id || `row-${startIndex + index}`;
               const isExpanded = expandedRows.has(rowId);
               const canExpand = hasExpandableRows && (!isExpandable || isExpandable(row));
               const expandedContent = canExpand && isExpanded ? expandableContent?.(row) : null;
@@ -316,7 +316,7 @@ export function DataTable<T extends Record<string, any>>({
                       <TableCell key={column.id} className={column.className}>
                         {column.cell
                           ? column.cell(row)
-                          : getValue(row, column) ?? '-'}
+                          : String(getValue(row, column) ?? '-')}
                       </TableCell>
                     ))}
                   </TableRow>

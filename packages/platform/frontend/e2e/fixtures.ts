@@ -1,4 +1,4 @@
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
 
 /**
  * E2E Test Fixtures for S4Kit
@@ -19,7 +19,7 @@ export const TEST_USER = {
 /**
  * Attempts to log in, creating the user via signup if in SaaS mode
  */
-async function ensureLoggedIn(page: ReturnType<typeof base.page>) {
+async function ensureLoggedIn(page: Page) {
   // First check if already logged in
   await page.goto('/');
   await page.waitForTimeout(1000);
@@ -80,10 +80,11 @@ async function ensureLoggedIn(page: ReturnType<typeof base.page>) {
 
 // Extend base test with authentication
 export const test = base.extend<{
-  authenticatedPage: ReturnType<typeof base.page>;
+  authenticatedPage: Page;
 }>({
   authenticatedPage: async ({ page }, use) => {
     await ensureLoggedIn(page);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page);
   },
 });
@@ -93,7 +94,7 @@ export { expect };
 /**
  * Helper to login with test user - call in beforeEach
  */
-export async function loginTestUser(page: ReturnType<typeof base.page>) {
+export async function loginTestUser(page: Page) {
   await ensureLoggedIn(page);
 }
 
@@ -107,7 +108,7 @@ export function uniqueId(prefix = 'test') {
 /**
  * Helper to wait for toast notification
  */
-export async function waitForToast(page: ReturnType<typeof base.page>, text: string | RegExp) {
+export async function waitForToast(page: Page, text: string | RegExp) {
   const toast = page.locator('[data-sonner-toast]').filter({ hasText: text });
   await expect(toast).toBeVisible({ timeout: 5000 });
   return toast;
@@ -116,7 +117,7 @@ export async function waitForToast(page: ReturnType<typeof base.page>, text: str
 /**
  * Helper to dismiss all toasts
  */
-export async function dismissToasts(page: ReturnType<typeof base.page>) {
+export async function dismissToasts(page: Page) {
   const toasts = page.locator('[data-sonner-toast]');
   const count = await toasts.count();
   for (let i = 0; i < count; i++) {

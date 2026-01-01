@@ -158,7 +158,7 @@ export function InstanceServiceConfigDialog({
     setLoading(true);
 
     try {
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
 
       // Service path override
       if (formData.useServicePathOverride && formData.servicePathOverride) {
@@ -194,8 +194,9 @@ export function InstanceServiceConfigDialog({
       toast.success('Instance service configuration updated');
       onOpenChange(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update configuration');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update configuration';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -264,7 +265,7 @@ export function InstanceServiceConfigDialog({
                   <Select
                     value={formData.authType}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, authType: value })
+                      setFormData({ ...formData, authType: value as typeof formData.authType })
                     }
                   >
                     <SelectTrigger>
