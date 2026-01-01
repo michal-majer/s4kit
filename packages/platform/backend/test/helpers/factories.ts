@@ -5,10 +5,10 @@
  * All created data is tracked for automatic cleanup.
  */
 
-import { db, organizations, systems, instances, systemServices, instanceServices, apiKeys, apiKeyAccess } from '../../src/db';
+import { db, organizations, systems, instances, systemServices, instanceServices, apiKeys, apiKeyAccess, authConfigurations } from '../../src/db';
 import { trackOrganization } from '../setup';
 import { apiKeyService } from '../../src/services/api-key';
-import { encryption } from '../../src/services/encryption';
+import { encryption } from '@s4kit/shared/services';
 
 // Counter for generating unique names
 let counter = 0;
@@ -31,12 +31,18 @@ export interface CreateSystemOptions {
   createdBy?: string;
 }
 
-export interface CreateInstanceOptions {
-  environment?: InstanceEnvironment;
-  baseUrl?: string;
+export interface CreateAuthConfigOptions {
+  name?: string;
+  description?: string;
   authType?: AuthType;
   username?: string;
   password?: string;
+}
+
+export interface CreateInstanceOptions {
+  environment?: InstanceEnvironment;
+  baseUrl?: string;
+  authConfigId?: string | null;
 }
 
 export interface CreateSystemServiceOptions {
@@ -46,13 +52,14 @@ export interface CreateSystemServiceOptions {
   description?: string;
   entities?: string[];
   odataVersion?: 'v2' | 'v4';
+  authConfigId?: string | null;
 }
 
 export interface CreateInstanceServiceOptions {
   servicePathOverride?: string;
   entities?: string[] | null;
   verificationStatus?: 'pending' | 'verified' | 'failed';
-  entityCount?: number;
+  authConfigId?: string | null;
 }
 
 export interface AccessGrant {
@@ -89,6 +96,27 @@ export const factories = {
   },
 
   /**
+   * Create a test auth configuration
+   */
+  async createAuthConfig(organizationId: string, options: CreateAuthConfigOptions = {}) {
+    const authType = options.authType ?? 'basic';
+    const username = options.username ?? 'testuser';
+    const password = options.password ?? 'testpass';
+
+    const [config] = await db.insert(authConfigurations).values({
+      id: crypto.randomUUID(),
+      organizationId,
+      name: options.name ?? `Test Auth ${uniqueId()}`,
+      description: options.description,
+      authType,
+      username: authType === 'basic' ? encryption.encrypt(username) : null,
+      password: authType === 'basic' ? encryption.encrypt(password) : null,
+    }).returning();
+
+    return config!;
+  },
+
+  /**
    * Create a test system
    */
   async createSystem(organizationId: string, options: CreateSystemOptions = {}) {
@@ -105,20 +133,15 @@ export const factories = {
   },
 
   /**
-   * Create a test instance with encrypted credentials
+   * Create a test instance
    */
   async createInstance(systemId: string, options: CreateInstanceOptions = {}) {
-    const username = options.username ?? 'testuser';
-    const password = options.password ?? 'testpass';
-
     const [instance] = await db.insert(instances).values({
       id: crypto.randomUUID(),
       systemId,
       environment: options.environment ?? 'dev',
       baseUrl: options.baseUrl ?? 'https://test-sap.example.com/sap/opu/odata/sap/',
-      authType: options.authType ?? 'basic',
-      username: options.authType === 'none' ? null : encryption.encrypt(username),
-      password: options.authType === 'none' ? null : encryption.encrypt(password),
+      authConfigId: options.authConfigId ?? null,
     }).returning();
 
     return instance!;
@@ -139,6 +162,7 @@ export const factories = {
       description: options.description,
       entities: options.entities ?? ['A_BusinessPartner', 'A_BusinessPartnerAddress'],
       odataVersion: options.odataVersion ?? 'v4',
+      authConfigId: options.authConfigId ?? null,
     }).returning();
 
     return service!;
@@ -155,7 +179,7 @@ export const factories = {
       servicePathOverride: options.servicePathOverride,
       entities: options.entities,
       verificationStatus: options.verificationStatus ?? 'verified',
-      entityCount: options.entityCount ?? 2,
+      authConfigId: options.authConfigId ?? null,
     }).returning();
 
     return instService!;
@@ -205,7 +229,7 @@ export const factories = {
 
   /**
    * Create a complete test data stack:
-   * Organization -> System -> Instance -> Service -> InstanceService -> API Key
+   * Organization -> AuthConfig -> System -> Instance -> Service -> InstanceService -> API Key
    *
    * Useful for tests that need a full data hierarchy
    */
@@ -219,12 +243,26 @@ export const factories = {
       throw new Error('Organization not found');
     }
 
+    // Create auth configuration
+    const authConfig = await factories.createAuthConfig(org.id, {
+      name: 'Test Basic Auth',
+      authType: 'basic',
+      username: 'testuser',
+      password: 'testpass',
+    });
+
     // Create system
     const system = await factories.createSystem(org.id);
 
-    // Create dev and production instances
-    const devInstance = await factories.createInstance(system.id, { environment: 'dev' });
-    const prodInstance = await factories.createInstance(system.id, { environment: 'production' });
+    // Create dev and production instances with auth
+    const devInstance = await factories.createInstance(system.id, {
+      environment: 'dev',
+      authConfigId: authConfig.id,
+    });
+    const prodInstance = await factories.createInstance(system.id, {
+      environment: 'production',
+      authConfigId: authConfig.id,
+    });
 
     // Create a system service
     const service = await factories.createSystemService(system.id, {
@@ -247,6 +285,7 @@ export const factories = {
 
     return {
       organization: org,
+      authConfig,
       system,
       devInstance,
       prodInstance,

@@ -1,7 +1,4 @@
 import ky from 'ky';
-import { db } from '../db';
-import { instances } from '@s4kit/shared/db/schema';
-import { eq } from 'drizzle-orm';
 import { encryption } from '@s4kit/shared/services';
 import { redis } from '../cache/redis';
 import { oauthTokenService, type OAuthTokenConfig } from './oauth';
@@ -11,7 +8,6 @@ import {
   stripODataMetadata,
   type ODataResponse
 } from '@s4kit/shared/services';
-import type { Instance } from '../types';
 
 interface SapRequestOptions {
   method: string;
@@ -35,7 +31,7 @@ export interface ResolvedAuthConfig {
 
 interface SapRequestWithAuthOptions extends SapRequestOptions {
   baseUrl: string;
-  auth: ResolvedAuthConfig;
+  auth: ResolvedAuthConfig | null;
 }
 
 // Return type for SAP requests with timing information
@@ -75,190 +71,21 @@ function buildODataQueryString(params?: Record<string, string | number | boolean
 
 export const sapClient = {
   /**
-   * Make a request to SAP system
-   * @param instanceOrId - Either an Instance object (preferred) or instance UUID
-   * @param options - Request options (method, path, body, params)
-   */
-  request: async (instanceOrId: Instance | string, options: SapRequestOptions) => {
-    // 1. Get instance (use provided object or fetch from DB)
-    let instance: Instance | undefined;
-    
-    if (typeof instanceOrId === 'string') {
-      // Fetch instance details (fallback for backward compatibility)
-      instance = await db.query.instances.findFirst({
-        where: eq(instances.id, instanceOrId)
-      });
-    } else {
-      instance = instanceOrId;
-    }
-
-    if (!instance) {
-      throw new Error('Instance not found');
-    }
-
-    // 2. Prepare client
-    const prefixUrl = instance.baseUrl;
-    const authType = instance.authType || 'basic';
-    
-    // 3. Prepare authentication based on auth type
-    let authHeader: string | undefined;
-    let apiKeyHeader: { name: string; value: string } | undefined;
-    let csrfToken = '';
-    
-    if (authType === 'none') {
-      // No authentication
-    } else if (authType === 'api_key') {
-      // API Key authentication - get key from credentials and header name from authConfig
-      const credentials = instance.credentials as any;
-      const authConfig = instance.authConfig as any;
-      
-      if (credentials?.apiKey) {
-        const apiKey = encryption.decrypt(credentials.apiKey);
-        const headerName = authConfig?.headerName || 'X-API-Key';
-        apiKeyHeader = { name: headerName, value: apiKey };
-      } else {
-        throw new Error('API Key not found in instance credentials');
-      }
-    } else if (authType === 'basic') {
-      // Basic authentication
-      const username = instance.username ? encryption.decrypt(instance.username) : '';
-      const password = instance.password ? encryption.decrypt(instance.password) : '';
-      authHeader = `Basic ${btoa(`${username}:${password}`)}`;
-      
-      // Handle CSRF for basic auth
-      csrfToken = await sapClient.getCsrfToken(instance.id, prefixUrl, authHeader);
-    } else if (authType === 'custom') {
-      // Custom authentication - get header name and value from authConfig and credentials
-      const authConfig = instance.authConfig as any;
-      const credentials = instance.credentials as any;
-
-      if (authConfig?.headerName && credentials?.headerValue) {
-        const headerName = authConfig.headerName;
-        const headerValue = encryption.decrypt(credentials.headerValue);
-        apiKeyHeader = { name: headerName, value: headerValue };
-      } else {
-        throw new Error('Custom authentication header name and value not found in instance configuration');
-      }
-    } else if (authType === 'oauth2') {
-      // OAuth2 authentication (Client Credentials or JWT Bearer)
-      const authConfig = instance.authConfig as any;
-      const credentials = instance.credentials as any;
-
-      if (!authConfig?.tokenUrl || !authConfig?.clientId) {
-        throw new Error('OAuth2 tokenUrl and clientId are required in authConfig');
-      }
-      if (!credentials?.clientSecret) {
-        throw new Error('OAuth2 clientSecret is required in credentials');
-      }
-
-      const oauthConfig: OAuthTokenConfig = {
-        tokenUrl: authConfig.tokenUrl,
-        clientId: authConfig.clientId,
-        clientSecret: encryption.decrypt(credentials.clientSecret),
-        scope: authConfig.scope,
-        grantType: authConfig.grantType || 'client_credentials',
-        assertion: authConfig.assertion,
-      };
-
-      const accessToken = await oauthTokenService.getToken(oauthConfig, `oauth:${instance.id}`);
-      authHeader = `Bearer ${accessToken}`;
-      // OAuth typically doesn't need CSRF tokens
-    } else {
-      throw new Error(`Authentication type '${authType}' is not supported`);
-    }
-
-    // 5. Make request
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      
-      // Only add auth headers if auth is required
-      if (authType === 'api_key' && apiKeyHeader) {
-        headers[apiKeyHeader.name] = apiKeyHeader.value;
-      } else if (authType === 'custom' && apiKeyHeader) {
-        headers[apiKeyHeader.name] = apiKeyHeader.value;
-      } else if (authType !== 'none' && authHeader) {
-        headers['Authorization'] = authHeader;
-        if (csrfToken) {
-          headers['X-CSRF-Token'] = csrfToken;
-        }
-      }
-      
-      // Build OData-compatible query string (don't encode $ in parameter names)
-      const queryString = buildODataQueryString(options.params);
-      const fullPath = queryString 
-        ? `${normalizePath(options.path)}?${queryString}`
-        : normalizePath(options.path);
-      
-      const response = await ky(fullPath, {
-        prefixUrl,
-        method: options.method,
-        headers,
-        json: options.body,
-        retry: 0 // We handle retries or let SDK handle it
-      });
-
-      const rawJson = await response.json();
-      return sapClient.processResponse(rawJson, options);
-    } catch (error: any) {
-      // If CSRF token is invalid, clear cache and retry once (only for basic auth)
-      if (authType === 'basic' && error.response?.status === 403 && error.response.headers.get('x-csrf-token') === 'Required') {
-        await redis.del(`csrf:${instance.id}`);
-        const newToken = await sapClient.getCsrfToken(instance.id, prefixUrl, authHeader!);
-        
-        const retryHeaders: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        };
-        
-        if (authHeader) {
-          retryHeaders['Authorization'] = authHeader;
-          if (newToken) {
-            retryHeaders['X-CSRF-Token'] = newToken;
-          }
-        }
-        
-
-        // Build OData-compatible query string (don't encode $ in parameter names)
-        const retryQueryString = buildODataQueryString(options.params);
-        const retryFullPath = retryQueryString 
-          ? `${normalizePath(options.path)}?${retryQueryString}`
-          : normalizePath(options.path);
-        
-        const response = await ky(retryFullPath, {
-          prefixUrl,
-          method: options.method,
-          headers: retryHeaders,
-          json: options.body
-        });
-        
-        const rawJson = await response.json();
-        return sapClient.processResponse(rawJson, options);
-      }
-      
-      // Try to parse OData error from response
-      throw await sapClient.handleError(error);
-    }
-  },
-
-  /**
    * Make a request to SAP system with pre-resolved auth configuration
    * This is the preferred method when auth has been resolved from instanceService
    * @param options - Request options including baseUrl and resolved auth config
    */
   requestWithAuth: async (options: SapRequestWithAuthOptions) => {
     const { baseUrl, auth, ...requestOptions } = options;
-    
+
     // Prepare authentication based on auth type
-    const authType = auth.type || 'basic';
+    const authType = auth?.type || 'none';
     let authHeader: string | undefined;
     let apiKeyHeader: { name: string; value: string } | undefined;
     let csrfToken = '';
-    const csrfCacheKey = `csrf:${baseUrl}:${auth.username || 'apikey'}`;
-    
-    if (authType === 'none') {
+    const csrfCacheKey = auth ? `csrf:${baseUrl}:${auth.username || 'apikey'}` : `csrf:${baseUrl}:noauth`;
+
+    if (!auth || authType === 'none') {
       // No authentication
     } else if (authType === 'api_key') {
       // API Key authentication
@@ -417,7 +244,7 @@ export const sapClient = {
       }
 
       // If OAuth token is rejected (401), invalidate cache and retry once
-      if (authType === 'oauth2' && error.response?.status === 401) {
+      if (auth && authType === 'oauth2' && error.response?.status === 401) {
         const authConfig = auth.config as any;
         const credentials = auth.credentials as any;
         const cacheKey = `oauth:${baseUrl}:${authConfig.clientId}`;
@@ -543,31 +370,6 @@ export const sapClient = {
       }
     }
     return error;
-  },
-
-  getCsrfToken: async (instanceId: string, baseUrl: string, authHeader: string) => {
-    const cached = await redis.get(`csrf:${instanceId}`);
-    if (cached) return cached;
-
-    try {
-      const response = await ky.head('', {
-        prefixUrl: baseUrl,
-        headers: {
-          'Authorization': authHeader,
-          'X-CSRF-Token': 'Fetch'
-        }
-      });
-      
-      const token = response.headers.get('x-csrf-token');
-      if (token) {
-        await redis.set(`csrf:${instanceId}`, token, 'EX', 3600); // Cache for 1 hour
-        return token;
-      }
-    } catch (e) {
-      console.warn('Failed to fetch CSRF token, proceeding without it', e);
-    }
-    
-    return '';
   },
 
   /**

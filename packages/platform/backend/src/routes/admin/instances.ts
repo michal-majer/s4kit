@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { db, instances, systems, systemServices, instanceServices } from '../../db';
-import { encryption } from '../../services/encryption';
+import { db, instances, systems, systemServices, instanceServices, authConfigurations } from '../../db';
+import { encryption } from '@s4kit/shared/services';
 import { metadataParser } from '../../services/metadata-parser';
 import { serviceBindingParser } from '../../services/service-binding-parser';
 import { z } from 'zod';
@@ -17,42 +17,45 @@ async function verifySystemOrg(systemId: string, organizationId: string): Promis
   return !!system;
 }
 
+// Helper to verify auth config belongs to organization
+async function verifyAuthConfigOrg(authConfigId: string | null | undefined, organizationId: string): Promise<boolean> {
+  if (!authConfigId) return true; // null is valid (no auth)
+  const config = await db.query.authConfigurations.findFirst({
+    where: and(eq(authConfigurations.id, authConfigId), eq(authConfigurations.organizationId, organizationId)),
+  });
+  return !!config;
+}
+
+// Helper to resolve auth configuration
+export async function resolveAuthConfig(authConfigId: string | null): Promise<{
+  authType: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
+  username: string | null;
+  password: string | null;
+  authConfig: any;
+  credentials: any;
+} | null> {
+  if (!authConfigId) return null;
+
+  const config = await db.query.authConfigurations.findFirst({
+    where: eq(authConfigurations.id, authConfigId),
+  });
+
+  if (!config) return null;
+
+  return {
+    authType: config.authType,
+    username: config.username,
+    password: config.password,
+    authConfig: config.authConfig,
+    credentials: config.credentials,
+  };
+}
+
 const instanceSchema = z.object({
-  systemId: z.uuidv4(),
+  systemId: z.string().uuid(),
   environment: z.enum(['sandbox', 'dev', 'quality', 'preprod', 'production']),
-  baseUrl: z.url(),
-  authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).default('basic'),
-  
-  // Basic auth fields
-  username: z.string().min(1).optional(),
-  password: z.string().min(1).optional(),
-  
-  // API Key auth fields
-  apiKey: z.string().min(1).optional(),
-  apiKeyHeaderName: z.string().optional(),
-  
-  // OAuth2 auth fields
-  oauth2ClientId: z.string().min(1).optional(),
-  oauth2ClientSecret: z.string().min(1).optional(),
-  oauth2TokenUrl: z.url().optional(),
-  oauth2Scope: z.string().optional(),
-  oauth2AuthorizationUrl: z.url().optional(),
-  
-  // Custom auth fields
-  customHeaderName: z.string().min(1).optional(),
-  customHeaderValue: z.string().min(1).optional(),
-  authConfig: z.any().optional(),
-  credentials: z.any().optional(),
-}).refine((data) => {
-  if (data.authType === 'none') return true;
-  if (data.authType === 'basic') return !!(data.username && data.password);
-  if (data.authType === 'api_key') return !!data.apiKey;
-  if (data.authType === 'oauth2') return !!(data.oauth2ClientId && data.oauth2ClientSecret && data.oauth2TokenUrl);
-  if (data.authType === 'custom') return !!(data.customHeaderName && data.customHeaderValue);
-  return true;
-}, {
-  message: 'Required authentication fields are missing for the selected auth type',
-  path: ['authType']
+  baseUrl: z.string().url(),
+  authConfigId: z.string().uuid().optional().nullable(),
 });
 
 // List instances (optionally by systemId, filtered by organization)
@@ -87,9 +90,28 @@ app.get('/', requirePermission('instance:read'), async (c) => {
     orderBy: [desc(instances.createdAt)],
   });
 
-  // Don't return secrets
-  const safeInstances = allInstances.map(({ username, password, credentials, ...rest }) => rest);
-  return c.json(safeInstances);
+  // Include auth config name if linked
+  const result = await Promise.all(allInstances.map(async (instance) => {
+    let authConfigName: string | null = null;
+    let authType: string | null = null;
+
+    if (instance.authConfigId) {
+      const config = await db.query.authConfigurations.findFirst({
+        where: eq(authConfigurations.id, instance.authConfigId),
+        columns: { name: true, authType: true },
+      });
+      authConfigName = config?.name ?? null;
+      authType = config?.authType ?? null;
+    }
+
+    return {
+      ...instance,
+      authConfigName,
+      authType,
+    };
+  }));
+
+  return c.json(result);
 });
 
 // Create instance
@@ -107,75 +129,17 @@ app.post('/', requirePermission('instance:create'), async (c) => {
     return c.json({ error: 'System not found' }, 404);
   }
 
-  const { 
-    username, 
-    password, 
-    authType, 
-    apiKey,
-    apiKeyHeaderName,
-    oauth2ClientId,
-    oauth2ClientSecret,
-    oauth2TokenUrl,
-    oauth2Scope,
-    oauth2AuthorizationUrl,
-    customHeaderName,
-    customHeaderValue,
-    authConfig,
-    credentials,
-    ...data 
-  } = result.data;
-
-  const instanceData: any = {
-    ...data,
-    authType: authType as any,
-  };
-
-  // Store credentials based on auth type
-  if (authType === 'basic' && username && password) {
-    instanceData.username = encryption.encrypt(username);
-    instanceData.password = encryption.encrypt(password);
-  } else if (authType === 'api_key' && apiKey) {
-    instanceData.authConfig = {
-      headerName: apiKeyHeaderName || 'X-API-Key',
-    };
-    instanceData.credentials = {
-      apiKey: encryption.encrypt(apiKey),
-    };
-  } else if (authType === 'oauth2') {
-    instanceData.authConfig = {
-      tokenUrl: oauth2TokenUrl,
-      scope: oauth2Scope,
-      authorizationUrl: oauth2AuthorizationUrl,
-      clientId: oauth2ClientId,
-    };
-    instanceData.credentials = {
-      clientSecret: oauth2ClientSecret ? encryption.encrypt(oauth2ClientSecret) : undefined,
-    };
-  } else if (authType === 'custom') {
-    if (customHeaderName && customHeaderValue) {
-      instanceData.authConfig = {
-        headerName: customHeaderName,
-      };
-      instanceData.credentials = {
-        headerValue: encryption.encrypt(customHeaderValue),
-      };
-    } else if (authConfig) {
-      instanceData.authConfig = authConfig;
-      if (credentials) {
-        const encryptedCredentials: any = {};
-        for (const [key, value] of Object.entries(credentials)) {
-          if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-            encryptedCredentials[key] = encryption.encrypt(value);
-          } else {
-            encryptedCredentials[key] = value;
-          }
-        }
-        instanceData.credentials = encryptedCredentials;
-      }
-    }
+  // Verify auth config belongs to organization (if specified)
+  if (!(await verifyAuthConfigOrg(result.data.authConfigId, organizationId))) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
   }
 
-  const [newInstance] = await db.insert(instances).values(instanceData).returning();
+  const [newInstance] = await db.insert(instances).values({
+    systemId: result.data.systemId,
+    environment: result.data.environment,
+    baseUrl: result.data.baseUrl,
+    authConfigId: result.data.authConfigId ?? null,
+  }).returning();
 
   if (!newInstance) {
     return c.json({ error: 'Failed to create instance' }, 500);
@@ -183,17 +147,17 @@ app.post('/', requirePermission('instance:create'), async (c) => {
 
   // For S4HANA systems, auto-link services
   const system = await db.query.systems.findFirst({
-    where: eq(systems.id, data.systemId)
+    where: eq(systems.id, result.data.systemId)
   });
 
   if (system && (system.type === 's4_public' || system.type === 's4_private' || system.type === 's4_onprem')) {
     // Check if there are existing instances for this system
     const existingInstances = await db.query.instances.findMany({
-      where: eq(instances.systemId, data.systemId)
+      where: eq(instances.systemId, result.data.systemId)
     });
 
     // Define environment order for finding the closest instance
-    const envOrder: Record<typeof data.environment, number> = {
+    const envOrder: Record<typeof result.data.environment, number> = {
       sandbox: 0,
       dev: 1,
       quality: 2,
@@ -205,14 +169,12 @@ app.post('/', requirePermission('instance:create'), async (c) => {
     const otherInstances = existingInstances.filter(inst => inst.id !== newInstance.id);
 
     // Find the closest instance by environment level (prefer lower, then higher)
-    // Sort by distance from current environment, with lower environments having priority
     const sortedInstances = otherInstances.sort((a, b) => {
-      const currentEnv = envOrder[data.environment];
+      const currentEnv = envOrder[result.data.environment];
       const distA = Math.abs(envOrder[a.environment] - currentEnv);
       const distB = Math.abs(envOrder[b.environment] - currentEnv);
 
-      if (distA !== distB) return distA - distB; // Closer environment first
-      // If same distance, prefer lower environment
+      if (distA !== distB) return distA - distB;
       return envOrder[a.environment] - envOrder[b.environment];
     });
 
@@ -226,14 +188,12 @@ app.post('/', requirePermission('instance:create'), async (c) => {
         where: eq(instanceServices.instanceId, sourceInstance.id)
       });
 
-      // Get the system services for these instance services
       const sourceServiceIds = sourceInstanceServices.map(is => is.systemServiceId);
       if (sourceServiceIds.length > 0) {
         systemServicesForSystem = await db.query.systemServices.findMany({
           where: inArray(systemServices.id, sourceServiceIds)
         });
 
-        // Create instance services copying from source
         for (const svc of systemServicesForSystem) {
           try {
             await db.insert(instanceServices).values({
@@ -242,38 +202,20 @@ app.post('/', requirePermission('instance:create'), async (c) => {
               verificationStatus: 'pending',
             });
           } catch (err) {
-            // Ignore duplicate key errors (service already linked)
             console.error('Failed to copy service:', err);
           }
         }
       }
     } else {
       // First instance - load the 10 popular/essential services
-      // Different aliases exist in s4_public vs s4_private/s4_onprem
       const POPULAR_SERVICE_ALIASES_PUBLIC = [
-        'bp',                  // Business Partner (v2)
-        'salesorder',          // Sales Order (A2X)
-        'product',             // Product Master (v4)
-        'purchorder',          // Purchase Order (v4)
-        'glaccount',           // G/L Account (v2)
-        'costcenter',          // Cost Center (v2)
-        'companycode',         // Company Code (v2)
-        'materialdoc',         // Material Documents (v2)
-        'billing',             // Billing Document (v2)
-        'glaccountlineitem',   // G/L Account Line Items (v2)
+        'bp', 'salesorder', 'product', 'purchorder', 'glaccount',
+        'costcenter', 'companycode', 'materialdoc', 'billing', 'glaccountlineitem',
       ];
 
       const POPULAR_SERVICE_ALIASES_PRIVATE = [
-        'bp',                  // Business Partner
-        'product',             // Product Master
-        'purchorder',          // Purchase Order
-        'glaccount',           // G/L Account
-        'companycode',         // Company Code
-        'glaccountlineitem',   // G/L Account Line Items
-        'bank',                // Bank Master
-        'billingdocsrv',       // Billing Document
-        'costcentersrv',       // Cost Center
-        'billingdocrequestsrv', // Billing Document Request
+        'bp', 'product', 'purchorder', 'glaccount', 'companycode',
+        'glaccountlineitem', 'bank', 'billingdocsrv', 'costcentersrv', 'billingdocrequestsrv',
       ];
 
       const aliases = system.type === 's4_public'
@@ -282,12 +224,11 @@ app.post('/', requirePermission('instance:create'), async (c) => {
 
       systemServicesForSystem = await db.query.systemServices.findMany({
         where: and(
-          eq(systemServices.systemId, data.systemId),
+          eq(systemServices.systemId, result.data.systemId),
           inArray(systemServices.alias, aliases)
         )
       });
 
-      // Create instance services with pending verification
       for (const svc of systemServicesForSystem) {
         try {
           await db.insert(instanceServices).values({
@@ -296,20 +237,18 @@ app.post('/', requirePermission('instance:create'), async (c) => {
             verificationStatus: 'pending',
           });
         } catch (err) {
-          // Ignore duplicate key errors (service already linked)
           console.error('Failed to auto-link service:', err);
         }
       }
     }
 
-    // Trigger batched verification (non-blocking) - processes 5 at a time with delays
+    // Trigger batched verification (non-blocking)
     if (systemServicesForSystem.length > 0) {
       batchedRefreshServices(newInstance.id, newInstance, systemServicesForSystem).catch(console.error);
     }
   }
 
-  const { username: _, password: __, credentials: ___, ...safeInstance } = newInstance;
-  return c.json(safeInstance, 201);
+  return c.json(newInstance, 201);
 });
 
 // Get single instance (verify belongs to org via system)
@@ -330,8 +269,24 @@ app.get('/:id', requirePermission('instance:read'), async (c) => {
     return c.json({ error: 'Instance not found' }, 404);
   }
 
-  const { username, password, credentials, ...safeInstance } = instance;
-  return c.json(safeInstance);
+  // Include auth config info if linked
+  let authConfigName: string | null = null;
+  let authType: string | null = null;
+
+  if (instance.authConfigId) {
+    const config = await db.query.authConfigurations.findFirst({
+      where: eq(authConfigurations.id, instance.authConfigId),
+      columns: { name: true, authType: true },
+    });
+    authConfigName = config?.name ?? null;
+    authType = config?.authType ?? null;
+  }
+
+  return c.json({
+    ...instance,
+    authConfigName,
+    authType,
+  });
 });
 
 // Update instance
@@ -347,124 +302,28 @@ app.patch('/:id', requirePermission('instance:update'), async (c) => {
   if (!existingInstance || !(await verifySystemOrg(existingInstance.systemId, organizationId))) {
     return c.json({ error: 'Instance not found' }, 404);
   }
-  
+
   const updateSchema = z.object({
-    baseUrl: z.url().optional(),
-    authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).optional(),
-    username: z.string().min(1).optional(),
-    password: z.string().min(1).optional(),
-    apiKey: z.string().min(1).optional(),
-    apiKeyHeaderName: z.string().optional(),
-    oauth2ClientId: z.string().min(1).optional(),
-    oauth2ClientSecret: z.string().min(1).optional(),
-    oauth2TokenUrl: z.url().optional(),
-    oauth2Scope: z.string().optional(),
-    oauth2AuthorizationUrl: z.url().optional(),
-    customHeaderName: z.string().min(1).optional(),
-    customHeaderValue: z.string().min(1).optional(),
-    authConfig: z.any().optional(),
-    credentials: z.any().optional(),
+    baseUrl: z.string().url().optional(),
+    authConfigId: z.string().uuid().optional().nullable(),
   });
-  
+
   const result = updateSchema.safeParse(body);
 
   if (!result.success) {
     return c.json({ error: result.error }, 400);
   }
 
-  const { 
-    username, 
-    password, 
-    authType,
-    apiKey,
-    apiKeyHeaderName,
-    oauth2ClientId,
-    oauth2ClientSecret,
-    oauth2TokenUrl,
-    oauth2Scope,
-    oauth2AuthorizationUrl,
-    customHeaderName,
-    customHeaderValue,
-    authConfig,
-    credentials,
-    ...data 
-  } = result.data;
-
-  const updateData: any = {
-    ...data,
-    updatedAt: new Date(),
-  };
-
-  if (authType !== undefined) {
-    updateData.authType = authType;
-  }
-
-  const finalAuthType = authType;
-  
-  if (finalAuthType === 'none') {
-    updateData.username = null;
-    updateData.password = null;
-    updateData.authConfig = null;
-    updateData.credentials = null;
-  } else if (finalAuthType === 'basic' || (finalAuthType === undefined && (username !== undefined || password !== undefined))) {
-    if (username !== undefined) updateData.username = encryption.encrypt(username);
-    if (password !== undefined) updateData.password = encryption.encrypt(password);
-  } else if (finalAuthType === 'api_key' && apiKey !== undefined) {
-    updateData.authConfig = { headerName: apiKeyHeaderName || 'X-API-Key' };
-    updateData.credentials = { apiKey: encryption.encrypt(apiKey) };
-  } else if (finalAuthType === 'oauth2' && (oauth2ClientId !== undefined || oauth2ClientSecret !== undefined || oauth2TokenUrl !== undefined)) {
-    const existingInstance = await db.query.instances.findFirst({ where: eq(instances.id, id) });
-    const currentAuthConfig = existingInstance?.authConfig as any || {};
-    const currentCredentials = existingInstance?.credentials as any || {};
-    
-    updateData.authConfig = {
-      ...currentAuthConfig,
-      tokenUrl: oauth2TokenUrl !== undefined ? oauth2TokenUrl : currentAuthConfig.tokenUrl,
-      scope: oauth2Scope !== undefined ? oauth2Scope : currentAuthConfig.scope,
-      authorizationUrl: oauth2AuthorizationUrl !== undefined ? oauth2AuthorizationUrl : currentAuthConfig.authorizationUrl,
-      clientId: oauth2ClientId !== undefined ? oauth2ClientId : currentAuthConfig.clientId,
-    };
-    
-    if (oauth2ClientSecret !== undefined) {
-      updateData.credentials = { ...currentCredentials, clientSecret: encryption.encrypt(oauth2ClientSecret) };
-    }
-  } else if (finalAuthType === 'custom') {
-    if (customHeaderName !== undefined || customHeaderValue !== undefined) {
-      const existingInstance = await db.query.instances.findFirst({ where: eq(instances.id, id) });
-      const currentAuthConfig = existingInstance?.authConfig as any || {};
-      
-      if (customHeaderName !== undefined) {
-        updateData.authConfig = {
-          ...currentAuthConfig,
-          headerName: customHeaderName,
-        };
-      }
-      
-      if (customHeaderValue !== undefined) {
-        const currentCredentials = existingInstance?.credentials as any || {};
-        updateData.credentials = {
-          ...currentCredentials,
-          headerValue: encryption.encrypt(customHeaderValue),
-        };
-      }
-    } else if (authConfig !== undefined) {
-      updateData.authConfig = authConfig;
-      if (credentials !== undefined) {
-        const encryptedCredentials: any = {};
-        for (const [key, value] of Object.entries(credentials)) {
-          if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-            encryptedCredentials[key] = encryption.encrypt(value);
-          } else {
-            encryptedCredentials[key] = value;
-          }
-        }
-        updateData.credentials = encryptedCredentials;
-      }
-    }
+  // Verify auth config belongs to organization (if specified)
+  if (result.data.authConfigId !== undefined && !(await verifyAuthConfigOrg(result.data.authConfigId, organizationId))) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
   }
 
   const [updated] = await db.update(instances)
-    .set(updateData)
+    .set({
+      ...result.data,
+      updatedAt: new Date(),
+    })
     .where(eq(instances.id, id))
     .returning();
 
@@ -472,8 +331,7 @@ app.patch('/:id', requirePermission('instance:update'), async (c) => {
     return c.json({ error: 'Instance not found' }, 404);
   }
 
-  const { username: _, password: __, credentials: ___, ...safeInstance } = updated;
-  return c.json(safeInstance);
+  return c.json(updated);
 });
 
 // Import service binding JSON (VCAP_SERVICES or BTP service binding)
@@ -491,6 +349,7 @@ app.post('/:id/import-binding', requirePermission('instance:update'), async (c) 
 
   const importSchema = z.object({
     bindingJson: z.string().min(1, 'Binding JSON is required'),
+    configName: z.string().min(1).max(255).optional(),
     preferredService: z.enum(['xsuaa', 'destination']).optional(),
   });
 
@@ -510,8 +369,10 @@ app.post('/:id/import-binding', requirePermission('instance:update'), async (c) 
     }, 400);
   }
 
-  // Build auth config and credentials
-  const authConfig = {
+  // Create a new auth configuration from the binding
+  const configName = result.data.configName || `${existingInstance.environment}-oauth-imported`;
+
+  const authConfigData = {
     tokenUrl: parsed.tokenUrl,
     clientId: parsed.clientId,
     scope: parsed.scope,
@@ -520,39 +381,57 @@ app.post('/:id/import-binding', requirePermission('instance:update'), async (c) 
     bindingType: parsed.bindingType,
   };
 
-  const credentials = {
+  const credentialsData = {
     clientSecret: encryption.encrypt(parsed.clientSecret),
   };
 
-  // Update instance with OAuth2 configuration
-  const [updated] = await db.update(instances)
-    .set({
+  try {
+    // Create auth configuration
+    const [newAuthConfig] = await db.insert(authConfigurations).values({
+      organizationId,
+      name: configName,
+      description: `Imported from ${parsed.bindingType} service binding`,
       authType: 'oauth2',
-      authConfig,
-      credentials,
-      // Clear basic auth fields when switching to OAuth
-      username: null,
-      password: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(instances.id, id))
-    .returning();
+      authConfig: authConfigData,
+      credentials: credentialsData,
+    }).returning();
 
-  if (!updated) {
-    return c.json({ error: 'Failed to update instance' }, 500);
+    if (!newAuthConfig) {
+      return c.json({ error: 'Failed to create auth configuration' }, 500);
+    }
+
+    // Update instance to use the new auth configuration
+    const [updated] = await db.update(instances)
+      .set({
+        authConfigId: newAuthConfig.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(instances.id, id))
+      .returning();
+
+    if (!updated) {
+      return c.json({ error: 'Failed to update instance' }, 500);
+    }
+
+    return c.json({
+      success: true,
+      authConfigId: newAuthConfig.id,
+      authConfigName: newAuthConfig.name,
+      config: {
+        tokenUrl: parsed.tokenUrl,
+        clientId: parsed.clientId,
+        scope: parsed.scope,
+        identityZone: parsed.identityZone,
+        bindingType: parsed.bindingType,
+      },
+    });
+  } catch (error: any) {
+    // Handle unique constraint violation - config name already exists
+    if (error.code === '23505') {
+      return c.json({ error: `Auth configuration with name "${configName}" already exists. Please specify a different name.` }, 409);
+    }
+    throw error;
   }
-
-  // Return parsed config (without secrets) for UI confirmation
-  return c.json({
-    success: true,
-    config: {
-      tokenUrl: parsed.tokenUrl,
-      clientId: parsed.clientId,
-      scope: parsed.scope,
-      identityZone: parsed.identityZone,
-      bindingType: parsed.bindingType,
-    },
-  });
 });
 
 // Delete instance
@@ -577,113 +456,67 @@ app.delete('/:id', requirePermission('instance:delete'), async (c) => {
   return c.json({ success: true });
 });
 
-// Helper function to refresh all services for an instance
-async function refreshAllServicesForInstance(
-  instanceId: string,
-  instance: typeof instances.$inferSelect,
-  systemServicesForSystem?: typeof systemServices.$inferSelect[]
-) {
-  // Get all instance services for this instance
-  const instServices = await db.query.instanceServices.findMany({
-    where: eq(instanceServices.instanceId, instanceId)
+// Helper function to get auth for metadata fetching
+async function getAuthForInstance(instance: typeof instances.$inferSelect): Promise<any> {
+  if (!instance.authConfigId) {
+    return null;
+  }
+
+  const config = await db.query.authConfigurations.findFirst({
+    where: eq(authConfigurations.id, instance.authConfigId),
   });
 
-  // Get system services if not provided
-  let sysServices = systemServicesForSystem;
-  if (!sysServices) {
-    const sysServiceIds = instServices.map(is => is.systemServiceId);
-    sysServices = [];
-    for (const id of sysServiceIds) {
-      const svc = await db.query.systemServices.findFirst({
-        where: eq(systemServices.id, id)
-      });
-      if (svc) sysServices.push(svc);
+  if (!config) return null;
+
+  return {
+    type: config.authType,
+    username: config.username,
+    password: config.password,
+    config: config.authConfig,
+    credentials: config.credentials,
+  };
+}
+
+// Helper function to get auth with inheritance: instanceService > systemService > instance
+async function getAuthWithInheritance(
+  instService: typeof instanceServices.$inferSelect,
+  systemService: typeof systemServices.$inferSelect,
+  instance: typeof instances.$inferSelect
+): Promise<any> {
+  // Priority 1: Instance service auth
+  if (instService.authConfigId) {
+    const config = await db.query.authConfigurations.findFirst({
+      where: eq(authConfigurations.id, instService.authConfigId),
+    });
+    if (config && config.authType !== 'none') {
+      return {
+        type: config.authType,
+        username: config.username,
+        password: config.password,
+        config: config.authConfig,
+        credentials: config.credentials,
+      };
     }
   }
 
-  const results: { serviceId: string; status: 'verified' | 'failed'; entityCount?: number; error?: string }[] = [];
-
-  for (const instService of instServices) {
-    const systemService = sysServices.find(s => s.id === instService.systemServiceId);
-    if (!systemService) continue;
-
-    try {
-      // Resolve auth with inheritance: instanceService > systemService > instance
-      let auth: any = null;
-
-      if (instService.authType && instService.authType !== 'none') {
-        auth = {
-          type: instService.authType,
-          username: instService.username,
-          password: instService.password,
-          config: instService.authConfig,
-          credentials: instService.credentials,
-        };
-      } else if (systemService.authType && systemService.authType !== 'none') {
-        auth = {
-          type: systemService.authType,
-          username: systemService.username,
-          password: systemService.password,
-          config: systemService.authConfig,
-          credentials: systemService.credentials,
-        };
-      } else {
-        auth = {
-          type: instance.authType,
-          username: instance.username,
-          password: instance.password,
-          config: instance.authConfig,
-          credentials: instance.credentials,
-        };
-      }
-
-      const servicePath = instService.servicePathOverride || systemService.servicePath;
-
-      const metadataResult = await metadataParser.fetchMetadata({
-        baseUrl: instance.baseUrl,
-        servicePath,
-        auth,
-      });
-
-      if (metadataResult.error) {
-        await db.update(instanceServices)
-          .set({
-            verificationStatus: 'failed',
-            lastVerifiedAt: new Date(),
-            verificationError: metadataResult.error,
-          })
-          .where(eq(instanceServices.id, instService.id));
-
-        results.push({ serviceId: instService.id, status: 'failed', error: metadataResult.error });
-      } else {
-        const entityNames = metadataResult.entities.map(e => e.name);
-
-        await db.update(instanceServices)
-          .set({
-            entities: entityNames,
-            verificationStatus: 'verified',
-            lastVerifiedAt: new Date(),
-            entityCount: entityNames.length,
-            verificationError: null,
-          })
-          .where(eq(instanceServices.id, instService.id));
-
-        results.push({ serviceId: instService.id, status: 'verified', entityCount: entityNames.length });
-      }
-    } catch (error: any) {
-      await db.update(instanceServices)
-        .set({
-          verificationStatus: 'failed',
-          lastVerifiedAt: new Date(),
-          verificationError: error.message || 'Failed to refresh entities',
-        })
-        .where(eq(instanceServices.id, instService.id));
-
-      results.push({ serviceId: instService.id, status: 'failed', error: error.message });
+  // Priority 2: System service auth
+  if (systemService.authConfigId) {
+    const config = await db.query.authConfigurations.findFirst({
+      where: eq(authConfigurations.id, systemService.authConfigId),
+    });
+    if (config && config.authType !== 'none') {
+      return {
+        type: config.authType,
+        username: config.username,
+        password: config.password,
+        config: config.authConfig,
+        credentials: config.credentials,
+      };
     }
   }
 
-  return results;
+  // Priority 3: Instance auth (fallback)
+  return getAuthForInstance(instance);
 }
 
 // Helper to add delay
@@ -715,35 +548,7 @@ async function batchedRefreshServices(
         if (!systemService) return null;
 
         try {
-          // Resolve auth with inheritance: instanceService > systemService > instance
-          let auth: any = null;
-
-          if (instService.authType && instService.authType !== 'none') {
-            auth = {
-              type: instService.authType,
-              username: instService.username,
-              password: instService.password,
-              config: instService.authConfig,
-              credentials: instService.credentials,
-            };
-          } else if (systemService.authType && systemService.authType !== 'none') {
-            auth = {
-              type: systemService.authType,
-              username: systemService.username,
-              password: systemService.password,
-              config: systemService.authConfig,
-              credentials: systemService.credentials,
-            };
-          } else {
-            auth = {
-              type: instance.authType,
-              username: instance.username,
-              password: instance.password,
-              config: instance.authConfig,
-              credentials: instance.credentials,
-            };
-          }
-
+          const auth = await getAuthWithInheritance(instService, systemService, instance);
           const servicePath = instService.servicePathOverride || systemService.servicePath;
 
           const metadataResult = await metadataParser.fetchMetadata({
@@ -770,7 +575,6 @@ async function batchedRefreshServices(
                 entities: entityNames,
                 verificationStatus: 'verified',
                 lastVerifiedAt: new Date(),
-                entityCount: entityNames.length,
                 verificationError: null,
               })
               .where(eq(instanceServices.id, instService.id));
@@ -791,7 +595,6 @@ async function batchedRefreshServices(
       })
     );
 
-    // Collect non-null results
     results.push(...batchResults.filter((r): r is NonNullable<typeof r> => r !== null));
 
     // Delay before next batch (except for last batch)
@@ -821,7 +624,18 @@ app.post('/:id/refresh-all-services', requirePermission('instance:update'), asyn
     return c.json({ error: 'Instance not found' }, 404);
   }
 
-  const results = await refreshAllServicesForInstance(id, instance);
+  // Get all instance services
+  const instServices = await db.query.instanceServices.findMany({
+    where: eq(instanceServices.instanceId, id)
+  });
+
+  // Get system services
+  const sysServiceIds = instServices.map(is => is.systemServiceId);
+  const sysServices = await db.query.systemServices.findMany({
+    where: inArray(systemServices.id, sysServiceIds)
+  });
+
+  const results = await batchedRefreshServices(id, instance, sysServices);
 
   const verified = results.filter((r) => r.status === 'verified').length;
   const failed = results.filter((r) => r.status === 'failed').length;

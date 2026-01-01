@@ -8,6 +8,7 @@ import systemsRoute from './routes/admin/systems'
 import instancesRoute from './routes/admin/instances'
 import systemServicesRoute from './routes/admin/system-services'
 import instanceServicesRoute from './routes/admin/instance-services'
+import authConfigurationsRoute from './routes/admin/auth-configurations'
 import apiKeysRoute from './routes/admin/api-keys'
 import logsRoute from './routes/admin/logs'
 import organizationRoute from './routes/admin/organization'
@@ -60,6 +61,7 @@ app.route('/admin/systems', systemsRoute)
 app.route('/admin/instances', instancesRoute)
 app.route('/admin/system-services', systemServicesRoute)
 app.route('/admin/instance-services', instanceServicesRoute)
+app.route('/admin/auth-configurations', authConfigurationsRoute)
 app.route('/admin/api-keys', apiKeysRoute)
 app.route('/admin/logs', logsRoute)
 app.route('/admin/organization', organizationRoute)

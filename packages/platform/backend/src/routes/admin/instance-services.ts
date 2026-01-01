@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { db, systems, instanceServices, systemServices, instances, apiKeyAccess } from '../../db';
-import { encryption } from '../../services/encryption';
+import { db, systems, instanceServices, systemServices, instances, apiKeyAccess, authConfigurations } from '../../db';
 import { metadataParser } from '../../services/metadata-parser';
 import { sapClient, type ResolvedAuthConfig } from '../../services/sap-client';
 import { z } from 'zod';
@@ -33,6 +32,66 @@ async function verifyInstanceServiceOwnership(instanceServiceId: string, organiz
   return !!system;
 }
 
+/**
+ * Verify that an auth config belongs to the organization
+ */
+async function verifyAuthConfigOwnership(authConfigId: string | null | undefined, organizationId: string): Promise<boolean> {
+  if (!authConfigId) return true;
+  const config = await db.query.authConfigurations.findFirst({
+    where: and(eq(authConfigurations.id, authConfigId), eq(authConfigurations.organizationId, organizationId)),
+  });
+  return !!config;
+}
+
+/**
+ * Get auth configuration from authConfigId
+ */
+async function getAuthFromConfigId(authConfigId: string | null): Promise<ResolvedAuthConfig | null> {
+  if (!authConfigId) return null;
+
+  const config = await db.query.authConfigurations.findFirst({
+    where: eq(authConfigurations.id, authConfigId),
+  });
+
+  if (!config || config.authType === 'none') return null;
+
+  return {
+    type: config.authType,
+    username: config.username,
+    password: config.password,
+    config: config.authConfig,
+    credentials: config.credentials,
+  };
+}
+
+/**
+ * Get auth with inheritance: instanceService > systemService > instance
+ */
+async function getAuthWithInheritance(
+  instService: typeof instanceServices.$inferSelect,
+  systemService: typeof systemServices.$inferSelect,
+  instance: typeof instances.$inferSelect
+): Promise<ResolvedAuthConfig | null> {
+  // Priority 1: Instance service auth
+  if (instService.authConfigId) {
+    const auth = await getAuthFromConfigId(instService.authConfigId);
+    if (auth) return auth;
+  }
+
+  // Priority 2: System service auth
+  if (systemService.authConfigId) {
+    const auth = await getAuthFromConfigId(systemService.authConfigId);
+    if (auth) return auth;
+  }
+
+  // Priority 3: Instance auth (fallback)
+  if (instance.authConfigId) {
+    return getAuthFromConfigId(instance.authConfigId);
+  }
+
+  return null;
+}
+
 // Helper function to refresh entities for an instance service (can be called async)
 async function refreshInstanceServiceEntities(instanceServiceId: string): Promise<void> {
   const instanceService = await db.query.instanceServices.findFirst({
@@ -53,35 +112,7 @@ async function refreshInstanceServiceEntities(instanceServiceId: string): Promis
   if (!instance || !systemService) return;
 
   try {
-    // Resolve auth with inheritance: instanceService > systemService > instance
-    let auth: any = null;
-
-    if (instanceService.authType && instanceService.authType !== 'none') {
-      auth = {
-        type: instanceService.authType,
-        username: instanceService.username,
-        password: instanceService.password,
-        config: instanceService.authConfig,
-        credentials: instanceService.credentials,
-      };
-    } else if (systemService.authType && systemService.authType !== 'none') {
-      auth = {
-        type: systemService.authType,
-        username: systemService.username,
-        password: systemService.password,
-        config: systemService.authConfig,
-        credentials: systemService.credentials,
-      };
-    } else {
-      auth = {
-        type: instance.authType,
-        username: instance.username,
-        password: instance.password,
-        config: instance.authConfig,
-        credentials: instance.credentials,
-      };
-    }
-
+    const auth = await getAuthWithInheritance(instanceService, systemService, instance);
     const servicePath = instanceService.servicePathOverride || systemService.servicePath;
 
     const metadataResult = await metadataParser.fetchMetadata({
@@ -108,7 +139,6 @@ async function refreshInstanceServiceEntities(instanceServiceId: string): Promis
         entities: entityNames,
         verificationStatus: 'verified',
         lastVerifiedAt: new Date(),
-        entityCount: entityNames.length,
         verificationError: null,
       })
       .where(eq(instanceServices.id, instanceServiceId));
@@ -134,21 +164,8 @@ const instanceServiceSchema = z.object({
   instanceId: z.string().uuid(),
   systemServiceId: z.string().uuid(),
   servicePathOverride: z.string().optional(),
-  // Optional: per-instance entity list (null = inherit from systemService)
   entities: z.array(z.string()).optional().nullable(),
-  // Optional auth override
-  authType: z.enum(['none', 'basic', 'oauth2', 'custom']).optional(),
-  username: z.string().min(1).optional(),
-  password: z.string().min(1).optional(),
-  oauth2ClientId: z.string().min(1).optional(),
-  oauth2ClientSecret: z.string().min(1).optional(),
-  oauth2TokenUrl: z.string().url().optional(),
-  oauth2Scope: z.string().optional(),
-  oauth2AuthorizationUrl: z.string().url().optional(),
-  customHeaderName: z.string().min(1).optional(),
-  customHeaderValue: z.string().min(1).optional(),
-  authConfig: z.any().optional(),
-  credentials: z.any().optional(),
+  authConfigId: z.string().uuid().optional().nullable(),
 });
 
 // List instance services (optionally by instanceId or systemServiceId)
@@ -181,12 +198,27 @@ app.get('/', async (c) => {
     // Resolve entities: use instanceService.entities if set, otherwise inherit from systemService
     const resolvedEntities = is.entities !== null ? is.entities : (systemService?.entities || []);
 
-    const { username, password, credentials, ...safeIs } = is;
+    // Get auth config info if linked
+    let authConfigName: string | null = null;
+    let authType: string | null = null;
+
+    if (is.authConfigId) {
+      const config = await db.query.authConfigurations.findFirst({
+        where: eq(authConfigurations.id, is.authConfigId),
+        columns: { name: true, authType: true },
+      });
+      authConfigName = config?.name ?? null;
+      authType = config?.authType ?? null;
+    }
+
     return {
-      ...safeIs,
+      ...is,
       entities: resolvedEntities,
-      hasAuthOverride: !!is.authType,
+      entityCount: resolvedEntities.length,
+      hasAuthOverride: !!is.authConfigId,
       hasEntityOverride: is.entities !== null,
+      authConfigName,
+      authType,
       systemService: systemService ? {
         id: systemService.id,
         name: systemService.name,
@@ -213,6 +245,7 @@ app.get('/', async (c) => {
 
 // Create instance service
 app.post('/', async (c) => {
+  const organizationId = c.get('organizationId')!;
   const body = await c.req.json();
   const result = instanceServiceSchema.safeParse(body);
 
@@ -220,67 +253,19 @@ app.post('/', async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
-  const {
-    authType,
-    username,
-    password,
-    oauth2ClientId,
-    oauth2ClientSecret,
-    oauth2TokenUrl,
-    oauth2Scope,
-    oauth2AuthorizationUrl,
-    customHeaderName,
-    customHeaderValue,
-    authConfig,
-    credentials,
-    entities,
-    ...data
-  } = result.data;
-
-  const serviceData: any = {
-    ...data,
-    entities: entities !== undefined ? entities : null,
-    verificationStatus: 'pending',
-  };
-
-  if (authType) {
-    serviceData.authType = authType as any;
-
-    if (authType === 'basic' && username && password) {
-      serviceData.username = encryption.encrypt(username);
-      serviceData.password = encryption.encrypt(password);
-    } else if (authType === 'oauth2') {
-      serviceData.authConfig = {
-        tokenUrl: oauth2TokenUrl,
-        scope: oauth2Scope,
-        authorizationUrl: oauth2AuthorizationUrl,
-        clientId: oauth2ClientId,
-      };
-      serviceData.credentials = {
-        clientSecret: oauth2ClientSecret ? encryption.encrypt(oauth2ClientSecret) : undefined,
-      };
-    } else if (authType === 'custom') {
-      if (customHeaderName && customHeaderValue) {
-        serviceData.authConfig = { headerName: customHeaderName };
-        serviceData.credentials = { headerValue: encryption.encrypt(customHeaderValue) };
-      } else if (authConfig) {
-        serviceData.authConfig = authConfig;
-        if (credentials) {
-          const encryptedCredentials: any = {};
-          for (const [key, value] of Object.entries(credentials)) {
-            if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-              encryptedCredentials[key] = encryption.encrypt(value);
-            } else {
-              encryptedCredentials[key] = value;
-            }
-          }
-          serviceData.credentials = encryptedCredentials;
-        }
-      }
-    }
+  // Verify auth config belongs to organization (if specified)
+  if (!(await verifyAuthConfigOwnership(result.data.authConfigId, organizationId))) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
   }
 
-  const [newService] = await db.insert(instanceServices).values(serviceData).returning();
+  const [newService] = await db.insert(instanceServices).values({
+    instanceId: result.data.instanceId,
+    systemServiceId: result.data.systemServiceId,
+    servicePathOverride: result.data.servicePathOverride,
+    entities: result.data.entities ?? null,
+    authConfigId: result.data.authConfigId ?? null,
+    verificationStatus: 'pending',
+  }).returning();
 
   if (!newService) {
     return c.json({ error: 'Failed to create instance service' }, 500);
@@ -291,38 +276,52 @@ app.post('/', async (c) => {
     console.error('Auto-verification failed for instance service:', newService.id, err);
   });
 
-  const { username: _, password: __, credentials: ___, ...safeService } = newService;
-  return c.json(safeService, 201);
+  return c.json(newService, 201);
 });
 
 // Get single instance service
 app.get('/:id', async (c) => {
   const id = c.req.param('id');
-  
+
   const service = await db.query.instanceServices.findFirst({
     where: eq(instanceServices.id, id)
   });
-  
+
   if (!service) {
     return c.json({ error: 'Instance service not found' }, 404);
   }
-  
+
   const systemService = await db.query.systemServices.findFirst({
     where: eq(systemServices.id, service.systemServiceId)
   });
   const instance = await db.query.instances.findFirst({
     where: eq(instances.id, service.instanceId)
   });
-  
+
   // Resolve entities: use instanceService.entities if set, otherwise inherit from systemService
   const resolvedEntities = service.entities !== null ? service.entities : (systemService?.entities || []);
-  
-  const { username, password, credentials, ...safeService } = service;
+
+  // Get auth config info if linked
+  let authConfigName: string | null = null;
+  let authType: string | null = null;
+
+  if (service.authConfigId) {
+    const config = await db.query.authConfigurations.findFirst({
+      where: eq(authConfigurations.id, service.authConfigId),
+      columns: { name: true, authType: true },
+    });
+    authConfigName = config?.name ?? null;
+    authType = config?.authType ?? null;
+  }
+
   return c.json({
-    ...safeService,
+    ...service,
     entities: resolvedEntities,
-    hasAuthOverride: !!service.authType,
+    entityCount: resolvedEntities.length,
+    hasAuthOverride: !!service.authConfigId,
     hasEntityOverride: service.entities !== null,
+    authConfigName,
+    authType,
     systemService: systemService ? {
       id: systemService.id,
       name: systemService.name,
@@ -348,98 +347,26 @@ app.patch('/:id', requirePermission('service:update'), async (c) => {
   }
 
   const body = await c.req.json();
-  
+
   const updateSchema = z.object({
     servicePathOverride: z.string().optional().nullable(),
     entities: z.array(z.string()).optional().nullable(),
-    authType: z.enum(['none', 'basic', 'oauth2', 'custom']).optional().nullable(),
-    username: z.string().min(1).optional().nullable(),
-    password: z.string().min(1).optional().nullable(),
-    oauth2ClientId: z.string().min(1).optional(),
-    oauth2ClientSecret: z.string().min(1).optional(),
-    oauth2TokenUrl: z.string().url().optional(),
-    oauth2Scope: z.string().optional(),
-    oauth2AuthorizationUrl: z.string().url().optional(),
-    customHeaderName: z.string().min(1).optional(),
-    customHeaderValue: z.string().min(1).optional(),
-    authConfig: z.any().optional(),
-    credentials: z.any().optional(),
+    authConfigId: z.string().uuid().optional().nullable(),
   });
-  
+
   const result = updateSchema.safeParse(body);
 
   if (!result.success) {
     return c.json({ error: result.error }, 400);
   }
 
-  const {
-    authType,
-    username,
-    password,
-    oauth2ClientId,
-    oauth2ClientSecret,
-    oauth2TokenUrl,
-    oauth2Scope,
-    oauth2AuthorizationUrl,
-    customHeaderName,
-    customHeaderValue,
-    authConfig,
-    credentials,
-    entities,
-    ...data
-  } = result.data;
-
-  const updateData: any = { ...data };
-  
-  // Handle entities update
-  if (entities !== undefined) {
-    updateData.entities = entities;
-  }
-
-  if (authType !== undefined) {
-    updateData.authType = authType;
-    
-    if (authType === null || authType === 'none') {
-      updateData.username = null;
-      updateData.password = null;
-      updateData.authConfig = null;
-      updateData.credentials = null;
-    } else if (authType === 'basic') {
-      if (username) updateData.username = encryption.encrypt(username);
-      if (password) updateData.password = encryption.encrypt(password);
-    } else if (authType === 'oauth2') {
-      updateData.authConfig = {
-        tokenUrl: oauth2TokenUrl,
-        scope: oauth2Scope,
-        authorizationUrl: oauth2AuthorizationUrl,
-        clientId: oauth2ClientId,
-      };
-      if (oauth2ClientSecret) {
-        updateData.credentials = { clientSecret: encryption.encrypt(oauth2ClientSecret) };
-      }
-    } else if (authType === 'custom') {
-      if (customHeaderName && customHeaderValue) {
-        updateData.authConfig = { headerName: customHeaderName };
-        updateData.credentials = { headerValue: encryption.encrypt(customHeaderValue) };
-      } else if (authConfig) {
-        updateData.authConfig = authConfig;
-        if (credentials) {
-          const encryptedCredentials: any = {};
-          for (const [key, value] of Object.entries(credentials)) {
-            if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-              encryptedCredentials[key] = encryption.encrypt(value);
-            } else {
-              encryptedCredentials[key] = value;
-            }
-          }
-          updateData.credentials = encryptedCredentials;
-        }
-      }
-    }
+  // Verify auth config belongs to organization (if specified)
+  if (result.data.authConfigId !== undefined && !(await verifyAuthConfigOwnership(result.data.authConfigId, organizationId))) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
   }
 
   const [updated] = await db.update(instanceServices)
-    .set(updateData)
+    .set(result.data)
     .where(eq(instanceServices.id, id))
     .returning();
 
@@ -447,8 +374,7 @@ app.patch('/:id', requirePermission('service:update'), async (c) => {
     return c.json({ error: 'Instance service not found' }, 404);
   }
 
-  const { username: _, password: __, credentials: ___, ...safeService } = updated;
-  return c.json(safeService);
+  return c.json(updated);
 });
 
 // Delete instance service
@@ -483,16 +409,16 @@ app.delete('/:id', async (c) => {
 // Refresh entities for an instance service
 app.post('/:id/refresh-entities', async (c) => {
   const id = c.req.param('id');
-  
+
   // Get the instance service
   const instanceService = await db.query.instanceServices.findFirst({
     where: eq(instanceServices.id, id)
   });
-  
+
   if (!instanceService) {
     return c.json({ error: 'Instance service not found' }, 404);
   }
-  
+
   // Get the associated instance and system service
   const [instance, systemService] = await Promise.all([
     db.query.instances.findFirst({
@@ -502,58 +428,26 @@ app.post('/:id/refresh-entities', async (c) => {
       where: eq(systemServices.id, instanceService.systemServiceId)
     })
   ]);
-  
+
   if (!instance) {
     return c.json({ error: 'Instance not found' }, 404);
   }
-  
+
   if (!systemService) {
     return c.json({ error: 'System service not found' }, 404);
   }
-  
+
   try {
-    // Resolve auth with inheritance: instanceService > systemService > instance
-    let auth: any = null;
-    
-    if (instanceService.authType && instanceService.authType !== 'none') {
-      // Use instance-service-level auth (highest priority)
-      auth = {
-        type: instanceService.authType,
-        username: instanceService.username,
-        password: instanceService.password,
-        config: instanceService.authConfig,
-        credentials: instanceService.credentials,
-      };
-    } else if (systemService.authType && systemService.authType !== 'none') {
-      // Use service-level auth
-      auth = {
-        type: systemService.authType,
-        username: systemService.username,
-        password: systemService.password,
-        config: systemService.authConfig,
-        credentials: systemService.credentials,
-      };
-    } else {
-      // Use instance-level auth (default)
-      auth = {
-        type: instance.authType,
-        username: instance.username,
-        password: instance.password,
-        config: instance.authConfig,
-        credentials: instance.credentials,
-      };
-    }
-    
-    // Determine service path: use override if set, otherwise use systemService path
+    const auth = await getAuthWithInheritance(instanceService, systemService, instance);
     const servicePath = instanceService.servicePathOverride || systemService.servicePath;
-    
+
     // Fetch metadata from the specific instance
     const metadataResult = await metadataParser.fetchMetadata({
       baseUrl: instance.baseUrl,
       servicePath,
       auth,
     });
-    
+
     if (metadataResult.error) {
       // Update verification status to failed
       await db.update(instanceServices)
@@ -580,7 +474,6 @@ app.post('/:id/refresh-entities', async (c) => {
         entities: entityNames,
         verificationStatus: 'verified',
         lastVerifiedAt: new Date(),
-        entityCount: entityNames.length,
         verificationError: null,
       })
       .where(eq(instanceServices.id, id))
@@ -597,14 +490,13 @@ app.post('/:id/refresh-entities', async (c) => {
         .where(eq(systemServices.id, systemService.id));
     }
 
-    const { username: _, password: __, credentials: ___, ...safeService } = updated;
-
     // Resolve entities for response
     const resolvedEntities = updated.entities !== null ? updated.entities : (systemService.entities || []);
 
     return c.json({
-      ...safeService,
+      ...updated,
       entities: resolvedEntities,
+      entityCount: resolvedEntities.length,
       refreshedCount: entityNames.length,
       odataVersion: metadataResult.odataVersion || systemService.odataVersion,
     });
@@ -688,34 +580,8 @@ app.post('/:id/test', async (c) => {
     }, 404);
   }
 
-  // Resolve auth with inheritance: instanceService > systemService > instance
-  let auth: ResolvedAuthConfig;
-
-  if (instanceService.authType && instanceService.authType !== 'none') {
-    auth = {
-      type: instanceService.authType,
-      username: instanceService.username,
-      password: instanceService.password,
-      config: instanceService.authConfig,
-      credentials: instanceService.credentials,
-    };
-  } else if (systemService.authType && systemService.authType !== 'none') {
-    auth = {
-      type: systemService.authType,
-      username: systemService.username,
-      password: systemService.password,
-      config: systemService.authConfig,
-      credentials: systemService.credentials,
-    };
-  } else {
-    auth = {
-      type: instance.authType,
-      username: instance.username,
-      password: instance.password,
-      config: instance.authConfig,
-      credentials: instance.credentials,
-    };
-  }
+  // Resolve auth with inheritance
+  const auth = await getAuthWithInheritance(instanceService, systemService, instance);
 
   // Build path
   const servicePath = instanceService.servicePathOverride || systemService.servicePath;
@@ -766,7 +632,7 @@ app.post('/:id/test', async (c) => {
       request: {
         method: 'GET',
         url: `${instance.baseUrl}${fullPath}`,
-        authType: auth.type,
+        authType: auth?.type || 'none',
       }
     });
   } catch (error: any) {
@@ -784,7 +650,7 @@ app.post('/:id/test', async (c) => {
       request: {
         method: 'GET',
         url: `${instance.baseUrl}${fullPath}`,
-        authType: auth.type,
+        authType: auth?.type || 'none',
       }
     });
   }

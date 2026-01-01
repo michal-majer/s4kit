@@ -1,0 +1,348 @@
+import { Hono } from 'hono';
+import { db, authConfigurations, instances, systemServices, instanceServices } from '../../db';
+import { encryption } from '@s4kit/shared/services';
+import { z } from 'zod';
+import { desc, eq, and, count, or } from 'drizzle-orm';
+import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
+
+const app = new Hono<{ Variables: SessionVariables }>();
+
+// Zod schema for creating/updating auth configurations
+const authConfigSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().max(500).optional().nullable(),
+  authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).default('basic'),
+
+  // Basic auth fields
+  username: z.string().min(1).optional(),
+  password: z.string().min(1).optional(),
+
+  // API Key auth fields
+  apiKey: z.string().min(1).optional(),
+  apiKeyHeaderName: z.string().optional(),
+
+  // OAuth2 auth fields
+  oauth2ClientId: z.string().min(1).optional(),
+  oauth2ClientSecret: z.string().min(1).optional(),
+  oauth2TokenUrl: z.string().url().optional(),
+  oauth2Scope: z.string().optional(),
+  oauth2AuthorizationUrl: z.string().url().optional(),
+
+  // Custom auth fields
+  customHeaderName: z.string().min(1).optional(),
+  customHeaderValue: z.string().min(1).optional(),
+
+  // Raw config/credentials (for advanced use cases)
+  authConfig: z.any().optional(),
+  credentials: z.any().optional(),
+}).refine((data) => {
+  if (data.authType === 'none') return true;
+  if (data.authType === 'basic') return !!(data.username && data.password);
+  if (data.authType === 'api_key') return !!data.apiKey;
+  if (data.authType === 'oauth2') return !!(data.oauth2ClientId && data.oauth2ClientSecret && data.oauth2TokenUrl);
+  if (data.authType === 'custom') return !!(data.customHeaderName && data.customHeaderValue) || !!(data.authConfig && data.credentials);
+  return true;
+}, {
+  message: 'Required authentication fields are missing for the selected auth type',
+  path: ['authType']
+});
+
+// Helper to build auth config and credentials from form data
+function buildAuthData(data: z.infer<typeof authConfigSchema>) {
+  const {
+    authType,
+    username,
+    password,
+    apiKey,
+    apiKeyHeaderName,
+    oauth2ClientId,
+    oauth2ClientSecret,
+    oauth2TokenUrl,
+    oauth2Scope,
+    oauth2AuthorizationUrl,
+    customHeaderName,
+    customHeaderValue,
+    authConfig,
+    credentials,
+    ...rest
+  } = data;
+
+  const result: any = {
+    ...rest,
+    authType,
+    username: null,
+    password: null,
+    authConfig: null,
+    credentials: null,
+  };
+
+  if (authType === 'basic' && username && password) {
+    result.username = encryption.encrypt(username);
+    result.password = encryption.encrypt(password);
+  } else if (authType === 'api_key' && apiKey) {
+    result.authConfig = {
+      headerName: apiKeyHeaderName || 'X-API-Key',
+    };
+    result.credentials = {
+      apiKey: encryption.encrypt(apiKey),
+    };
+  } else if (authType === 'oauth2') {
+    result.authConfig = {
+      tokenUrl: oauth2TokenUrl,
+      scope: oauth2Scope,
+      authorizationUrl: oauth2AuthorizationUrl,
+      clientId: oauth2ClientId,
+    };
+    result.credentials = {
+      clientSecret: oauth2ClientSecret ? encryption.encrypt(oauth2ClientSecret) : undefined,
+    };
+  } else if (authType === 'custom') {
+    if (customHeaderName && customHeaderValue) {
+      result.authConfig = {
+        headerName: customHeaderName,
+      };
+      result.credentials = {
+        headerValue: encryption.encrypt(customHeaderValue),
+      };
+    } else if (authConfig) {
+      result.authConfig = authConfig;
+      if (credentials) {
+        const encryptedCredentials: any = {};
+        for (const [key, value] of Object.entries(credentials)) {
+          if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
+            encryptedCredentials[key] = encryption.encrypt(value);
+          } else {
+            encryptedCredentials[key] = value;
+          }
+        }
+        result.credentials = encryptedCredentials;
+      }
+    }
+  }
+
+  return result;
+}
+
+// Safe representation (without secrets)
+function toSafeAuthConfig(config: typeof authConfigurations.$inferSelect) {
+  const { username, password, credentials, ...safe } = config;
+  return {
+    ...safe,
+    hasCredentials: !!(username || password || credentials),
+  };
+}
+
+// List auth configurations for organization
+app.get('/', requirePermission('system:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+
+  const configs = await db.query.authConfigurations.findMany({
+    where: eq(authConfigurations.organizationId, organizationId),
+    orderBy: [desc(authConfigurations.createdAt)],
+  });
+
+  return c.json(configs.map(toSafeAuthConfig));
+});
+
+// Create auth configuration
+app.post('/', requirePermission('system:create'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const body = await c.req.json();
+  const result = authConfigSchema.safeParse(body);
+
+  if (!result.success) {
+    return c.json({ error: result.error }, 400);
+  }
+
+  const authData = buildAuthData(result.data);
+
+  try {
+    const [newConfig] = await db.insert(authConfigurations).values({
+      ...authData,
+      organizationId,
+    }).returning();
+
+    if (!newConfig) {
+      return c.json({ error: 'Failed to create auth configuration' }, 500);
+    }
+
+    return c.json(toSafeAuthConfig(newConfig), 201);
+  } catch (error: any) {
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      return c.json({ error: 'An auth configuration with this name already exists' }, 409);
+    }
+    throw error;
+  }
+});
+
+// Get single auth configuration
+app.get('/:id', requirePermission('system:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const id = c.req.param('id');
+
+  const config = await db.query.authConfigurations.findFirst({
+    where: and(
+      eq(authConfigurations.id, id),
+      eq(authConfigurations.organizationId, organizationId)
+    ),
+  });
+
+  if (!config) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
+  }
+
+  return c.json(toSafeAuthConfig(config));
+});
+
+// Update auth configuration
+app.patch('/:id', requirePermission('system:update'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+
+  // Verify config belongs to organization
+  const existing = await db.query.authConfigurations.findFirst({
+    where: and(
+      eq(authConfigurations.id, id),
+      eq(authConfigurations.organizationId, organizationId)
+    ),
+  });
+
+  if (!existing) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
+  }
+
+  const updateSchema = authConfigSchema.partial();
+  const result = updateSchema.safeParse(body);
+
+  if (!result.success) {
+    return c.json({ error: result.error }, 400);
+  }
+
+  // Merge with existing data for auth type validation
+  const merged = {
+    name: result.data.name ?? existing.name,
+    description: result.data.description ?? existing.description,
+    authType: result.data.authType ?? existing.authType,
+    ...result.data,
+  };
+
+  const authData = buildAuthData(merged as z.infer<typeof authConfigSchema>);
+
+  try {
+    const [updated] = await db.update(authConfigurations)
+      .set({
+        ...authData,
+        updatedAt: new Date(),
+      })
+      .where(eq(authConfigurations.id, id))
+      .returning();
+
+    if (!updated) {
+      return c.json({ error: 'Auth configuration not found' }, 404);
+    }
+
+    return c.json(toSafeAuthConfig(updated));
+  } catch (error: any) {
+    if (error.code === '23505') {
+      return c.json({ error: 'An auth configuration with this name already exists' }, 409);
+    }
+    throw error;
+  }
+});
+
+// Get usage count for an auth configuration
+app.get('/:id/usage', requirePermission('system:read'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const id = c.req.param('id');
+
+  // Verify config belongs to organization
+  const existing = await db.query.authConfigurations.findFirst({
+    where: and(
+      eq(authConfigurations.id, id),
+      eq(authConfigurations.organizationId, organizationId)
+    ),
+  });
+
+  if (!existing) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
+  }
+
+  // Count usage across instances, systemServices, and instanceServices
+  const [instanceCount] = await db.select({ count: count() })
+    .from(instances)
+    .where(eq(instances.authConfigId, id));
+
+  const [systemServiceCount] = await db.select({ count: count() })
+    .from(systemServices)
+    .where(eq(systemServices.authConfigId, id));
+
+  const [instanceServiceCount] = await db.select({ count: count() })
+    .from(instanceServices)
+    .where(eq(instanceServices.authConfigId, id));
+
+  return c.json({
+    instances: instanceCount?.count ?? 0,
+    systemServices: systemServiceCount?.count ?? 0,
+    instanceServices: instanceServiceCount?.count ?? 0,
+    total: (instanceCount?.count ?? 0) + (systemServiceCount?.count ?? 0) + (instanceServiceCount?.count ?? 0),
+  });
+});
+
+// Delete auth configuration
+app.delete('/:id', requirePermission('system:delete'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const id = c.req.param('id');
+
+  // Verify config belongs to organization
+  const existing = await db.query.authConfigurations.findFirst({
+    where: and(
+      eq(authConfigurations.id, id),
+      eq(authConfigurations.organizationId, organizationId)
+    ),
+  });
+
+  if (!existing) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
+  }
+
+  // Check for usage
+  const [instanceCount] = await db.select({ count: count() })
+    .from(instances)
+    .where(eq(instances.authConfigId, id));
+
+  const [systemServiceCount] = await db.select({ count: count() })
+    .from(systemServices)
+    .where(eq(systemServices.authConfigId, id));
+
+  const [instanceServiceCount] = await db.select({ count: count() })
+    .from(instanceServices)
+    .where(eq(instanceServices.authConfigId, id));
+
+  const totalUsage = (instanceCount?.count ?? 0) + (systemServiceCount?.count ?? 0) + (instanceServiceCount?.count ?? 0);
+
+  if (totalUsage > 0) {
+    return c.json({
+      error: 'Cannot delete auth configuration',
+      message: `Configuration is in use by ${totalUsage} resource(s). Remove all references first.`,
+      usage: {
+        instances: instanceCount?.count ?? 0,
+        systemServices: systemServiceCount?.count ?? 0,
+        instanceServices: instanceServiceCount?.count ?? 0,
+      },
+    }, 409);
+  }
+
+  const [deleted] = await db.delete(authConfigurations)
+    .where(eq(authConfigurations.id, id))
+    .returning();
+
+  if (!deleted) {
+    return c.json({ error: 'Auth configuration not found' }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
+export default app;

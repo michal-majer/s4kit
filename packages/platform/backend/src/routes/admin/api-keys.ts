@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { db, apiKeys, apiKeyAccess, instanceServices, instances, systemServices, systems } from '../../db';
+import { db, apiKeys, apiKeyAccess, instanceServices, instances, systemServices, systems, authConfigurations } from '../../db';
 import { apiKeyService } from '../../services/api-key';
 import { metadataParser, type ODataEntityType } from '../../services/metadata-parser';
 import { generateTypeScriptFile, filterEntityTypes } from '../../services/type-generator';
@@ -707,36 +707,49 @@ app.delete('/:id', requirePermission('apiKey:delete'), async (c) => {
 });
 
 /**
- * Resolve auth configuration with inheritance logic (same as proxy route)
+ * Get auth from authConfigId
  */
-function resolveAuth(instance: Instance, systemService: SystemService, instanceService: InstanceService) {
-  if (instanceService.authType) {
-    return {
-      type: instanceService.authType,
-      username: instanceService.username,
-      password: instanceService.password,
-      config: instanceService.authConfig,
-      credentials: instanceService.credentials,
-    };
-  }
-  // Check service-level auth
-  if (systemService.authType) {
-    return {
-      type: systemService.authType,
-      username: systemService.username,
-      password: systemService.password,
-      config: systemService.authConfig,
-      credentials: systemService.credentials,
-    };
-  }
-  // Inherit from instance
+async function getAuthFromConfigId(authConfigId: string | null) {
+  if (!authConfigId) return null;
+
+  const config = await db.query.authConfigurations.findFirst({
+    where: eq(authConfigurations.id, authConfigId),
+  });
+
+  if (!config || config.authType === 'none') return null;
+
   return {
-    type: instance.authType,
-    username: instance.username,
-    password: instance.password,
-    config: instance.authConfig,
-    credentials: instance.credentials,
+    type: config.authType,
+    username: config.username,
+    password: config.password,
+    config: config.authConfig,
+    credentials: config.credentials,
   };
+}
+
+/**
+ * Resolve auth configuration with inheritance logic (same as proxy route)
+ * Priority: instanceService > systemService > instance
+ */
+async function resolveAuth(instance: Instance, systemService: SystemService, instanceService: InstanceService) {
+  // Priority 1: Instance service auth
+  if (instanceService.authConfigId) {
+    const auth = await getAuthFromConfigId(instanceService.authConfigId);
+    if (auth) return auth;
+  }
+
+  // Priority 2: System service auth
+  if (systemService.authConfigId) {
+    const auth = await getAuthFromConfigId(systemService.authConfigId);
+    if (auth) return auth;
+  }
+
+  // Priority 3: Instance auth (fallback)
+  if (instance.authConfigId) {
+    return getAuthFromConfigId(instance.authConfigId);
+  }
+
+  return null;
 }
 
 // Generate TypeScript types for API key
@@ -791,7 +804,7 @@ app.get('/:id/types', requirePermission('apiKey:read'), async (c) => {
       }
       
       // Resolve auth configuration
-      const authConfig = resolveAuth(inst, svc, instService);
+      const authConfig = await resolveAuth(inst, svc, instService);
       
       // Determine service path (instance override or system service default)
       const servicePath = instService.servicePathOverride || svc.servicePath;

@@ -124,11 +124,10 @@ export const apiKeyService = {
       return { valid: false, error: 'Key has expired' };
     }
     
-    // Update last used timestamp and IP (fire and forget)
+    // Update last used timestamp (fire and forget)
     db.update(apiKeys)
-      .set({ 
+      .set({
         lastUsedAt: new Date(),
-        lastUsedIp: clientIp,
         usageCount: result.usageCount + 1
       })
       .where(eq(apiKeys.id, result.id))

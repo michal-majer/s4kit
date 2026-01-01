@@ -6,6 +6,7 @@ export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox'
 export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
 export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extended']);
 export const odataVersionEnum = pgEnum('odata_version', ['v2', 'v4']);
+export const verificationStatusEnum = pgEnum('verification_status', ['pending', 'verified', 'failed']);
 
 // Organizations table
 export const organizations = pgTable('organizations', {
@@ -17,9 +18,36 @@ export const organizations = pgTable('organizations', {
   logRetentionDays: integer('log_retention_days').default(90).notNull(),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Systems table (replaces connections)
+// Auth Configurations - reusable auth configs that can be shared across instances/services
+export const authConfigurations = pgTable('auth_configurations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
+
+  // Display info
+  name: varchar('name', { length: 255 }).notNull(), // e.g., 'prod-oauth', 'dev-basic'
+  description: varchar('description', { length: 500 }),
+
+  // Auth type and credentials
+  authType: authTypeEnum('auth_type').default('basic').notNull(),
+  username: varchar('username', { length: 255 }), // encrypted
+  password: varchar('password', { length: 500 }), // encrypted
+
+  // Flexible storage for complex auth settings (tokenUrl, scope, headerName, clientId)
+  authConfig: jsonb('auth_config'),
+
+  // Sensitive credentials (clientSecret, apiKey, headerValue) - encrypted
+  credentials: jsonb('credentials'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueOrgName: unique().on(table.organizationId, table.name),
+}));
+
+// Systems table
 export const systems = pgTable('systems', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
@@ -38,18 +66,8 @@ export const instances = pgTable('instances', {
   environment: instanceEnvironmentEnum('environment').notNull(),
   baseUrl: varchar('base_url', { length: 500 }).notNull(),
 
-  // Auth configuration for this instance
-  authType: authTypeEnum('auth_type').default('basic').notNull(),
-
-  // Basic auth fields
-  username: varchar('username', { length: 255 }), // encrypted
-  password: varchar('password', { length: 500 }), // encrypted
-
-  // Flexible storage for complex auth settings (tokenUrl, scope, headerName, clientId)
-  authConfig: jsonb('auth_config'),
-
-  // Sensitive credentials (clientSecret, privateKey, certificates, tokens) - encrypted
-  credentials: jsonb('credentials'),
+  // Auth configuration - reference to reusable auth config (nullable = no auth / inherit)
+  authConfigId: uuid('auth_config_id').references(() => authConfigurations.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -90,12 +108,8 @@ export const systemServices = pgTable('system_services', {
   // OData version (null = unknown/not detected, inherited from predefinedService or auto-detected)
   odataVersion: odataVersionEnum('odata_version'),
 
-  // Optional service-level auth (used as default when linked to instances)
-  authType: authTypeEnum('auth_type'), // null = inherit from instance
-  username: varchar('username', { length: 255 }), // encrypted
-  password: varchar('password', { length: 500 }), // encrypted
-  authConfig: jsonb('auth_config'),
-  credentials: jsonb('credentials'),
+  // Optional service-level auth - reference to reusable auth config
+  authConfigId: uuid('auth_config_id').references(() => authConfigurations.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -115,18 +129,13 @@ export const instanceServices = pgTable('instance_services', {
   // Optional: per-instance entity list (null = inherit from systemService)
   entities: jsonb('entities').$type<string[] | null>(),
 
-  // Optional: per-instance-service authentication override
-  authType: authTypeEnum('auth_type'), // null = inherit from systemService or instance
-  username: varchar('username', { length: 255 }), // encrypted
-  password: varchar('password', { length: 500 }), // encrypted
-  authConfig: jsonb('auth_config'),
-  credentials: jsonb('credentials'),
+  // Optional: per-instance-service auth override - reference to reusable auth config
+  authConfigId: uuid('auth_config_id').references(() => authConfigurations.id, { onDelete: 'set null' }),
 
   // Verification status fields
-  verificationStatus: varchar('verification_status', { length: 20 }), // 'pending', 'verified', 'failed'
+  verificationStatus: verificationStatusEnum('verification_status'),
   lastVerifiedAt: timestamp('last_verified_at'),
   verificationError: varchar('verification_error', { length: 500 }),
-  entityCount: integer('entity_count'), // cached count for quick display
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
@@ -164,7 +173,6 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'), // References users.id (no FK to avoid circular deps)
   lastUsedAt: timestamp('last_used_at'),
-  lastUsedIp: varchar('last_used_ip', { length: 45 }),
   usageCount: integer('usage_count').default(0).notNull(),
 });
 

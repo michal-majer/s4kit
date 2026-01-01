@@ -53,7 +53,7 @@ interface FetchMetadataOptions {
     password?: string | null;
     config?: any;
     credentials?: any;
-  };
+  } | null;
 }
 
 /**
