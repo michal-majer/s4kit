@@ -119,7 +119,7 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     needs: [test, build]
-    if: github.ref == 'refs/heads/main'
+    if: false  # Disabled until monorepo Docker setup is configured
     steps:
       - uses: actions/checkout@v4
 
