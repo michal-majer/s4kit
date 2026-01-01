@@ -87,6 +87,7 @@ jobs:
       - name: Run Backend tests (unit only)
         run: cd packages/platform/backend && bun test test/unit
         env:
+          DATABASE_URL: postgresql://s4kit:s4kit_test_password@localhost:5432/s4kit_test
           ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
 
       - name: Run Proxy tests
