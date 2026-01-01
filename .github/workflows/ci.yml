@@ -85,7 +85,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
 
       - name: Setup database schema
-        run: cd packages/platform/backend && bun run db:push
+        run: cd packages/platform/backend && npx drizzle-kit push --force
         env:
           DATABASE_URL: postgresql://s4kit:s4kit_test_password@localhost:5432/s4kit_test
 
