@@ -10,6 +10,12 @@
     "build": "bun run build --filter '*'",
     "test": "bun test"
   },
+  "dependencies": {
+    "drizzle-orm": "0.45.1"
+  },
+  "overrides": {
+    "drizzle-orm": "0.45.1"
+  },
   "devDependencies": {
     "typescript": "^5.3.3",
     "@types/node": "^20.11.0",
