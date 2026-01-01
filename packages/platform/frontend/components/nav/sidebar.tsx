@@ -71,12 +71,15 @@ export function Sidebar({ user }: SidebarProps) {
   const { organizationName } = useAuth();
 
   useEffect(() => {
-    setMounted(true);
     // Fetch platform info
     api.platform.getInfo()
-      .then(setPlatformInfo)
+      .then((info) => {
+        setPlatformInfo(info);
+        setMounted(true);
+      })
       .catch(() => {
         // Silently fail - standalone is the default
+        setMounted(true);
       });
   }, []);
 
@@ -86,7 +89,7 @@ export function Sidebar({ user }: SidebarProps) {
       toast.success('Signed out successfully');
       router.push('/login');
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error('Failed to sign out');
     }
   };

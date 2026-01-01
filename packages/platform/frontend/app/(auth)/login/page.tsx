@@ -35,8 +35,9 @@ export default function LoginPage() {
       toast.success('Welcome back!');
       router.push('/');
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Login failed');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Login failed';
+      toast.error(message);
       setLoading(false);
     }
   };
@@ -47,8 +48,9 @@ export default function LoginPage() {
         provider,
         callbackURL: '/',
       });
-    } catch (error: any) {
-      toast.error(error.message || `Failed to sign in with ${provider}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Failed to sign in with ${provider}`;
+      toast.error(message);
     }
   };
 

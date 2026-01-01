@@ -26,8 +26,9 @@ export function ServicePreview({ system, service }: ServicePreviewProps) {
       const result = await api.systemServices.refreshEntities(service.id);
       toast.success(`Refreshed ${result.refreshedCount || result.entities?.length || 0} entities`);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to refresh entities');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh entities';
+      toast.error(message);
     } finally {
       setRefreshing(false);
     }
@@ -122,7 +123,7 @@ export function ServicePreview({ system, service }: ServicePreviewProps) {
               <div className="text-center py-8 text-muted-foreground border rounded-lg">
                 <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No entities found</p>
-                <p className="text-sm mt-1">Click "Refresh Entities" to fetch entities from the service metadata</p>
+                <p className="text-sm mt-1">Click &quot;Refresh Entities&quot; to fetch entities from the service metadata</p>
               </div>
             )}
           </div>

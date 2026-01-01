@@ -62,7 +62,7 @@ export function CreateSystemDialog() {
       setOpen(false);
       setFormData({ name: '', type: '', description: '' });
       router.push(`/systems/${newSystem.id}`);
-    } catch (error) {
+    } catch {
       toast.error('Failed to create system');
     } finally {
       setLoading(false);

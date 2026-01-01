@@ -7,7 +7,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { sql, or, like, eq, ne, and } from 'drizzle-orm';
+import { or, like, ne, and } from 'drizzle-orm';
 import { organizations } from '@s4kit/shared/db/schema';
 
 // Main s4kit organization ID that should never be deleted

@@ -22,7 +22,7 @@ export function SelectFilter<T>({ config, value, onChange, data }: SelectFilterP
     return typeof config.options === 'function'
       ? config.options(data)
       : config.options;
-  }, [config.options, data]);
+  }, [config, data]);
 
   return (
     <Select value={value || config.allValue || ''} onValueChange={onChange}>

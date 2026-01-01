@@ -85,10 +85,13 @@ export function AccessGrantCard({
   onTogglePermission,
   isSaving,
 }: AccessGrantCardProps) {
-  const entities = grant.systemService?.entities
-    || grant.instanceService?.entities
-    || grant.instanceService?.systemService?.entities
-    || [];
+  const entities = useMemo(() =>
+    grant.systemService?.entities
+      || grant.instanceService?.entities
+      || grant.instanceService?.systemService?.entities
+      || [],
+    [grant.systemService?.entities, grant.instanceService?.entities, grant.instanceService?.systemService?.entities]
+  );
   const entityCount = entities.length;
   const env = grant.instance?.environment
     || grant.instanceService?.instance?.environment

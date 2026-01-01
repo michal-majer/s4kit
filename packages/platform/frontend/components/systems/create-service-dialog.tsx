@@ -173,8 +173,9 @@ export function CreateServiceDialog({
       setServiceSearch('');
       setSelectedInstanceIds(instanceId ? [instanceId] : []);
       onCreated?.();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to add services');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add services';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -214,8 +215,9 @@ export function CreateServiceDialog({
       setCustomService({ name: '', alias: '', servicePath: '', description: '' });
       setSelectedInstanceIds([]);
       onCreated?.();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create service');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create service';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

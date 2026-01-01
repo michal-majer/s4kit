@@ -69,8 +69,8 @@ export function ImportBindingDialog({
       setImportedConfig(result.config);
       toast.success('Service binding imported successfully');
       onImported?.(result.config);
-    } catch (error: any) {
-      const message = error.message || 'Failed to import service binding';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import service binding';
       toast.error(message);
     } finally {
       setLoading(false);

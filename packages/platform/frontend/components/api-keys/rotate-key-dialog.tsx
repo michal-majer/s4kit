@@ -43,8 +43,9 @@ export function RotateKeyDialog({
       });
       setNewKey(result.newKey.secretKey);
       toast.success(`API key rotated: ${result.newKey.displayKey}`);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to rotate API key');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rotate API key';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -124,7 +125,7 @@ export function RotateKeyDialog({
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Leave empty to use "{apiKey.name} (Rotated)"
+              Leave empty to use &quot;{apiKey.name} (Rotated)&quot;
             </p>
           </div>
 

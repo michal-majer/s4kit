@@ -41,7 +41,9 @@ export function TwoFactorSettings({ enabled: initialEnabled = false }: TwoFactor
 
   // Mock secret for demo
   const mockSecret = 'JBSWY3DPEHPK3PXP';
-  const mockQRCode = `otpauth://totp/S4Kit:user@example.com?secret=${mockSecret}&issuer=S4Kit`;
+  // QR code URL for 2FA setup (will be used when 2FA is implemented)
+  const _mockQRCode = `otpauth://totp/S4Kit:user@example.com?secret=${mockSecret}&issuer=S4Kit`;
+  void _mockQRCode;
 
   const handleToggle = () => {
     if (enabled) {

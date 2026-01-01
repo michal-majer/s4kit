@@ -38,7 +38,7 @@ export default function AuthLayout({
         <div className="relative space-y-6">
           <blockquote className="space-y-4">
             <p className="text-2xl font-medium text-white/90 leading-relaxed">
-              "S4Kit transformed how we integrate with SAP. What used to take weeks now takes hours."
+              &quot;S4Kit transformed how we integrate with SAP. What used to take weeks now takes hours.&quot;
             </p>
             <footer className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm ring-1 ring-white/20" />

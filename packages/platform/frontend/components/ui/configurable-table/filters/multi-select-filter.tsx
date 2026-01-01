@@ -16,7 +16,7 @@ export function MultiSelectFilter<T>({ config, value, onChange, data }: MultiSel
     return typeof config.options === 'function'
       ? config.options(data)
       : config.options;
-  }, [config.options, data]);
+  }, [config, data]);
 
   return (
     <div style={{ width: config.width || '220px' }}>

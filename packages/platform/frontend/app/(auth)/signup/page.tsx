@@ -54,8 +54,9 @@ export default function SignUpPage() {
 
       toast.success('Account created! Please check your email to verify.');
       router.push('/login');
-    } catch (error: any) {
-      toast.error(error.message || 'Sign up failed');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Sign up failed';
+      toast.error(message);
       setLoading(false);
     }
   };

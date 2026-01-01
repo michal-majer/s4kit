@@ -13,8 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
-import { Filter, X, RotateCcw } from 'lucide-react';
-import type { ErrorCategory, Operation } from '@/lib/api';
+import { Filter, RotateCcw } from 'lucide-react';
 
 interface LogsFiltersProps {
   apiKeys?: Array<{ id: string; name: string }>;

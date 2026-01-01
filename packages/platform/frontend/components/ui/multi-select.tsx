@@ -111,7 +111,7 @@ export function MultiSelect({
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
-                      removeOption(opt.value, e as any)
+                      removeOption(opt.value, e as unknown as React.MouseEvent)
                     }
                   }}
                   onMouseDown={(e) => {

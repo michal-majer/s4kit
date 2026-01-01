@@ -59,8 +59,9 @@ export function LinkServiceToInstanceDialog({
         try {
           await api.instanceServices.refreshEntities(result.id);
           toast.success('Service linked and entities synced');
-        } catch (error: any) {
-          toast.warning('Service linked, but failed to sync entities: ' + (error.message || 'Unknown error'));
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          toast.warning('Service linked, but failed to sync entities: ' + errorMessage);
         }
       } else {
         toast.success('Service linked');
@@ -71,8 +72,9 @@ export function LinkServiceToInstanceDialog({
       setSyncEntities(true);
       if (onLinked) onLinked();
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to link service');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to link service';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

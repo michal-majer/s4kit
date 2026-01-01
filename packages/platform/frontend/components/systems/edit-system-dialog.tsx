@@ -44,7 +44,7 @@ export function EditSystemDialog({ system, open, onOpenChange }: EditSystemDialo
       toast.success('System updated');
       onOpenChange(false);
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error('Failed to update system');
     } finally {
       setLoading(false);

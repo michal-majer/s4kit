@@ -1,7 +1,8 @@
-import libs from 'libsodium-wrappers';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
-// Initialize libsodium
-await libs.ready;
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 12; // GCM standard
+const AUTH_TAG_LENGTH = 16;
 
 /**
  * Convert encryption key to 32-byte buffer
@@ -15,7 +16,7 @@ await libs.ready;
  *
  * @throws Error if key format is invalid or key length is incorrect
  */
-function getEncryptionKey(): Uint8Array {
+function getEncryptionKey(): Buffer {
   const keyString = process.env.ENCRYPTION_KEY;
 
   if (!keyString) {
@@ -27,11 +28,10 @@ function getEncryptionKey(): Uint8Array {
 
   // Try hex first (64 hex characters = 32 bytes) - RECOMMENDED
   if (/^[0-9a-fA-F]{64}$/.test(keyString)) {
-    return libs.from_hex(keyString);
+    return Buffer.from(keyString, 'hex');
   }
 
   // Try base64 (44 base64 characters = 32 bytes)
-  // Base64 encoding of 32 bytes: 32 * 4/3 = 42.67, rounded up = 44 chars (with padding)
   if (/^[A-Za-z0-9+/]{43}=$/.test(keyString) || /^[A-Za-z0-9+/]{44}$/.test(keyString)) {
     try {
       const decoded = Buffer.from(keyString, 'base64');
@@ -39,9 +39,9 @@ function getEncryptionKey(): Uint8Array {
         if (process.env.NODE_ENV === 'production') {
           console.warn('ENCRYPTION_KEY: Using base64 format. For production, prefer hex-encoded keys.');
         }
-        return new Uint8Array(decoded);
+        return decoded;
       }
-    } catch (e) {
+    } catch {
       // Not valid base64, continue to error
     }
   }
@@ -64,11 +64,15 @@ export const encryption = {
       throw new Error('Cannot encrypt empty string');
     }
     try {
-      const nonce = libs.randombytes_buf(libs.crypto_secretbox_NONCEBYTES);
-      const ciphertext = libs.crypto_secretbox_easy(text, nonce, SECRET_KEY);
+      const iv = randomBytes(IV_LENGTH);
+      const cipher = createCipheriv(ALGORITHM, SECRET_KEY, iv);
+      const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+      const authTag = cipher.getAuthTag();
+
       return JSON.stringify({
-        nonce: libs.to_hex(nonce),
-        ciphertext: libs.to_hex(ciphertext)
+        iv: iv.toString('hex'),
+        ciphertext: encrypted.toString('hex'),
+        tag: authTag.toString('hex')
       });
     } catch (error: any) {
       throw new Error(`Encryption failed: ${error.message}`);
@@ -80,13 +84,20 @@ export const encryption = {
       throw new Error('Cannot decrypt empty string');
     }
     try {
-      const { nonce, ciphertext } = JSON.parse(encrypted);
-      const decrypted = libs.crypto_secretbox_open_easy(
-        libs.from_hex(ciphertext),
-        libs.from_hex(nonce),
-        SECRET_KEY
-      );
-      return libs.to_string(decrypted);
+      const { iv, ciphertext, tag, nonce } = JSON.parse(encrypted);
+
+      // Support legacy libsodium format (nonce instead of iv, no tag)
+      if (nonce && !iv) {
+        throw new Error('Legacy libsodium format detected. Re-encryption required.');
+      }
+
+      const decipher = createDecipheriv(ALGORITHM, SECRET_KEY, Buffer.from(iv, 'hex'));
+      decipher.setAuthTag(Buffer.from(tag, 'hex'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(ciphertext, 'hex')),
+        decipher.final()
+      ]);
+      return decrypted.toString('utf8');
     } catch (error: any) {
       throw new Error(`Decryption failed: ${error.message}`);
     }

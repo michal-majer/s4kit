@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { Camera, Loader2, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,

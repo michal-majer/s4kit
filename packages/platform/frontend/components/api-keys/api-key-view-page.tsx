@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { PageHeader } from '@/components/common/page-header';
 import { api, ApiKey } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -24,7 +23,6 @@ import {
   ChevronRight,
   Server,
   Loader2,
-  Download,
   FileCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

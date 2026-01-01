@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { api, InstanceEnvironment } from '@/lib/api';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Upload, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -112,7 +111,6 @@ export function CreateInstanceDialog({
   onOpenChange,
   onCreated,
 }: CreateInstanceDialogProps) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showImportSection, setShowImportSection] = useState(false);
   const [bindingJson, setBindingJson] = useState('');
@@ -175,7 +173,7 @@ export function CreateInstanceDialog({
       toast.success('Instance created. Services are being verified...');
       onOpenChange(false);
       onCreated?.(newInstance);
-    } catch (error) {
+    } catch {
       toast.error('Failed to create instance');
     } finally {
       setLoading(false);

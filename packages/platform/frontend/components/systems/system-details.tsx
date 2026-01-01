@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,10 +17,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api, System, Instance, SystemService, InstanceService, SystemType } from '@/lib/api';
-import { envLabels, envColors, envBorderColors, envBgColors, envBorderAllColors, envBadgeVariant, envOrder, TOTAL_ENVIRONMENTS } from '@/lib/environment';
+import { envLabels, envColors, envBgColors, envBorderAllColors, envOrder, TOTAL_ENVIRONMENTS } from '@/lib/environment';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Pencil, Trash2, Server, Database, RefreshCw, Globe, Key, CheckCircle2, AlertCircle, Clock, Loader2, Settings, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, Server, Database, RefreshCw, Globe, Key, Loader2, Settings, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { CreateInstanceDialog } from './create-instance-dialog';
@@ -142,7 +142,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
             // All done
             setVerifyingInstanceId(null);
           }
-        } catch (e) {
+        } catch {
           // Retry on error
           setTimeout(() => pollForUpdates(attempts + 1), 1000);
         }
@@ -151,6 +151,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       // Start polling after initial delay for backend to create instance services
       setTimeout(() => pollForUpdates(0), 1500);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [system.type]);
 
   const handleServiceCreated = useCallback(async () => {
@@ -158,7 +159,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     try {
       const updatedSystemServices = await api.systemServices.list(system.id);
       setSystemServices(updatedSystemServices);
-    } catch (e) {
+    } catch {
       // Continue with polling even if system services refresh fails
     }
 
@@ -182,7 +183,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
           // Continue polling
           setTimeout(() => pollForUpdates(attempts + 1), 1000);
         }
-      } catch (e) {
+      } catch {
         // Retry on error
         setTimeout(() => pollForUpdates(attempts + 1), 1000);
       }
@@ -211,7 +212,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
         // No instances left, clear URL param
         router.replace(window.location.pathname, { scroll: false });
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete instance');
     } finally {
       setDeletingInstanceLoading(false);
@@ -226,11 +227,12 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       setInstanceServices(prev => prev.map(is =>
         is.id === instanceServiceId ? { ...is, entities: result.entities, verificationStatus: result.verificationStatus, lastVerifiedAt: result.lastVerifiedAt, entityCount: result.entityCount } : is
       ));
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to refresh service');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh service';
+      toast.error(errorMessage);
       // Update state to reflect failed verification
       setInstanceServices(prev => prev.map(is =>
-        is.id === instanceServiceId ? { ...is, verificationStatus: 'failed', verificationError: error.message || 'Failed to refresh service', lastVerifiedAt: new Date().toISOString() } : is
+        is.id === instanceServiceId ? { ...is, verificationStatus: 'failed', verificationError: errorMessage, lastVerifiedAt: new Date().toISOString() } : is
       ));
     } finally {
       setRefreshingInstanceServiceId(null);
@@ -257,8 +259,9 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
         }
         return is;
       }));
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to verify services');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to verify services';
+      toast.error(errorMessage);
     } finally {
       setRefreshingAllForInstanceId(null);
     }
@@ -272,11 +275,12 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       toast.success('Service removed');
       setInstanceServices(prev => prev.filter(is => is.id !== deletingService));
       setDeletingService(null);
-    } catch (error: any) {
+    } catch (error) {
       // Handle 409 conflict (service is used by API keys)
-      let errorMessage = error.message || 'Failed to remove service';
+      const rawMessage = error instanceof Error ? error.message : 'Failed to remove service';
+      let errorMessage = rawMessage;
       try {
-        const parsed = JSON.parse(error.message);
+        const parsed = JSON.parse(rawMessage);
         if (parsed.apiKeyCount) {
           errorMessage = `Cannot delete: service is used by ${parsed.apiKeyCount} API key access grant(s). Remove the API key access grants first.`;
         } else if (parsed.message) {

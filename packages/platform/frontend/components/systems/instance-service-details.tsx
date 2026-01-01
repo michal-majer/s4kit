@@ -11,14 +11,12 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import { api, System, Instance, SystemService, InstanceService } from '@/lib/api';
-import { envLabels, envColors, envBorderLeftColors, envOrder } from '@/lib/environment';
+import { envLabels, envColors, envOrder } from '@/lib/environment';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  ArrowLeft,
   RefreshCw,
   Database,
   Settings,
@@ -37,7 +35,6 @@ import {
   Play,
 } from 'lucide-react';
 import Link from 'next/link';
-import { ServiceVerificationStatus } from './service-verification-status';
 import { InstanceServiceConfigDialog } from './instance-service-config-dialog';
 import { ApiTestTab } from './api-test-tab';
 
@@ -73,8 +70,9 @@ export function InstanceServiceDetails({
       const result = await api.instanceServices.refreshEntities(instanceService.id);
       toast.success(`Refreshed ${result.refreshedCount || result.entities?.length || 0} entities`);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to refresh entities');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh entities';
+      toast.error(message);
     } finally {
       setRefreshing(false);
     }
@@ -494,7 +492,7 @@ export function InstanceServiceDetails({
                   </div>
                   <h3 className="font-medium">No entities discovered</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                    Click "Refresh" to fetch available entities from the service metadata endpoint
+                    Click &quot;Refresh&quot; to fetch available entities from the service metadata endpoint
                   </p>
                 </div>
               )}
