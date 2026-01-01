@@ -1,13 +1,13 @@
 import ky from 'ky';
 import { encryption } from '@s4kit/shared/services';
 import { redis } from '../index.ts';
-import { oauthTokenService, type OAuthTokenConfig } from './oauth-token.ts';
+import { oauthTokenService, type OAuthTokenConfig } from './oauth.ts';
 import {
   parseODataResponse,
   parseODataError,
   stripODataMetadata,
   type ODataResponse
-} from './odata.ts';
+} from '@s4kit/shared/services';
 
 interface SapRequestOptions {
   method: string;

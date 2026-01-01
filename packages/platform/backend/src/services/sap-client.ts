@@ -2,15 +2,15 @@ import ky from 'ky';
 import { db } from '../db';
 import { instances } from '@s4kit/shared/db/schema';
 import { eq } from 'drizzle-orm';
-import { encryption } from './encryption';
+import { encryption } from '@s4kit/shared/services';
 import { redis } from '../cache/redis';
-import { oauthTokenService, type OAuthTokenConfig } from './oauth-token';
-import { 
-  parseODataResponse, 
-  parseODataError, 
+import { oauthTokenService, type OAuthTokenConfig } from './oauth';
+import {
+  parseODataResponse,
+  parseODataError,
   stripODataMetadata,
-  type ODataResponse 
-} from './odata';
+  type ODataResponse
+} from '@s4kit/shared/services';
 import type { Instance } from '../types';
 
 interface SapRequestOptions {

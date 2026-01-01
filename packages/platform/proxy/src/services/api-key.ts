@@ -1,36 +1,11 @@
 import { db, redis } from '../index.ts';
 import { apiKeys, eq } from '@s4kit/shared/db';
-import { createHash, timingSafeEqual } from 'crypto';
+import { timingSafeEqual } from 'crypto';
+import { parseApiKey, hashApiKey } from '@s4kit/shared/services';
 import type { ApiKey } from '../types.ts';
 
 // Cache TTL in seconds
 const API_KEY_CACHE_TTL = 60; // 1 minute
-
-/**
- * Parse an API key and extract its components
- */
-function parseApiKey(key: string): {
-  valid: boolean;
-  env?: 'live' | 'test' | 'dev';
-  keyId?: string;
-  secret?: string;
-  prefix?: string;
-} {
-  // Format: s4k_{env}_{keyId}_{random}
-  const match = key.match(/^s4k_(live|test|dev)_([a-zA-Z0-9]{6,8})_([a-zA-Z0-9]{32,})$/);
-
-  if (!match) {
-    return { valid: false };
-  }
-
-  return {
-    valid: true,
-    env: match[1] as 'live' | 'test' | 'dev',
-    keyId: match[2],
-    secret: match[3],
-    prefix: `s4k_${match[1]}_${match[2]}`
-  };
-}
 
 export interface ApiKeyValidationResult {
   valid: boolean;
@@ -43,9 +18,7 @@ export const apiKeyService = {
    * Hash an API key using SHA-256
    * Used for verification against stored hash
    */
-  hashKey: (key: string): string => {
-    return createHash('sha256').update(key).digest('hex');
-  },
+  hashKey: hashApiKey,
 
   /**
    * Validate an API key and return associated data

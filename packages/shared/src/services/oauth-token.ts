@@ -1,4 +1,4 @@
-import { redis } from '../cache/redis';
+import type { Redis } from 'ioredis';
 
 /**
  * OAuth Token Service
@@ -130,11 +130,16 @@ async function fetchToken(config: OAuthTokenConfig): Promise<OAuthTokenResponse>
 /**
  * Get OAuth access token with caching
  *
+ * @param redis - Redis client for caching
  * @param config - OAuth configuration
  * @param customCacheKey - Optional custom cache key (defaults to auto-generated)
  * @returns Access token string
  */
-export async function getToken(config: OAuthTokenConfig, customCacheKey?: string): Promise<string> {
+export async function getToken(
+  redis: Redis,
+  config: OAuthTokenConfig,
+  customCacheKey?: string
+): Promise<string> {
   const cacheKey = customCacheKey || generateCacheKey(config);
 
   // Try to get from cache
@@ -178,18 +183,29 @@ export async function getToken(config: OAuthTokenConfig, customCacheKey?: string
 /**
  * Invalidate cached token
  *
+ * @param redis - Redis client
  * @param config - OAuth configuration
  * @param customCacheKey - Optional custom cache key
  */
-export async function invalidateToken(config: OAuthTokenConfig, customCacheKey?: string): Promise<void> {
+export async function invalidateToken(
+  redis: Redis,
+  config: OAuthTokenConfig,
+  customCacheKey?: string
+): Promise<void> {
   const cacheKey = customCacheKey || generateCacheKey(config);
   await redis.del(cacheKey);
 }
 
 /**
- * OAuth Token Service singleton
+ * Create an OAuth Token Service instance bound to a Redis client
  */
-export const oauthTokenService = {
-  getToken,
-  invalidateToken,
-};
+export function createOAuthTokenService(redis: Redis) {
+  return {
+    getToken: (config: OAuthTokenConfig, customCacheKey?: string) =>
+      getToken(redis, config, customCacheKey),
+    invalidateToken: (config: OAuthTokenConfig, customCacheKey?: string) =>
+      invalidateToken(redis, config, customCacheKey),
+  };
+}
+
+export type OAuthTokenService = ReturnType<typeof createOAuthTokenService>;

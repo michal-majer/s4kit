@@ -6,7 +6,7 @@
 import ky from 'ky';
 import { XMLParser } from 'fast-xml-parser';
 import { encryption } from '@s4kit/shared/services';
-import { oauthTokenService, type OAuthTokenConfig } from './oauth-token.ts';
+import { oauthTokenService, type OAuthTokenConfig } from './oauth.ts';
 
 export interface ODataEntity {
   name: string;
