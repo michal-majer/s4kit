@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { db, apiKeys, apiKeyAccess, instanceServices, instances, systemServices, systems, authConfigurations } from '../../db';
 import { apiKeyService } from '../../services/api-key';
-import { metadataParser, type ODataEntityType } from '../../services/metadata-parser';
-import { generateTypeScriptFile, filterEntityTypes } from '../../services/type-generator';
+import { metadataParser, generateTypeScriptFile, filterEntityTypes, type ODataEntityType } from '@s4kit/shared/services';
 import { redis } from '../../cache/redis';
 import { z } from 'zod';
 import { eq, desc, and, inArray } from 'drizzle-orm';

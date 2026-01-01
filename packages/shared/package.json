@@ -12,13 +12,12 @@
     "./types": "./src/types.ts"
   },
   "dependencies": {
+    "fast-xml-parser": "^4.5.3",
     "ioredis": "^5.8.2",
-    "libsodium-wrappers": "^0.7.15",
     "postgres": "^3.4.7"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/ioredis": "^5.0.0",
-    "@types/libsodium-wrappers": "^0.7.14"
+    "@types/ioredis": "^5.0.0"
   }
 }

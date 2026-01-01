@@ -28,3 +28,17 @@ export {
   type KeyEnvironment,
   type ParsedApiKey,
 } from './api-key-core.ts';
+export {
+  metadataParser,
+  type ODataEntity,
+  type ODataProperty,
+  type ODataNavigationProperty,
+  type ODataEntityType,
+  type ODataMetadataResult,
+  type ODataMetadataFull,
+  type MetadataAuthConfig,
+} from './metadata-parser.ts';
+export {
+  generateTypeScriptFile,
+  filterEntityTypes,
+} from './type-generator.ts';

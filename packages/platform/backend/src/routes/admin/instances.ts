@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { db, instances, systems, systemServices, instanceServices, authConfigurations } from '../../db';
 import { encryption } from '@s4kit/shared/services';
-import { metadataParser } from '../../services/metadata-parser';
+import { metadataParser } from '@s4kit/shared/services';
 import { serviceBindingParser } from '../../services/service-binding-parser';
 import { z } from 'zod';
 import { desc, eq, and, inArray } from 'drizzle-orm';

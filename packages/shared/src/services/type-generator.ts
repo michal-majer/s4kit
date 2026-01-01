@@ -1,9 +1,9 @@
 /**
- * TypeScript type generator for OData entities
+ * TypeScript type generator for OData entities (shared between backend and proxy)
  * Converts OData metadata to TypeScript type definitions
  */
 
-import type { ODataEntityType, ODataProperty, ODataEntity, ODataNavigationProperty } from './metadata-parser.ts';
+import type { ODataEntityType, ODataEntity } from './metadata-parser';
 
 /**
  * Map OData Edm types to TypeScript types
@@ -77,7 +77,6 @@ function generateEntityInterface(entityType: ODataEntityType, allEntityTypes: OD
 
     for (const navProp of entityType.navigationProperties) {
       const propName = sanitizeTypeName(navProp.name);
-      // Try to find the target entity type
       const targetType = findTargetEntityType(navProp.targetEntity, allEntityTypes);
       const tsType = targetType ? sanitizeTypeName(targetType.name) : 'any';
       const fullType = navProp.isCollection ? `${tsType}[]` : tsType;
@@ -173,9 +172,6 @@ function generateTypesForEntity(entityType: ODataEntityType, allEntityTypes: ODa
 /**
  * Generate module augmentation for S4KitClient with typed entity properties
  * This enables Prisma-like DX: client.Customers.list() with full type inference
- *
- * Uses EntitySet names (like 'Customers') for property names since that's what
- * users will use in API calls: client.Customers.list()
  */
 function generateClientAugmentation(
   entityTypes: ODataEntityType[],
@@ -195,22 +191,15 @@ function generateClientAugmentation(
 
   const generatedNames = new Set<string>();
 
-  // If we have entities (EntitySets), use them for property names
-  // and map to their corresponding EntityType interfaces
   if (entities && entities.length > 0) {
     for (const entity of entities) {
       if (generatedNames.has(entity.name)) continue;
       generatedNames.add(entity.name);
 
-      // Find the matching EntityType by name
-      // EntityType reference formats:
-      // - "NorthwindModel.Customer" -> extract "Customer"
-      // - Just "Customer"
       let interfaceName: string | null = null;
 
       if (entity.entityType) {
         const typeName = entity.entityType.split('.').pop() || entity.entityType;
-        // Check if we have an interface for this type
         const matchingType = entityTypes.find(et =>
           et.name === typeName || et.fullName === entity.entityType
         );
@@ -219,8 +208,6 @@ function generateClientAugmentation(
         }
       }
 
-      // If no match via entityType, try to match by removing common suffixes
-      // e.g., "Customers" EntitySet -> "Customer" EntityType
       if (!interfaceName) {
         const singularName = entity.name.replace(/ies$/, 'y').replace(/s$/, '');
         const matchingType = entityTypes.find(et =>
@@ -233,7 +220,6 @@ function generateClientAugmentation(
         }
       }
 
-      // Final fallback: use 'any' if no matching type found
       if (!interfaceName) {
         interfaceName = 'any';
       }
@@ -241,7 +227,6 @@ function generateClientAugmentation(
       lines.push(`    ${entity.name}: EntityHandler<${interfaceName}>;`);
     }
   } else {
-    // Fallback: use EntityType names directly (singular form)
     for (const entityType of entityTypes) {
       const interfaceName = sanitizeTypeName(entityType.name);
       if (generatedNames.has(entityType.name)) continue;
@@ -303,7 +288,6 @@ export function generateTypeScriptFile(
   lines.push('');
   lines.push('');
 
-  // Add module augmentation for Prisma-like DX
   lines.push(generateClientAugmentation(entityTypes, options?.entities));
   lines.push('');
 

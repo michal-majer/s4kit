@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { db, systems, instanceServices, systemServices, instances, apiKeyAccess, authConfigurations } from '../../db';
-import { metadataParser } from '../../services/metadata-parser';
+import { metadataParser } from '@s4kit/shared/services';
 import { sapClient, type ResolvedAuthConfig } from '../../services/sap-client';
 import { z } from 'zod';
 import { and, count, eq } from 'drizzle-orm';

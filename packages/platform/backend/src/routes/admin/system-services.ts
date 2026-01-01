@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { db, systems, systemServices, predefinedServices, instances, instanceServices, apiKeyAccess, authConfigurations } from '../../db';
-import { metadataParser } from '../../services/metadata-parser';
+import { metadataParser } from '@s4kit/shared/services';
 import { z } from 'zod';
 import { count, desc, eq, and } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';

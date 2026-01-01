@@ -5,43 +5,59 @@
 
 import { Hono } from 'hono';
 import { db } from '../index.ts';
-import { apiKeyAccess, instanceServices, instances, systemServices, eq } from '@s4kit/shared/db';
+import { apiKeyAccess, instanceServices, instances, systemServices, authConfigurations, eq } from '@s4kit/shared/db';
 import { apiKeyService } from '../services/api-key.ts';
-import { metadataParser, type ODataEntityType } from '../services/metadata-parser.ts';
-import { generateTypeScriptFile, filterEntityTypes } from '../services/type-generator.ts';
-import type { Instance, SystemService, InstanceService } from '../types.ts';
+import { metadataParser, generateTypeScriptFile, filterEntityTypes, type ODataEntityType, type MetadataAuthConfig } from '@s4kit/shared/services';
 
 const app = new Hono();
 
 /**
- * Resolve auth configuration with inheritance logic
+ * Get auth config from authConfigId
  */
-function resolveAuth(instance: Instance, systemService: SystemService, instanceService: InstanceService) {
-  if (instanceService.authType) {
-    return {
-      type: instanceService.authType,
-      username: instanceService.username,
-      password: instanceService.password,
-      config: instanceService.authConfig,
-      credentials: instanceService.credentials,
-    };
-  }
-  if (systemService.authType) {
-    return {
-      type: systemService.authType,
-      username: systemService.username,
-      password: systemService.password,
-      config: systemService.authConfig,
-      credentials: systemService.credentials,
-    };
-  }
+async function getAuthFromConfigId(authConfigId: string): Promise<MetadataAuthConfig | null> {
+  const config = await db.query.authConfigurations.findFirst({
+    where: eq(authConfigurations.id, authConfigId)
+  });
+
+  if (!config) return null;
+
   return {
-    type: instance.authType,
-    username: instance.username,
-    password: instance.password,
-    config: instance.authConfig,
-    credentials: instance.credentials,
+    type: config.authType,
+    username: config.username,
+    password: config.password,
+    config: config.authConfig,
+    credentials: config.credentials,
   };
+}
+
+/**
+ * Resolve auth configuration with inheritance logic
+ * Priority: instanceService > systemService > instance
+ */
+async function resolveAuth(
+  instanceAuthConfigId: string | null,
+  systemServiceAuthConfigId: string | null,
+  instanceServiceAuthConfigId: string | null
+): Promise<MetadataAuthConfig | null> {
+  // Priority 1: Instance service auth
+  if (instanceServiceAuthConfigId) {
+    const auth = await getAuthFromConfigId(instanceServiceAuthConfigId);
+    if (auth) return auth;
+  }
+
+  // Priority 2: System service auth
+  if (systemServiceAuthConfigId) {
+    const auth = await getAuthFromConfigId(systemServiceAuthConfigId);
+    if (auth) return auth;
+  }
+
+  // Priority 3: Instance auth (fallback)
+  if (instanceAuthConfigId) {
+    const auth = await getAuthFromConfigId(instanceAuthConfigId);
+    if (auth) return auth;
+  }
+
+  return null;
 }
 
 /**
@@ -108,8 +124,12 @@ app.get('/', async (c) => {
         continue;
       }
 
-      // Resolve auth configuration
-      const authConfig = resolveAuth(inst, svc, instService);
+      // Resolve auth configuration using inheritance
+      const authConfig = await resolveAuth(
+        inst.authConfigId,
+        svc.authConfigId,
+        instService.authConfigId
+      );
 
       // Determine service path
       const servicePath = instService.servicePathOverride || svc.servicePath;
@@ -127,13 +147,13 @@ app.get('/', async (c) => {
       }
 
       // Get allowed entities from permissions
-      const allowedEntities = Object.keys(grant.permissions);
+      const allowedEntities = Object.keys(grant.permissions as Record<string, string[]>);
 
       // Filter entity types based on permissions
       const filteredTypes = filterEntityTypes(
         metadataResult.entityTypes,
         allowedEntities,
-        grant.permissions
+        grant.permissions as Record<string, string[]>
       );
 
       // Add to collection (avoid duplicates by fullName)

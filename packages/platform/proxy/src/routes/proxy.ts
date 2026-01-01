@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
+import { db } from '../index.ts';
+import { authConfigurations, eq } from '@s4kit/shared/db';
 import { authMiddleware } from '../middleware/auth.ts';
 import { rateLimitMiddleware } from '../middleware/rate-limit.ts';
 import { loggingMiddleware } from '../middleware/logging.ts';
 import { accessResolver } from '../services/access-resolver.ts';
-import { sapClient } from '../services/sap-client.ts';
+import { sapClient, type ResolvedAuthConfig } from '../services/sap-client.ts';
 import {
   generateRequestId,
   hashClientIp,
@@ -14,7 +16,7 @@ import {
   countRecords,
   sanitizeErrorMessage,
 } from '../utils/log-helpers.ts';
-import type { Variables, Instance, SystemService, InstanceService, SecureLogData } from '../types.ts';
+import type { Variables, SecureLogData } from '../types.ts';
 
 const app = new Hono<{ Variables: Variables }>();
 
@@ -23,39 +25,55 @@ app.use('*', rateLimitMiddleware);
 app.use('*', loggingMiddleware);
 
 /**
+ * Get auth config from authConfigId
+ */
+async function getAuthFromConfigId(authConfigId: string): Promise<ResolvedAuthConfig | null> {
+  const config = await db.query.authConfigurations.findFirst({
+    where: eq(authConfigurations.id, authConfigId)
+  });
+
+  if (!config) return null;
+
+  return {
+    type: config.authType,
+    username: config.username,
+    password: config.password,
+    config: config.authConfig,
+    credentials: config.credentials,
+  };
+}
+
+/**
  * Resolve auth configuration with inheritance logic:
- * 1. If instanceService has authType set, use its auth (highest priority)
- * 2. Otherwise, if systemService has authType set, use service auth (service default)
+ * 1. If instanceService has authConfigId set, use its auth (highest priority)
+ * 2. Otherwise, if systemService has authConfigId set, use service auth (service default)
  * 3. Otherwise, inherit from instance (instance default)
  */
-function resolveAuth(instance: Instance, systemService: SystemService, instanceService: InstanceService) {
-  if (instanceService.authType) {
-    return {
-      type: instanceService.authType,
-      username: instanceService.username,
-      password: instanceService.password,
-      config: instanceService.authConfig,
-      credentials: instanceService.credentials,
-    };
+async function resolveAuth(
+  instanceAuthConfigId: string | null,
+  systemServiceAuthConfigId: string | null,
+  instanceServiceAuthConfigId: string | null
+): Promise<ResolvedAuthConfig> {
+  // Priority 1: Instance service auth
+  if (instanceServiceAuthConfigId) {
+    const auth = await getAuthFromConfigId(instanceServiceAuthConfigId);
+    if (auth) return auth;
   }
-  // Check service-level auth
-  if (systemService.authType) {
-    return {
-      type: systemService.authType,
-      username: systemService.username,
-      password: systemService.password,
-      config: systemService.authConfig,
-      credentials: systemService.credentials,
-    };
+
+  // Priority 2: System service auth
+  if (systemServiceAuthConfigId) {
+    const auth = await getAuthFromConfigId(systemServiceAuthConfigId);
+    if (auth) return auth;
   }
-  // Inherit from instance
-  return {
-    type: instance.authType,
-    username: instance.username,
-    password: instance.password,
-    config: instance.authConfig,
-    credentials: instance.credentials,
-  };
+
+  // Priority 3: Instance auth (fallback)
+  if (instanceAuthConfigId) {
+    const auth = await getAuthFromConfigId(instanceAuthConfigId);
+    if (auth) return auth;
+  }
+
+  // No auth configured
+  return { type: 'none' };
 }
 
 /**
@@ -128,7 +146,11 @@ app.all('/*', async (c) => {
   const fullPath = `${servicePath}/${entityPath}`.replace(/\/+/g, '/');
 
   // Resolve auth with inheritance
-  const authConfig = resolveAuth(instance, systemService, instanceService);
+  const authConfig = await resolveAuth(
+    instance.authConfigId,
+    systemService.authConfigId,
+    instanceService.authConfigId
+  );
 
   // Capture request body size (not content)
   let requestBody: unknown = undefined;
