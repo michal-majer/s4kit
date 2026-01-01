@@ -35,8 +35,10 @@ function toNumber(value: any): number {
 const API_KEY = process.env.API_KEY;
 const PROXY_URL = process.env.PROXY_URL || "http://localhost:3002/api/proxy";
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable is required. Create a .env file or run: API_KEY=xxx bun test");
+// Skip all tests in this file if API_KEY is not set (e.g., in CI without secrets)
+const skipTests = !API_KEY;
+if (skipTests) {
+  console.log("⚠️  Skipping proxy tests: API_KEY environment variable not set");
 }
 
 // ============================================================================
@@ -114,12 +116,12 @@ interface Order {
 // Test Suite
 // ============================================================================
 
-describe("S4Kit Proxy OData Operations", () => {
+describe.skipIf(skipTests)("S4Kit Proxy OData Operations", () => {
   let client: ReturnType<typeof S4Kit>;
 
   beforeAll(() => {
     client = S4Kit({
-      apiKey: API_KEY,
+      apiKey: API_KEY!,
       baseUrl: PROXY_URL,
     });
   });
