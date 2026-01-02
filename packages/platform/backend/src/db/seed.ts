@@ -34,26 +34,28 @@ export async function seedDatabase() {
     console.log('Seeding predefined services...');
 
     let totalSeeded = 0;
+    const BATCH_SIZE = 100;
 
     for (const systemType of systemTypesWithServices) {
       const apis = getApisForSystemType(systemType);
       console.log(`  Seeding ${apis.length} APIs for ${systemType}...`);
 
-      for (const service of apis) {
+      // Process in batches
+      for (let i = 0; i < apis.length; i += BATCH_SIZE) {
+        const batch = apis.slice(i, i + BATCH_SIZE);
+
+        // Build batch insert values
+        const values = batch.map(service =>
+          sql`(${systemType}, ${service.name}, ${service.alias}, ${service.servicePath}, ${service.description}, ${service.odataVersion}, ${JSON.stringify(service.defaultEntities)}::jsonb, NOW())`
+        );
+
         await db.execute(sql`
           INSERT INTO predefined_services (system_type, name, alias, service_path, description, odata_version, default_entities, created_at)
-          VALUES (
-            ${systemType},
-            ${service.name},
-            ${service.alias},
-            ${service.servicePath},
-            ${service.description},
-            ${service.odataVersion},
-            ${JSON.stringify(service.defaultEntities)}::jsonb,
-            NOW()
-          )
+          VALUES ${sql.join(values, sql`, `)}
           ON CONFLICT (system_type, alias) DO NOTHING
         `);
+
+        console.log(`    Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(apis.length / BATCH_SIZE)} done`);
       }
 
       totalSeeded += apis.length;
