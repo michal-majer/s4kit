@@ -35,10 +35,10 @@ export const auth = betterAuth({
 
   advanced: {
     defaultCookieAttributes: {
-      sameSite: 'none',
+      // With custom domain: use secure 'lax' + cross-subdomain cookies
+      // Without custom domain (staging on railway.app): use 'none' for cross-site cookies
+      sameSite: process.env.COOKIE_DOMAIN ? 'lax' : 'none',
       secure: true,
-      // Use parent domain for cross-subdomain cookies (e.g., .s4kit.com)
-      // This allows staging.s4kit.com to access cookies set by staging-api.s4kit.com
       ...(process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
     },
   },
