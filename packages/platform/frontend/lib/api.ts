@@ -375,6 +375,18 @@ export interface AcceptInvitationResult {
 }
 
 export const api = {
+  // Auth (public endpoints)
+  auth: {
+    resendVerification: async (email: string) => {
+      const res = await fetch(`${API_URL}/api/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      return res.json() as Promise<{ success: boolean; message?: string; error?: string }>;
+    },
+  },
+
   // Platform info
   platform: {
     getInfo: () => fetchAPI<PlatformInfo>('/admin/platform-info'),

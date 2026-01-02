@@ -19,6 +19,7 @@ import sessionsRoute from './routes/admin/sessions'
 import platformInfoRoute from './routes/admin/platform-info'
 import meRoute from './routes/admin/me'
 import invitationsRoute from './routes/admin/invitations'
+import resendVerificationRoute from './routes/public/resend-verification'
 
 const app = new Hono()
 
@@ -69,6 +70,17 @@ app.use('/api/platform-info', cors({
 
 // Public platform info (no auth required, for login page)
 app.route('/api/platform-info', platformInfoRoute)
+
+// CORS for resend verification (public, no credentials)
+app.use('/api/resend-verification', cors({
+  origin: frontendUrl,
+  allowMethods: ['POST', 'OPTIONS'],
+  allowHeaders: ['Content-Type'],
+  credentials: false,
+}))
+
+// Public resend verification route (no auth required)
+app.route('/api/resend-verification', resendVerificationRoute)
 
 // CORS for invitations (public GET, auth required for POST)
 app.use('/api/invitations/*', cors({

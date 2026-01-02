@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, ArrowRight, Check, Lock } from 'lucide-react';
+import { Loader2, ArrowRight, Check, Lock, Mail } from 'lucide-react';
+import { api } from '@/lib/api';
 
 function SignUpContent() {
   const router = useRouter();
@@ -18,6 +19,8 @@ function SignUpContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showResendOption, setShowResendOption] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // Check for pre-filled email from invitation
   const invitedEmail = searchParams.get('email');
@@ -50,6 +53,7 @@ function SignUpContent() {
     }
 
     setLoading(true);
+    setShowResendOption(false);
 
     try {
       const result = await signUp.email({
@@ -59,7 +63,24 @@ function SignUpContent() {
       });
 
       if (result.error) {
-        toast.error(result.error.message || 'Sign up failed');
+        const errorMessage = result.error.message?.toLowerCase() || '';
+        const errorCode = result.error.code?.toLowerCase() || '';
+
+        // Check for email already exists errors
+        const isEmailExists =
+          errorCode.includes('user_already_exists') ||
+          errorCode.includes('email_exists') ||
+          errorMessage.includes('already exists') ||
+          errorMessage.includes('already registered') ||
+          errorMessage.includes('email is already in use') ||
+          errorMessage.includes('user with this email');
+
+        if (isEmailExists) {
+          setShowResendOption(true);
+          toast.error('An account with this email already exists');
+        } else {
+          toast.error(result.error.message || 'Sign up failed');
+        }
         setLoading(false);
         return;
       }
@@ -95,6 +116,29 @@ function SignUpContent() {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!email) {
+      toast.error('Please enter your email address');
+      return;
+    }
+
+    setResending(true);
+    try {
+      const result = await api.auth.resendVerification(email);
+      if (result.success) {
+        toast.success('Verification email sent! Please check your inbox.');
+        setShowResendOption(false);
+        router.push('/login?verify=pending');
+      } else {
+        toast.error(result.error || 'Failed to send verification email');
+      }
+    } catch (error) {
+      toast.error('Failed to send verification email');
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -106,6 +150,51 @@ function SignUpContent() {
             : 'Get started with S4Kit in minutes'}
         </p>
       </div>
+
+      {/* Email Already Exists - Resend Option */}
+      {showResendOption && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+          <div className="flex items-start gap-3">
+            <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="space-y-3 flex-1">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  Account already exists
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  An account with this email already exists. If you haven&apos;t verified your email yet, you can request a new verification link.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResendVerification}
+                  disabled={resending}
+                  className="border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900"
+                >
+                  {resending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="mr-2 h-4 w-4" />
+                  )}
+                  Resend verification
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push('/login')}
+                  className="text-amber-700 hover:text-amber-900 dark:text-amber-300"
+                >
+                  Go to login
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sign Up Form */}
       <form onSubmit={handleSignUp} className="space-y-5">

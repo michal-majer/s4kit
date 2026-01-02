@@ -25,6 +25,8 @@ function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [features, setFeatures] = useState<PlatformFeatures | null>(null);
+  const [showResendOption, setShowResendOption] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const verifyPending = searchParams.get('verify') === 'pending';
   const redirectUrl = searchParams.get('redirect');
@@ -41,6 +43,7 @@ function LoginContent() {
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setShowResendOption(false);
 
     try {
       const result = await signIn.email({
@@ -49,7 +52,24 @@ function LoginContent() {
       });
 
       if (result.error) {
-        toast.error(result.error.message || 'Login failed');
+        const errorMessage = result.error.message?.toLowerCase() || '';
+        const errorCode = result.error.code?.toLowerCase() || '';
+
+        // Check for email not verified errors
+        const isEmailNotVerified =
+          errorCode.includes('email_not_verified') ||
+          errorCode.includes('not_verified') ||
+          errorMessage.includes('email is not verified') ||
+          errorMessage.includes('email not verified') ||
+          errorMessage.includes('verify your email') ||
+          errorMessage.includes('account is inactive');
+
+        if (isEmailNotVerified) {
+          setShowResendOption(true);
+          toast.error('Please verify your email address to continue');
+        } else {
+          toast.error(result.error.message || 'Login failed');
+        }
         setLoading(false);
         return;
       }
@@ -61,6 +81,28 @@ function LoginContent() {
       const message = error instanceof Error ? error.message : 'Login failed';
       toast.error(message);
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      toast.error('Please enter your email address');
+      return;
+    }
+
+    setResending(true);
+    try {
+      const result = await api.auth.resendVerification(email);
+      if (result.success) {
+        toast.success('Verification email sent! Please check your inbox.');
+        setShowResendOption(false);
+      } else {
+        toast.error(result.error || 'Failed to send verification email');
+      }
+    } catch (error) {
+      toast.error('Failed to send verification email');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -90,6 +132,40 @@ function LoginContent() {
               <p className="text-sm text-blue-700 dark:text-blue-300">
                 We&apos;ve sent you a verification link. Please check your inbox and click the link to verify your account.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Not Verified - Resend Option */}
+      {showResendOption && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+          <div className="flex items-start gap-3">
+            <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="space-y-3 flex-1">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  Email not verified
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Your email address hasn&apos;t been verified yet. Check your inbox for the verification link, or request a new one.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResendVerification}
+                disabled={resending}
+                className="border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900"
+              >
+                {resending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
+                Resend verification email
+              </Button>
             </div>
           </div>
         </div>
