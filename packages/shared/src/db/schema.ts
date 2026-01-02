@@ -8,10 +8,27 @@ export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extende
 export const odataVersionEnum = pgEnum('odata_version', ['v2', 'v4']);
 export const verificationStatusEnum = pgEnum('verification_status', ['pending', 'verified', 'failed']);
 
+// Onboarding data type for flexible storage of onboarding responses
+export interface OnboardingData {
+  // Current step
+  organizationName?: string;
+  // Future steps (extensible)
+  companySize?: 'solo' | '2-10' | '11-50' | '51-200' | '200+';
+  industry?: string;
+  role?: 'developer' | 'architect' | 'manager' | 'consultant' | 'other';
+  useCase?: 'integration' | 'development' | 'testing' | 'migration' | 'other';
+  sapSystemTypes?: ('s4_public' | 's4_private' | 'btp')[];
+  referralSource?: 'search' | 'social' | 'recommendation' | 'event' | 'other';
+}
+
 // Organizations table
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+
+  // Onboarding tracking
+  onboardingCompletedAt: timestamp('onboarding_completed_at'),
+  onboardingData: jsonb('onboarding_data').$type<OnboardingData>(),
 
   // Logging configuration (organization defaults)
   defaultLogLevel: logLevelEnum('default_log_level').default('standard').notNull(),

@@ -225,7 +225,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       const result = await api.instanceServices.refreshEntities(instanceServiceId);
       toast.success(`Refreshed ${result.refreshedCount || result.entities?.length || 0} entities`);
       setInstanceServices(prev => prev.map(is =>
-        is.id === instanceServiceId ? { ...is, entities: result.entities, verificationStatus: result.verificationStatus, lastVerifiedAt: result.lastVerifiedAt, entityCount: result.entityCount } : is
+        is.id === instanceServiceId ? { ...is, entities: result.entities, verificationStatus: result.verificationStatus, lastVerifiedAt: result.lastVerifiedAt } : is
       ));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to refresh service';
@@ -252,7 +252,6 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
           return {
             ...is,
             verificationStatus: refreshResult.status,
-            entityCount: refreshResult.entityCount ?? is.entityCount,
             verificationError: refreshResult.error || null,
             lastVerifiedAt: new Date().toISOString(),
           };
@@ -557,13 +556,13 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-1.5 text-sm text-muted-foreground">
-                                        {is.entityCount ?? '-'}
+                                        {is.entities?.length ?? '-'}
                                       </TableCell>
                                       <TableCell className="py-1.5">
                                         <ServiceVerificationStatus
                                           status={is.verificationStatus as 'pending' | 'verified' | 'failed' | null}
                                           lastVerifiedAt={is.lastVerifiedAt}
-                                          entityCount={is.entityCount}
+                                          entityCount={is.entities?.length}
                                           error={is.verificationError}
                                         />
                                       </TableCell>

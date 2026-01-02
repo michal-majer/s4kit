@@ -6,13 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { AuthConfigSelector } from '@/components/common/auth-config-selector';
 import { api, SystemService } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -32,16 +26,7 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
     servicePath: service.servicePath,
     description: service.description || '',
     entities: service.entities?.join(', ') || '',
-    authType: service.authType || 'inherit',
-    username: '',
-    password: '',
-    apiKey: '',
-    apiKeyHeaderName: service.authConfig?.headerName || 'X-API-Key',
-    oauth2ClientId: service.authConfig?.clientId || '',
-    oauth2ClientSecret: '',
-    oauth2TokenUrl: service.authConfig?.tokenUrl || '',
-    oauth2Scope: service.authConfig?.scope || '',
-    oauth2AuthorizationUrl: service.authConfig?.authorizationUrl || '',
+    authConfigId: service.authConfigId || null,
   });
 
   useEffect(() => {
@@ -52,16 +37,7 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
         servicePath: service.servicePath,
         description: service.description || '',
         entities: service.entities?.join(', ') || '',
-        authType: service.authType || 'inherit',
-        username: '',
-        password: '',
-        apiKey: '',
-        apiKeyHeaderName: service.authConfig?.headerName || 'X-API-Key',
-        oauth2ClientId: service.authConfig?.clientId || '',
-        oauth2ClientSecret: '',
-        oauth2TokenUrl: service.authConfig?.tokenUrl || '',
-        oauth2Scope: service.authConfig?.scope || '',
-        oauth2AuthorizationUrl: service.authConfig?.authorizationUrl || '',
+        authConfigId: service.authConfigId || null,
       });
     }
   }, [service, open]);
@@ -96,23 +72,7 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
     }
 
     try {
-      const updateData: {
-        name: string;
-        alias: string;
-        servicePath: string;
-        description?: string;
-        entities: string[];
-        authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
-        username?: string;
-        password?: string;
-        apiKey?: string;
-        apiKeyHeaderName?: string;
-        oauth2ClientId?: string;
-        oauth2ClientSecret?: string;
-        oauth2TokenUrl?: string;
-        oauth2Scope?: string;
-        oauth2AuthorizationUrl?: string;
-      } = {
+      await api.systemServices.update(service.id, {
         name: formData.name,
         alias: formData.alias,
         servicePath: formData.servicePath,
@@ -120,30 +80,8 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
         entities: formData.entities
           ? formData.entities.split(',').map((e) => e.trim()).filter(Boolean)
           : [],
-      };
-
-      // Handle auth settings
-      if (formData.authType === 'inherit') {
-        updateData.authType = null;
-      } else {
-        updateData.authType = formData.authType as 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
-        
-        if (formData.authType === 'basic') {
-          if (formData.username) updateData.username = formData.username;
-          if (formData.password) updateData.password = formData.password;
-        } else if (formData.authType === 'api_key') {
-          if (formData.apiKey) updateData.apiKey = formData.apiKey;
-          updateData.apiKeyHeaderName = formData.apiKeyHeaderName;
-        } else if (formData.authType === 'oauth2') {
-          updateData.oauth2ClientId = formData.oauth2ClientId;
-          if (formData.oauth2ClientSecret) updateData.oauth2ClientSecret = formData.oauth2ClientSecret;
-          updateData.oauth2TokenUrl = formData.oauth2TokenUrl;
-          updateData.oauth2Scope = formData.oauth2Scope;
-          updateData.oauth2AuthorizationUrl = formData.oauth2AuthorizationUrl;
-        }
-      }
-
-      await api.systemServices.update(service.id, updateData);
+        authConfigId: formData.authConfigId,
+      });
       toast.success('Service updated');
       onOpenChange(false);
       router.refresh();
@@ -218,124 +156,15 @@ export function EditServiceDialog({ service, open, onOpenChange }: EditServiceDi
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold mb-3">Service Authentication</h3>
             <p className="text-xs text-muted-foreground mb-4">
-              Configure dedicated authentication for this service. Leave as &quot;Inherit from instance&quot; to use the instance&apos;s authentication settings.
+              Configure dedicated authentication for this service. Select &quot;No Authentication&quot; to inherit from the instance.
             </p>
-            
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="authType">Authentication Type</Label>
-                <Select
-                  value={formData.authType}
-                  onValueChange={(value) => setFormData({ ...formData, authType: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inherit">Inherit from instance</SelectItem>
-                    <SelectItem value="basic">Basic Auth</SelectItem>
-                    <SelectItem value="oauth2">OAuth 2.0</SelectItem>
-                    <SelectItem value="api_key">API Key</SelectItem>
-                    <SelectItem value="none">None</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
 
-              {formData.authType === 'basic' && (
-                <>
-                  <div>
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      placeholder="Leave empty to keep existing"
-                      value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="Leave empty to keep existing"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-
-              {formData.authType === 'api_key' && (
-                <>
-                  <div>
-                    <Label htmlFor="apiKeyHeaderName">Header Name</Label>
-                    <Input
-                      id="apiKeyHeaderName"
-                      value={formData.apiKeyHeaderName}
-                      onChange={(e) => setFormData({ ...formData, apiKeyHeaderName: e.target.value })}
-                      placeholder="X-API-Key"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="apiKey">API Key</Label>
-                    <Input
-                      id="apiKey"
-                      type="password"
-                      placeholder="Leave empty to keep existing"
-                      value={formData.apiKey}
-                      onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-
-              {formData.authType === 'oauth2' && (
-                <>
-                  <div>
-                    <Label htmlFor="oauth2TokenUrl">Token URL</Label>
-                    <Input
-                      id="oauth2TokenUrl"
-                      value={formData.oauth2TokenUrl}
-                      onChange={(e) => setFormData({ ...formData, oauth2TokenUrl: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="oauth2ClientId">Client ID</Label>
-                    <Input
-                      id="oauth2ClientId"
-                      value={formData.oauth2ClientId}
-                      onChange={(e) => setFormData({ ...formData, oauth2ClientId: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="oauth2ClientSecret">Client Secret</Label>
-                    <Input
-                      id="oauth2ClientSecret"
-                      type="password"
-                      placeholder="Leave empty to keep existing"
-                      value={formData.oauth2ClientSecret}
-                      onChange={(e) => setFormData({ ...formData, oauth2ClientSecret: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="oauth2Scope">Scope</Label>
-                    <Input
-                      id="oauth2Scope"
-                      value={formData.oauth2Scope}
-                      onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="oauth2AuthorizationUrl">Authorization URL</Label>
-                    <Input
-                      id="oauth2AuthorizationUrl"
-                      value={formData.oauth2AuthorizationUrl}
-                      onChange={(e) => setFormData({ ...formData, oauth2AuthorizationUrl: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+            <AuthConfigSelector
+              value={formData.authConfigId}
+              onChange={(authConfigId) => setFormData({ ...formData, authConfigId })}
+              allowNone={true}
+              description="Leave empty to inherit authentication from the instance"
+            />
           </div>
 
           <DialogFooter>

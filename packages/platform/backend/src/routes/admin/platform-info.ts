@@ -1,9 +1,18 @@
 import { Hono } from 'hono'
+import { config } from '../../config/mode'
 
 type Platform = 'sap-btp' | 'cloud-foundry' | 'standalone'
+type DeploymentMode = 'selfhost' | 'saas'
 
 interface PlatformInfo {
   platform: Platform
+  mode: DeploymentMode
+  features: {
+    signup: boolean
+    socialLogin: boolean
+    billing: boolean
+    multiOrg: boolean
+  }
   space?: string
   organization?: string
   appName?: string
@@ -21,8 +30,19 @@ interface VcapApplication {
 function detectPlatform(): PlatformInfo {
   const vcapAppRaw = process.env.VCAP_APPLICATION
 
+  // Base info with mode and features
+  const baseInfo = {
+    mode: config.mode,
+    features: {
+      signup: config.features.signup,
+      socialLogin: config.features.socialLogin,
+      billing: config.features.billing,
+      multiOrg: config.features.multiOrg,
+    },
+  }
+
   if (!vcapAppRaw) {
-    return { platform: 'standalone' }
+    return { platform: 'standalone', ...baseInfo }
   }
 
   try {
@@ -39,10 +59,11 @@ function detectPlatform(): PlatformInfo {
       space: vcapApp.space_name,
       organization: vcapApp.organization_name,
       appName: vcapApp.application_name,
+      ...baseInfo,
     }
   } catch {
     // VCAP_APPLICATION exists but couldn't parse - likely CF
-    return { platform: 'cloud-foundry' }
+    return { platform: 'cloud-foundry', ...baseInfo }
   }
 }
 

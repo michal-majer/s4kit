@@ -3,7 +3,7 @@
  * Re-exports the shared OAuth service initialized with local Redis client
  */
 
-import { redis } from '../index.ts';
+import { redis } from '../cache/redis.ts';
 import { createOAuthTokenService, type OAuthTokenConfig } from '@s4kit/shared/services';
 
 // Create and export the service instance bound to our Redis client

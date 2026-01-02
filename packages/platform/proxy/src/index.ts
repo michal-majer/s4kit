@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createDbClient } from '@s4kit/shared/db';
-import { createRedisClient } from '@s4kit/shared/cache';
+import { redis } from './cache/redis.ts';
 import proxyRoute from './routes/proxy.ts';
 import healthRoute from './routes/health.ts';
 import typesRoute from './routes/types.ts';
@@ -18,10 +18,8 @@ export const { db, close: closeDb } = createDbClient({
   idleTimeout: 20,
 });
 
-export const redis = createRedisClient({
-  url: process.env.REDIS_URL,
-  lazyConnect: true,
-});
+// Re-export redis from cache module
+export { redis };
 
 const app = new Hono();
 

@@ -537,12 +537,12 @@ export function InstanceServiceDetails({
                   )}
                   {effectiveAuthType === 'oauth2' && (
                     <p className="text-sm text-muted-foreground">
-                      {instanceService.authConfig?.tokenUrl || instance.authConfig?.tokenUrl || 'OAuth 2.0 Client Credentials'}
+                      {instanceService.authConfigName || instance.authConfigName || 'OAuth 2.0 Client Credentials'}
                     </p>
                   )}
                   {effectiveAuthType === 'api_key' && (
                     <p className="text-sm text-muted-foreground">
-                      Header: {instanceService.authConfig?.headerName || instance.authConfig?.headerName || 'X-API-Key'}
+                      {instanceService.authConfigName || instance.authConfigName || 'API Key Header'}
                     </p>
                   )}
                 </div>
