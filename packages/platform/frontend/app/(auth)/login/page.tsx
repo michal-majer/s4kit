@@ -110,7 +110,7 @@ function LoginContent() {
     try {
       await signIn.social({
         provider,
-        callbackURL: redirectUrl || '/',
+        callbackURL: redirectUrl || window.location.origin,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to sign in with ${provider}`;
