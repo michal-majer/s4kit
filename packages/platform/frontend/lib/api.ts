@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Use proxy path to avoid cross-site cookie issues
+// Requests to /backend/* are proxied to the actual backend via next.config.ts rewrites
+const API_URL = '/backend';
 
 export class AuthError extends Error {
   constructor(message: string) {

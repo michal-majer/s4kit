@@ -1,10 +1,12 @@
 import { createAuthClient } from 'better-auth/react';
 import { organizationClient } from 'better-auth/client/plugins';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Use proxy path to avoid cross-site cookie issues
+// Requests to /backend/* are proxied to the actual backend via next.config.ts rewrites
+const AUTH_BASE_URL = '/backend';
 
 export const authClient = createAuthClient({
-  baseURL: API_URL,
+  baseURL: AUTH_BASE_URL,
   plugins: [organizationClient()],
 });
 
