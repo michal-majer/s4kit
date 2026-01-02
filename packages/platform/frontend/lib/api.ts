@@ -1,16 +1,6 @@
-// Use proxy path for client-side requests to avoid cross-site cookie issues
-// Requests to /backend/* are proxied to the actual backend via next.config.ts rewrites
-// For SSR, use the direct backend URL (internal network on Railway)
-const getApiUrl = () => {
-  if (typeof window === 'undefined') {
-    // Server-side: use internal URL if available, otherwise public URL
-    return process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-  }
-  // Client-side: use proxy path
-  return '/backend';
-};
-
-const API_URL = getApiUrl();
+// Direct backend URL - cross-site cookies handled via sameSite: 'none' on backend
+// For SSR, can use internal URL for better performance on Railway
+const API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export class AuthError extends Error {
   constructor(message: string) {
