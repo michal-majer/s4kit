@@ -1,12 +1,20 @@
 import { createAuthClient } from 'better-auth/react';
 import { organizationClient } from 'better-auth/client/plugins';
 
-// Use proxy path to avoid cross-site cookie issues
+// Use proxy path for client-side requests to avoid cross-site cookie issues
 // Requests to /backend/* are proxied to the actual backend via next.config.ts rewrites
-const AUTH_BASE_URL = '/backend';
+// For SSR/build, use the direct backend URL
+const getAuthBaseURL = () => {
+  if (typeof window === 'undefined') {
+    // Server-side: use direct backend URL
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  }
+  // Client-side: use proxy path
+  return '/backend';
+};
 
 export const authClient = createAuthClient({
-  baseURL: AUTH_BASE_URL,
+  baseURL: getAuthBaseURL(),
   plugins: [organizationClient()],
 });
 

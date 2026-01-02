@@ -1,6 +1,16 @@
-// Use proxy path to avoid cross-site cookie issues
+// Use proxy path for client-side requests to avoid cross-site cookie issues
 // Requests to /backend/* are proxied to the actual backend via next.config.ts rewrites
-const API_URL = '/backend';
+// For SSR, use the direct backend URL (internal network on Railway)
+const getApiUrl = () => {
+  if (typeof window === 'undefined') {
+    // Server-side: use internal URL if available, otherwise public URL
+    return process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  }
+  // Client-side: use proxy path
+  return '/backend';
+};
+
+const API_URL = getApiUrl();
 
 export class AuthError extends Error {
   constructor(message: string) {
