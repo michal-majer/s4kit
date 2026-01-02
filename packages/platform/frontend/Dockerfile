@@ -8,12 +8,14 @@ RUN npm install -g bun
 
 # Copy package files
 COPY package.json ./
+COPY packages/shared/package.json ./packages/shared/
 COPY packages/platform/frontend/package.json ./packages/platform/frontend/
 
 # Install dependencies
 RUN bun install --frozen-lockfile
 
 # Copy source files
+COPY packages/shared ./packages/shared
 COPY packages/platform/frontend ./packages/platform/frontend
 COPY tsconfig.json ./
 
