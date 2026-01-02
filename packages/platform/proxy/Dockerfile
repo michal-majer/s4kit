@@ -24,6 +24,9 @@ FROM oven/bun:1.3-slim
 
 WORKDIR /app
 
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy built application
 COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/packages/platform/proxy ./packages/platform/proxy

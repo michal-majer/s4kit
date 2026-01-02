@@ -1,0 +1,11 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "packages/platform/backend/Dockerfile"
+watchPatterns = ["packages/platform/backend/**", "packages/shared/**"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+numReplicas = 1
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

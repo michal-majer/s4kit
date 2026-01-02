@@ -1,0 +1,11 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "packages/platform/proxy/Dockerfile"
+watchPatterns = ["packages/platform/proxy/**", "packages/shared/**"]
+
+[deploy]
+healthcheckPath = "/health/ready"
+healthcheckTimeout = 30
+numReplicas = 1
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
