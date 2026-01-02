@@ -3,6 +3,9 @@ builder = "dockerfile"
 dockerfilePath = "packages/platform/frontend/Dockerfile"
 watchPatterns = ["packages/platform/frontend/**"]
 
+[build.args]
+NEXT_PUBLIC_API_URL = "${{NEXT_PUBLIC_API_URL}}"
+
 [deploy]
 healthcheckPath = "/"
 healthcheckTimeout = 30

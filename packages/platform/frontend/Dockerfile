@@ -6,6 +6,10 @@ WORKDIR /app
 # Install bun for faster installation
 RUN npm install -g bun
 
+# Build arguments for Next.js public env vars
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Copy package files
 COPY package.json ./
 COPY packages/shared/package.json ./packages/shared/
