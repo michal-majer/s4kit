@@ -37,6 +37,9 @@ export const auth = betterAuth({
     defaultCookieAttributes: {
       sameSite: 'none',
       secure: true,
+      // Use parent domain for cross-subdomain cookies (e.g., .s4kit.com)
+      // This allows staging.s4kit.com to access cookies set by staging-api.s4kit.com
+      ...(process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
     },
   },
 
