@@ -46,8 +46,14 @@ app.post('/', async (c) => {
       expiresAt,
     });
 
-    // Build verification URL
-    const baseUrl = process.env.BETTER_AUTH_URL || 'http://localhost:3000';
+    // Build verification URL - auto-detect backend URL from Railway or explicit config
+    const getBackendUrl = () => {
+      if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+      if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+      if (process.env.RAILWAY_STATIC_URL) return process.env.RAILWAY_STATIC_URL;
+      return 'http://localhost:3000';
+    };
+    const baseUrl = getBackendUrl();
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
     const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent(frontendUrl)}`;
 
