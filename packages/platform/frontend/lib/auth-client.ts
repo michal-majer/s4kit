@@ -9,8 +9,8 @@ const getAuthBaseURL = () => {
     // Server-side: use direct backend URL
     return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   }
-  // Client-side: use proxy path
-  return '/backend';
+  // Client-side: use absolute URL with proxy path (better-auth requires absolute URL)
+  return `${window.location.origin}/backend`;
 };
 
 export const authClient = createAuthClient({
