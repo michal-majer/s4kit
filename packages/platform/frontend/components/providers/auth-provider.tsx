@@ -63,7 +63,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   owner: ['*'],
   admin: [
     'organization:read',
-    'organization:update',
+    // Note: organization:update is owner-only (for name changes, deletion, etc.)
     'member:read',
     'member:create',
     'member:update',

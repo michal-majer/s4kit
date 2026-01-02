@@ -82,19 +82,56 @@ async function getCurrentUserMembership() {
   }
 }
 
+async function getOnboardingStatus() {
+  try {
+    const cookieHeader = await getCookieHeader();
+
+    const res = await fetch(`${API_URL}/admin/onboarding`, {
+      headers: {
+        Cookie: cookieHeader,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      // If we can't fetch onboarding status, assume complete to avoid blocking
+      return { completed: true };
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to get onboarding status:', error);
+    // If we can't fetch onboarding status, assume complete to avoid blocking
+    return { completed: true };
+  }
+}
+
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [session, organization, membership] = await Promise.all([
+  const [session, organization, membership, onboarding] = await Promise.all([
     getSession(),
     getOrganization(),
     getCurrentUserMembership(),
+    getOnboardingStatus(),
   ]);
 
   if (!session?.user) {
     redirect('/login');
+  }
+
+  // Check if user has no organization (invited user who hasn't accepted yet)
+  if (!organization && !membership) {
+    // User has no organization - they might have pending invitations
+    redirect('/no-organization');
+  }
+
+  // Redirect to onboarding if not completed
+  if (!onboarding?.completed) {
+    redirect('/onboarding');
   }
 
   const organizationId = organization?.id || session.session?.activeOrganizationId || '';

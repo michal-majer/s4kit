@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Building2, Shield, User, ChevronRight, type LucideIcon } from 'lucide-react';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface NavItem {
   href: string;
   label: string;
   description: string;
   icon: LucideIcon;
+  ownerOnly?: boolean;
 }
 
 const settingsNavItems: NavItem[] = [
@@ -18,6 +20,7 @@ const settingsNavItems: NavItem[] = [
     label: 'Organization',
     description: 'Manage your organization settings',
     icon: Building2,
+    ownerOnly: true,
   },
   {
     href: '/settings/security',
@@ -35,10 +38,15 @@ const settingsNavItems: NavItem[] = [
 
 export function SettingsNav() {
   const pathname = usePathname();
+  const { userRole } = useAuth();
+  const isOwner = userRole === 'owner';
+
+  // Filter nav items based on role
+  const visibleItems = settingsNavItems.filter(item => !item.ownerOnly || isOwner);
 
   return (
     <nav className="flex flex-col gap-1">
-      {settingsNavItems.map((item) => {
+      {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 

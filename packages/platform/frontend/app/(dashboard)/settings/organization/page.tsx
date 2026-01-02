@@ -1,5 +1,5 @@
+import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { OrganizationForm } from '@/components/settings/organization-form';
 import { MemberList } from '@/components/settings/member-list';
 import { DangerZone } from '@/components/settings/danger-zone';
@@ -7,10 +7,20 @@ import { withServerCookies } from '@/lib/server-api';
 import { api } from '@/lib/api';
 
 export default async function OrganizationSettingsPage() {
-  const [organization, members] = await withServerCookies(() =>
+  // Check user role first before fetching owner-only data
+  const currentUser = await withServerCookies(() => api.me.get());
+
+  // Only owners can access organization settings
+  if (currentUser.role !== 'owner') {
+    redirect('/settings/profile');
+  }
+
+  // Fetch organization data (owner-only endpoints)
+  const [organization, members, invitations] = await withServerCookies(() =>
     Promise.all([
       api.organization.get(),
       api.organization.getMembers(),
+      api.organization.getInvitations(),
     ])
   );
 
@@ -38,13 +48,11 @@ export default async function OrganizationSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <MemberList initialMembers={members} />
+          <MemberList initialMembers={members} initialInvitations={invitations} />
         </CardContent>
       </Card>
 
-      <Separator />
-
-      {/* Danger Zone */}
+      {/* Danger Zone - includes its own separator, only shows for owners */}
       <DangerZone organizationName={organization.name} />
     </div>
   );

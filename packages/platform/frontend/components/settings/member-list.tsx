@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, Crown, Shield, User, Trash2, UserCog } from 'lucide-react';
+import { MoreHorizontal, Crown, Shield, User, Trash2, UserCog, Mail, RefreshCw, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +27,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { InviteMemberDialog } from './invite-member-dialog';
-import { api, type OrganizationMember, type UserRole } from '@/lib/api';
+import { api, type OrganizationMember, type Invitation, type UserRole } from '@/lib/api';
+import { formatDistanceToNow } from 'date-fns';
 
 const roleConfig: Record<UserRole, { label: string; icon: typeof Crown; color: string }> = {
   owner: {
@@ -49,13 +50,17 @@ const roleConfig: Record<UserRole, { label: string; icon: typeof Crown; color: s
 
 interface MemberListProps {
   initialMembers: OrganizationMember[];
+  initialInvitations?: Invitation[];
 }
 
-export function MemberList({ initialMembers }: MemberListProps) {
+export function MemberList({ initialMembers, initialInvitations = [] }: MemberListProps) {
   const [members, setMembers] = useState<OrganizationMember[]>(initialMembers);
+  const [invitations, setInvitations] = useState<Invitation[]>(initialInvitations);
   const [memberToRemove, setMemberToRemove] = useState<OrganizationMember | null>(null);
+  const [invitationToCancel, setInvitationToCancel] = useState<Invitation | null>(null);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState<string | null>(null);
   const router = useRouter();
 
   const getInitials = (name: string) => {
@@ -102,12 +107,42 @@ export function MemberList({ initialMembers }: MemberListProps) {
 
   const handleInvite = async (email: string, role: UserRole) => {
     try {
-      await api.organization.sendInvitation(email, role);
+      const invitation = await api.organization.sendInvitation(email, role);
+      setInvitations((prev) => [...prev, invitation]);
       toast.success(`Invitation sent to ${email}`);
       setInviteDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to send invitation');
       throw error;
+    }
+  };
+
+  const handleResendInvitation = async (invitation: Invitation) => {
+    setIsResending(invitation.id);
+    try {
+      const result = await api.organization.resendInvitation(invitation.id);
+      setInvitations((prev) =>
+        prev.map((inv) => inv.id === invitation.id ? { ...inv, expiresAt: result.expiresAt } : inv)
+      );
+      toast.success(`Invitation resent to ${invitation.email}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to resend invitation');
+    } finally {
+      setIsResending(null);
+    }
+  };
+
+  const handleCancelInvitation = async () => {
+    if (!invitationToCancel) return;
+
+    try {
+      await api.organization.cancelInvitation(invitationToCancel.id);
+      setInvitations((prev) => prev.filter((inv) => inv.id !== invitationToCancel.id));
+      toast.success('Invitation cancelled');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel invitation');
+    } finally {
+      setInvitationToCancel(null);
     }
   };
 
@@ -205,6 +240,89 @@ export function MemberList({ initialMembers }: MemberListProps) {
         })}
       </div>
 
+      {/* Pending Invitations */}
+      {invitations.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-muted-foreground">
+            Pending Invitations ({invitations.length})
+          </p>
+          <div className="divide-y divide-border rounded-xl border border-dashed bg-muted/30">
+            {invitations.map((invitation) => {
+              const roleInfo = roleConfig[invitation.role];
+              const RoleIcon = roleInfo.icon;
+              const isExpired = new Date(invitation.expiresAt) < new Date();
+              const isLoading = isResending === invitation.id;
+
+              return (
+                <div
+                  key={invitation.id}
+                  className={cn(
+                    "flex items-center justify-between gap-4 p-4 transition-colors",
+                    isLoading && "opacity-50 pointer-events-none"
+                  )}
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted shrink-0">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{invitation.email}</p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {isExpired ? (
+                          <span className="text-destructive">Expired</span>
+                        ) : (
+                          <span>Expires {formatDistanceToNow(new Date(invitation.expiresAt), { addSuffix: true })}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge
+                      variant="secondary"
+                      className={cn('gap-1 font-medium', roleInfo.color)}
+                    >
+                      <RoleIcon className="h-3 w-3" />
+                      {roleInfo.label}
+                    </Badge>
+
+                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-800">
+                      Pending
+                    </Badge>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleResendInvitation(invitation)}>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Resend Invitation
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => setInvitationToCancel(invitation)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <X className="mr-2 h-4 w-4" />
+                          Cancel Invitation
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Invite Dialog */}
       <InviteMemberDialog
         open={inviteDialogOpen}
@@ -212,7 +330,7 @@ export function MemberList({ initialMembers }: MemberListProps) {
         onInvite={handleInvite}
       />
 
-      {/* Remove Confirmation */}
+      {/* Remove Member Confirmation */}
       <AlertDialog
         open={!!memberToRemove}
         onOpenChange={(open) => !open && setMemberToRemove(null)}
@@ -235,6 +353,34 @@ export function MemberList({ initialMembers }: MemberListProps) {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Invitation Confirmation */}
+      <AlertDialog
+        open={!!invitationToCancel}
+        onOpenChange={(open) => !open && setInvitationToCancel(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel invitation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel the invitation to{' '}
+              <span className="font-medium text-foreground">
+                {invitationToCancel?.email}
+              </span>
+              ? They will no longer be able to join this organization.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Invitation</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelInvitation}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancel Invitation
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

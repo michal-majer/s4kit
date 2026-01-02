@@ -62,6 +62,25 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
 // Types
 export type SystemType = 's4_public' | 's4_private' | 's4_onprem' | 'btp' | 'other';
 export type InstanceEnvironment = 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production';
+export type AuthType = 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
+
+export interface AuthConfiguration {
+  id: string;
+  organizationId: string;
+  name: string;
+  description?: string | null;
+  authType: AuthType;
+  authConfig?: {
+    headerName?: string;
+    tokenUrl?: string;
+    scope?: string;
+    authorizationUrl?: string;
+    clientId?: string;
+  } | null;
+  hasCredentials: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface System {
   id: string;
@@ -82,15 +101,9 @@ export interface Instance {
   systemId: string;
   environment: InstanceEnvironment;
   baseUrl: string;
-  authType: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
-  authConfig?: {
-    headerName?: string;
-    tokenUrl?: string;
-    scope?: string;
-    authorizationUrl?: string;
-    clientId?: string;
-    [key: string]: string | undefined;
-  };
+  authConfigId?: string | null;
+  authConfigName?: string | null;
+  authType?: AuthType | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,15 +118,9 @@ export interface SystemService {
   description?: string;
   entities: string[];
   odataVersion?: 'v2' | 'v4' | null;
-  authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
-  authConfig?: {
-    headerName?: string;
-    tokenUrl?: string;
-    scope?: string;
-    authorizationUrl?: string;
-    clientId?: string;
-    [key: string]: string | undefined;
-  };
+  authConfigId?: string | null;
+  authConfigName?: string | null;
+  authType?: AuthType | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -125,24 +132,17 @@ export interface InstanceService {
   servicePathOverride?: string;
   entities?: string[]; // Resolved entities (instanceService.entities or inherited from systemService)
   hasEntityOverride?: boolean; // True if instanceService.entities is set (not null)
-  authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
+  authConfigId?: string | null;
+  authConfigName?: string | null;
+  authType?: AuthType | null;
   hasAuthOverride?: boolean;
   // Verification status fields
   verificationStatus?: 'pending' | 'verified' | 'failed' | null;
   lastVerifiedAt?: string | null;
   verificationError?: string | null;
-  entityCount?: number | null;
   createdAt: string;
   instance?: { id: string; environment: InstanceEnvironment };
   systemService?: { id: string; name: string; alias: string; entities?: string[]; odataVersion?: 'v2' | 'v4' | null };
-  authConfig?: {
-    headerName?: string;
-    tokenUrl?: string;
-    scope?: string;
-    authorizationUrl?: string;
-    clientId?: string;
-    [key: string]: string | undefined;
-  };
 }
 
 export interface PredefinedService {
@@ -334,10 +334,80 @@ export interface PlatformInfo {
   appName?: string;
 }
 
+// Onboarding types
+export interface OnboardingData {
+  organizationName: string;
+  companySize?: 'solo' | '2-10' | '11-50' | '51-200' | '200+';
+  industry?: string;
+  role?: 'developer' | 'architect' | 'manager' | 'consultant' | 'other';
+  useCase?: 'integration' | 'development' | 'testing' | 'migration' | 'other';
+  sapSystemTypes?: ('s4_public' | 's4_private' | 'btp')[];
+  referralSource?: 'search' | 'social' | 'recommendation' | 'event' | 'other';
+}
+
+export interface OnboardingStatus {
+  completed: boolean;
+  completedAt: string | null;
+  data: OnboardingData | null;
+  currentOrganizationName: string;
+}
+
+// Invitation types
+export interface InvitationDetails {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: string;
+  expiresAt: string;
+  organizationId: string;
+  organizationName: string;
+  inviterName: string | null;
+  userExists?: boolean;
+  error?: string;
+}
+
+export interface AcceptInvitationResult {
+  success: boolean;
+  message: string;
+  organizationId: string;
+  organizationName?: string;
+  role?: UserRole;
+}
+
 export const api = {
   // Platform info
   platform: {
     getInfo: () => fetchAPI<PlatformInfo>('/admin/platform-info'),
+  },
+
+  // Current user membership
+  me: {
+    get: () => fetchAPI<{
+      user: { id: string; name: string; email: string; image?: string | null };
+      organizationId: string | null;
+      role: UserRole | null;
+    }>('/admin/me'),
+  },
+
+  // Invitations (public API)
+  invitations: {
+    get: (id: string) => fetchAPI<InvitationDetails>(`/api/invitations/${id}`),
+    accept: (id: string) => fetchAPI<AcceptInvitationResult>(`/api/invitations/${id}/accept`, { method: 'POST' }),
+  },
+
+  // Onboarding
+  onboarding: {
+    getStatus: () => fetchAPI<OnboardingStatus>('/admin/onboarding'),
+    complete: (data: OnboardingData) =>
+      fetchAPI<{ success: boolean; organization: { id: string; name: string; onboardingCompletedAt: string } }>(
+        '/admin/onboarding/complete',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    skip: () =>
+      fetchAPI<{ success: boolean; organization: { id: string; name: string; onboardingCompletedAt: string } }>(
+        '/admin/onboarding/skip',
+        { method: 'POST' }
+      ),
   },
 
   // Organization management
@@ -365,6 +435,8 @@ export const api = {
       }),
     cancelInvitation: (id: string) =>
       fetchAPI<{ success: boolean }>(`/admin/organization/invitations/${id}`, { method: 'DELETE' }),
+    resendInvitation: (id: string) =>
+      fetchAPI<{ success: boolean; expiresAt: string }>(`/admin/organization/invitations/${id}/resend`, { method: 'POST' }),
   },
 
   // User profile
@@ -403,6 +475,50 @@ export const api = {
     delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/systems/${id}`, { method: 'DELETE' }),
   },
 
+  authConfigurations: {
+    list: () => fetchAPI<AuthConfiguration[]>('/admin/auth-configurations'),
+    get: (id: string) => fetchAPI<AuthConfiguration>(`/admin/auth-configurations/${id}`),
+    create: (data: {
+      name: string;
+      description?: string | null;
+      authType: AuthType;
+      username?: string;
+      password?: string;
+      apiKey?: string;
+      apiKeyHeaderName?: string;
+      oauth2ClientId?: string;
+      oauth2ClientSecret?: string;
+      oauth2TokenUrl?: string;
+      oauth2Scope?: string;
+      oauth2AuthorizationUrl?: string;
+      customHeaderName?: string;
+      customHeaderValue?: string;
+    }) => fetchAPI<AuthConfiguration>('/admin/auth-configurations', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{
+      name: string;
+      description?: string | null;
+      authType: AuthType;
+      username?: string;
+      password?: string;
+      apiKey?: string;
+      apiKeyHeaderName?: string;
+      oauth2ClientId?: string;
+      oauth2ClientSecret?: string;
+      oauth2TokenUrl?: string;
+      oauth2Scope?: string;
+      oauth2AuthorizationUrl?: string;
+      customHeaderName?: string;
+      customHeaderValue?: string;
+    }>) => fetchAPI<AuthConfiguration>(`/admin/auth-configurations/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/auth-configurations/${id}`, { method: 'DELETE' }),
+    getUsage: (id: string) => fetchAPI<{
+      instances: number;
+      systemServices: number;
+      instanceServices: number;
+      total: number;
+    }>(`/admin/auth-configurations/${id}/usage`),
+  },
+
   instances: {
     list: (systemId?: string) => {
       const params = systemId ? `?systemId=${systemId}` : '';
@@ -413,37 +529,11 @@ export const api = {
       systemId: string;
       environment: InstanceEnvironment;
       baseUrl: string;
-      authType: string;
-      // Basic auth
-      username?: string;
-      password?: string;
-      // API Key auth
-      apiKey?: string;
-      apiKeyHeaderName?: string;
-      // OAuth2 auth
-      oauth2ClientId?: string;
-      oauth2ClientSecret?: string;
-      oauth2TokenUrl?: string;
-      oauth2Scope?: string;
-      oauth2AuthorizationUrl?: string;
-      // Custom auth
-      customHeaderName?: string;
-      customHeaderValue?: string;
+      authConfigId?: string | null;
     }) => fetchAPI<Instance>('/admin/instances', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<{
       baseUrl: string;
-      authType: string;
-      username?: string;
-      password?: string;
-      apiKey?: string;
-      apiKeyHeaderName?: string;
-      oauth2ClientId?: string;
-      oauth2ClientSecret?: string;
-      oauth2TokenUrl?: string;
-      oauth2Scope?: string;
-      oauth2AuthorizationUrl?: string;
-      customHeaderName?: string;
-      customHeaderValue?: string;
+      authConfigId?: string | null;
     }>) => fetchAPI<Instance>(`/admin/instances/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/instances/${id}`, { method: 'DELETE' }),
     refreshAllServices: (id: string) => fetchAPI<{
@@ -483,16 +573,7 @@ export const api = {
       entities?: string[];
       predefinedServiceId?: string;
       odataVersion?: 'v2' | 'v4';
-      authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
-      username?: string;
-      password?: string;
-      apiKey?: string;
-      apiKeyHeaderName?: string;
-      oauth2ClientId?: string;
-      oauth2ClientSecret?: string;
-      oauth2TokenUrl?: string;
-      oauth2Scope?: string;
-      oauth2AuthorizationUrl?: string;
+      authConfigId?: string | null;
     }) => fetchAPI<SystemService>('/admin/system-services', { method: 'POST', body: JSON.stringify({ ...data, entities: data.entities || [] }) }),
     update: (id: string, data: Partial<{
       name: string;
@@ -500,16 +581,7 @@ export const api = {
       servicePath: string;
       description?: string;
       entities?: string[];
-      authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
-      username?: string | null;
-      password?: string | null;
-      apiKey?: string;
-      apiKeyHeaderName?: string;
-      oauth2ClientId?: string;
-      oauth2ClientSecret?: string;
-      oauth2TokenUrl?: string;
-      oauth2Scope?: string;
-      oauth2AuthorizationUrl?: string;
+      authConfigId?: string | null;
     }>) =>
       fetchAPI<SystemService>(`/admin/system-services/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/system-services/${id}`, { method: 'DELETE' }),
@@ -531,31 +603,13 @@ export const api = {
       systemServiceId: string;
       servicePathOverride?: string;
       entities?: string[] | null; // null = inherit from systemService
-      authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
-      username?: string;
-      password?: string;
-      apiKey?: string;
-      apiKeyHeaderName?: string;
-      oauth2ClientId?: string;
-      oauth2ClientSecret?: string;
-      oauth2TokenUrl?: string;
-      oauth2Scope?: string;
-      oauth2AuthorizationUrl?: string;
+      authConfigId?: string | null;
     }) =>
       fetchAPI<InstanceService>('/admin/instance-services', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<{
       servicePathOverride?: string | null;
       entities?: string[] | null; // null = inherit from systemService
-      authType?: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom' | null;
-      username?: string | null;
-      password?: string | null;
-      apiKey?: string;
-      apiKeyHeaderName?: string;
-      oauth2ClientId?: string;
-      oauth2ClientSecret?: string;
-      oauth2TokenUrl?: string;
-      oauth2Scope?: string;
-      oauth2AuthorizationUrl?: string;
+      authConfigId?: string | null;
     }>) =>
       fetchAPI<InstanceService>(`/admin/instance-services/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI<{ success: boolean }>(`/admin/instance-services/${id}`, { method: 'DELETE' }),
@@ -654,6 +708,28 @@ export const api = {
         throw new Error(error || `API Error: ${res.status}`);
       }
       return res.text();
+    },
+  },
+
+  platformInfo: {
+    get: async () => {
+      // Public endpoint, no auth required
+      const res = await fetch(`${API_URL}/api/platform-info`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch platform info');
+      }
+      return res.json() as Promise<{
+        platform: 'sap-btp' | 'cloud-foundry' | 'standalone';
+        mode: 'selfhost' | 'saas';
+        features: {
+          signup: boolean;
+          socialLogin: boolean;
+          billing: boolean;
+          multiOrg: boolean;
+        };
+      }>;
     },
   },
 

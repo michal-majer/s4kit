@@ -17,6 +17,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/api';
+import { useAuth } from '@/components/providers/auth-provider';
+import { Separator } from '@/components/ui/separator';
 
 interface DangerZoneProps {
   organizationName: string;
@@ -27,6 +29,12 @@ export function DangerZone({ organizationName }: DangerZoneProps) {
   const [confirmText, setConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
+  const { userRole } = useAuth();
+
+  // Only owners can see the danger zone
+  if (userRole !== 'owner') {
+    return null;
+  }
 
   const isConfirmValid = confirmText === organizationName;
 
@@ -48,7 +56,9 @@ export function DangerZone({ organizationName }: DangerZoneProps) {
   };
 
   return (
-    <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+    <>
+      <Separator />
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
       <div className="flex items-start gap-4">
         <div className="rounded-lg bg-destructive/10 p-2">
           <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -119,5 +129,6 @@ export function DangerZone({ organizationName }: DangerZoneProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -25,6 +25,7 @@
     "ioredis": "^5.8.2",
     "ky": "^1.14.1",
     "postgres": "^3.4.7",
+    "resend": "^6.6.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {

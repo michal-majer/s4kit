@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import { db, organizations, members, invitations, users } from '../../db';
+import { db, organizations, members, invitations, users, sessions } from '../../db';
 import { z } from 'zod';
 import { eq, and, ne } from 'drizzle-orm';
 import { requirePermission, requireRole, type SessionVariables } from '../../middleware/session-auth';
+import { sendInvitationEmail } from '../../services/email';
 
 const app = new Hono<{ Variables: SessionVariables }>();
 
@@ -232,6 +233,11 @@ app.delete('/members/:userId', requirePermission('member:delete'), async (c) => 
     return c.json({ error: 'Member not found' }, 404);
   }
 
+  // Revoke all sessions for the removed user to log them out
+  await db
+    .delete(sessions)
+    .where(eq(sessions.userId, targetUserId));
+
   return c.json({ success: true });
 });
 
@@ -274,7 +280,8 @@ app.post('/invitations', requirePermission('invitation:create'), async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
-  const { email, role } = result.data;
+  const { email: rawEmail, role } = result.data;
+  const email = rawEmail.toLowerCase(); // Normalize email
 
   // Check if user is already a member
   const existingUser = await db.query.users.findFirst({
@@ -307,6 +314,11 @@ app.post('/invitations', requirePermission('invitation:create'), async (c) => {
     return c.json({ error: 'An invitation is already pending for this email' }, 400);
   }
 
+  // Get organization name for the email
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+
   // Create invitation (expires in 7 days)
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
@@ -324,10 +336,67 @@ app.post('/invitations', requirePermission('invitation:create'), async (c) => {
     })
     .returning();
 
-  // TODO: Send invitation email
-  console.log(`[Invitation] Invite sent to ${email} for organization ${organizationId}`);
+  if (!invitation) {
+    return c.json({ error: 'Failed to create invitation' }, 500);
+  }
+
+  // Send invitation email
+  await sendInvitationEmail({
+    email,
+    organizationName: org?.name || 'Unknown Organization',
+    inviterName: currentUser.name || currentUser.email,
+    role,
+    invitationId: invitation.id,
+  });
 
   return c.json(invitation, 201);
+});
+
+// Resend invitation
+app.post('/invitations/:id/resend', requirePermission('invitation:create'), async (c) => {
+  const organizationId = c.get('organizationId')!;
+  const invitationId = c.req.param('id');
+  const currentUser = c.get('user')!;
+
+  // Get the invitation
+  const [invitation] = await db
+    .select()
+    .from(invitations)
+    .where(and(
+      eq(invitations.id, invitationId),
+      eq(invitations.organizationId, organizationId),
+      eq(invitations.status, 'pending')
+    ))
+    .limit(1);
+
+  if (!invitation) {
+    return c.json({ error: 'Invitation not found or already accepted' }, 404);
+  }
+
+  // Get organization name
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+
+  // Update expiration (extend by 7 days from now)
+  const newExpiresAt = new Date();
+  newExpiresAt.setDate(newExpiresAt.getDate() + 7);
+
+  await db
+    .update(invitations)
+    .set({ expiresAt: newExpiresAt })
+    .where(eq(invitations.id, invitationId));
+
+  // Resend the email
+  await sendInvitationEmail({
+    email: invitation.email,
+    organizationName: org?.name || 'Unknown Organization',
+    inviterName: currentUser.name || currentUser.email,
+    role: invitation.role as 'admin' | 'developer',
+    invitationId: invitation.id,
+  });
+
+  return c.json({ success: true, expiresAt: newExpiresAt });
 });
 
 // Cancel invitation

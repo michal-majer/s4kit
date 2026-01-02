@@ -17,7 +17,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   owner: ['*'],
   admin: [
     'organization:read',
-    'organization:update',
+    // Note: organization:update is owner-only (for name changes, deletion, etc.)
     'member:read',
     'member:create',
     'member:update',
@@ -213,3 +213,19 @@ export const requirePermission = (permission: string) => {
 export function checkPermission(role: UserRole | null, permission: string): boolean {
   return hasPermission(role, permission);
 }
+
+/**
+ * Simple auth check - only requires user to be logged in
+ * Does NOT require organization to be selected (useful for onboarding)
+ */
+export const requireAuth = createMiddleware<{ Variables: SessionVariables }>(
+  async (c, next) => {
+    const user = c.get('user');
+
+    if (!user) {
+      return c.json({ error: 'Unauthorized - Please log in' }, 401);
+    }
+
+    return next();
+  }
+);
