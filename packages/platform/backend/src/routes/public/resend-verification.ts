@@ -3,13 +3,15 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../../db';
 import * as authSchema from '../../db/auth-schema';
-import { sendVerificationEmail } from '../../services/email';
+import { auth } from '../../auth';
 
 const app = new Hono();
 
 const resendSchema = z.object({
   email: z.string().email(),
 });
+
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
 
 // POST /api/resend-verification
 app.post('/', async (c) => {
@@ -34,34 +36,13 @@ app.post('/', async (c) => {
       return c.json({ success: true, message: 'If an account exists, a verification email has been sent.' });
     }
 
-    // Generate verification token
-    const token = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-    // Store verification token
-    await db.insert(authSchema.verifications).values({
-      id: crypto.randomUUID(),
-      identifier: email.toLowerCase(),
-      value: token,
-      expiresAt,
-    });
-
-    // Build verification URL - auto-detect backend URL from Railway or explicit config
-    const getBackendUrl = () => {
-      if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
-      if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-      if (process.env.RAILWAY_STATIC_URL) return process.env.RAILWAY_STATIC_URL;
-      return 'http://localhost:3000';
-    };
-    const baseUrl = getBackendUrl();
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-    const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent(frontendUrl)}`;
-
-    // Send verification email
-    await sendVerificationEmail({
-      email: user.email,
-      name: user.name,
-      url: verificationUrl,
+    // Use better-auth's internal API to send verification email
+    // This creates a proper JWT token that better-auth can validate
+    await auth.api.sendVerificationEmail({
+      body: {
+        email: user.email,
+        callbackURL: frontendUrl,
+      },
     });
 
     console.log(`[Resend] Verification email sent to ${email}`);

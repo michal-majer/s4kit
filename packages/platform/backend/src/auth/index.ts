@@ -33,6 +33,13 @@ export const auth = betterAuth({
 
   trustedOrigins: [frontendUrl],
 
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: 'none',
+      secure: true,
+    },
+  },
+
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: config.features.emailVerification,
