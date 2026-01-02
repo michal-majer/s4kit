@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { db, organizations, members, invitations, users, sessions } from '../../db';
 import { z } from 'zod';
 import { eq, and, ne } from 'drizzle-orm';
-import { requirePermission, requireRole, type SessionVariables } from '../../middleware/session-auth';
+import { requirePermission, requireRole, invalidateMembershipCache, type SessionVariables } from '../../middleware/session-auth';
 import { sendInvitationEmail } from '../../services/email';
 
 const app = new Hono<{ Variables: SessionVariables }>();
@@ -174,6 +174,9 @@ app.patch('/members/:userId/role', requirePermission('member:update'), async (c)
     return c.json({ error: 'Member not found' }, 404);
   }
 
+  // Invalidate membership cache for the updated user
+  await invalidateMembershipCache(targetUserId);
+
   return c.json(updated);
 });
 
@@ -232,6 +235,9 @@ app.delete('/members/:userId', requirePermission('member:delete'), async (c) => 
   if (!deleted) {
     return c.json({ error: 'Member not found' }, 404);
   }
+
+  // Invalidate membership cache for the removed user
+  await invalidateMembershipCache(targetUserId);
 
   // Revoke all sessions for the removed user to log them out
   await db

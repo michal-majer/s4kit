@@ -10,12 +10,15 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL environment variable is not set');
 }
 
-// Create postgres connection
-// Using connection pooling with max 10 connections
+// Create postgres connection optimized for Railway/cloud environments
 const queryClient = postgres(databaseUrl, {
-  max: 10,
-  idle_timeout: 20,
-  connect_timeout: 10,
+  max: 5,                    // Reduced for single-instance Railway deployments
+  idle_timeout: 30,          // Keep connections alive longer (Railway has connection overhead)
+  connect_timeout: 10,       // Fail fast on connection issues
+  prepare: false,            // Disable prepared statements (works better with connection poolers)
+  connection: {
+    application_name: 's4kit-backend',
+  },
 });
 
 // Combine all schemas

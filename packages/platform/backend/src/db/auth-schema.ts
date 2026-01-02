@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, text, pgEnum, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, text, pgEnum, unique, index } from 'drizzle-orm/pg-core';
 import { organizations } from '@s4kit/shared/db/schema';
 
 // User roles enum
@@ -54,7 +54,7 @@ export const accounts = pgTable('accounts', {
 export const verifications = pgTable('verifications', {
   id: text('id').primaryKey(),
   identifier: varchar('identifier', { length: 255 }).notNull(), // email or other identifier
-  value: varchar('value', { length: 255 }).notNull(), // verification token
+  value: text('value').notNull(), // verification token or OAuth state JSON
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -69,6 +69,8 @@ export const members = pgTable('members', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueMember: unique().on(table.organizationId, table.userId),
+  // Index for fast membership lookup by userId (used in session middleware)
+  userIdIdx: index('members_user_id_idx').on(table.userId),
 }));
 
 // Organization invitations

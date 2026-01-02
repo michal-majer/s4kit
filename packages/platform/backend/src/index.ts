@@ -2,9 +2,11 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { sql } from 'drizzle-orm'
 import { db } from './db'
+import { redis } from './cache/redis'
 import { auth } from './auth'
 import { config } from './config/mode'
 import { sessionMiddleware, adminAuthMiddleware } from './middleware/session-auth'
+import { cacheHeaders } from './middleware/cache-headers'
 import systemsRoute from './routes/admin/systems'
 import instancesRoute from './routes/admin/instances'
 import systemServicesRoute from './routes/admin/system-services'
@@ -44,6 +46,8 @@ app.use('/admin/*', cors({
 // Session auth middleware for admin routes
 app.use('/admin/*', sessionMiddleware)
 app.use('/admin/*', adminAuthMiddleware)
+// Add cache headers for GET requests (stale-while-revalidate pattern)
+app.use('/admin/*', cacheHeaders(0, 30))
 
 // Health check
 app.get('/health', async (c) => {
@@ -127,5 +131,23 @@ if (config.isSelfHosted) {
     })
   }
 }
+
+// Warm up connections on startup to reduce first-request latency
+async function warmupConnections() {
+  try {
+    // Warm up database connection
+    await db.execute(sql`SELECT 1`)
+    console.log('[Startup] Database connection warmed up')
+
+    // Warm up Redis connection (lazyConnect is enabled)
+    await redis.ping()
+    console.log('[Startup] Redis connection warmed up')
+  } catch (error) {
+    console.error('[Startup] Failed to warm up connections:', error)
+  }
+}
+
+// Run warmup in background (don't block server start)
+warmupConnections()
 
 export default app

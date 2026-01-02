@@ -2,8 +2,67 @@ import { createMiddleware } from 'hono/factory';
 import { auth, type Session, type User } from '../auth';
 import { db, members } from '../db';
 import { eq, and } from 'drizzle-orm';
+import { redis } from '../cache/redis';
 
 export type UserRole = 'owner' | 'admin' | 'developer';
+
+// Cache TTL for user memberships (5 minutes)
+const MEMBERSHIP_CACHE_TTL = 300;
+
+interface CachedMembership {
+  organizationId: string;
+  role: UserRole;
+}
+
+/**
+ * Get user memberships with Redis caching
+ */
+async function getCachedMemberships(userId: string): Promise<CachedMembership[]> {
+  const cacheKey = `user:${userId}:memberships`;
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {
+    // Redis error - fall through to DB
+  }
+
+  // Fetch from database
+  const memberships = await db.query.members.findMany({
+    where: eq(members.userId, userId),
+    columns: {
+      organizationId: true,
+      role: true,
+    },
+  });
+
+  const result = memberships.map((m) => ({
+    organizationId: m.organizationId,
+    role: m.role as UserRole,
+  }));
+
+  // Cache the result
+  try {
+    await redis.set(cacheKey, JSON.stringify(result), 'EX', MEMBERSHIP_CACHE_TTL);
+  } catch {
+    // Redis error - ignore
+  }
+
+  return result;
+}
+
+/**
+ * Invalidate user membership cache (call after membership changes)
+ */
+export async function invalidateMembershipCache(userId: string): Promise<void> {
+  try {
+    await redis.del(`user:${userId}:memberships`);
+  } catch {
+    // Redis error - ignore
+  }
+}
 
 export type SessionVariables = {
   user: User | null;
@@ -85,17 +144,16 @@ export const sessionMiddleware = createMiddleware<{ Variables: SessionVariables 
       // Get active organization from header or session
       let orgId = c.req.header('X-Organization-Id') || session.session.activeOrganizationId;
 
+      // Fetch memberships once (with Redis caching)
+      const userMemberships = await getCachedMemberships(session.user.id);
+
       // If no org selected, auto-select if user belongs to exactly one organization
       if (!orgId) {
-        const userMemberships = await db.query.members.findMany({
-          where: eq(members.userId, session.user.id),
-        });
-
         if (userMemberships.length === 1 && userMemberships[0]) {
           // User belongs to exactly one org, auto-select it
           orgId = userMemberships[0].organizationId;
           c.set('organizationId', orgId);
-          c.set('userRole', (userMemberships[0].role as UserRole) || null);
+          c.set('userRole', userMemberships[0].role);
           return next();
         } else if (userMemberships.length > 1) {
           // User belongs to multiple orgs, they need to select one
@@ -107,12 +165,10 @@ export const sessionMiddleware = createMiddleware<{ Variables: SessionVariables 
 
       c.set('organizationId', orgId || null);
 
-      // Get user role in organization
+      // Get user role from cached memberships (no additional DB query)
       if (orgId) {
-        const member = await db.query.members.findFirst({
-          where: and(eq(members.userId, session.user.id), eq(members.organizationId, orgId)),
-        });
-        c.set('userRole', (member?.role as UserRole) || null);
+        const membership = userMemberships.find((m) => m.organizationId === orgId);
+        c.set('userRole', membership?.role || null);
       } else {
         c.set('userRole', null);
       }

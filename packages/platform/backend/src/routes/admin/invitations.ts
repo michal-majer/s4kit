@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { db, organizations } from '../../db';
 import { members, invitations, users } from '../../db/auth-schema';
 import { eq, and } from 'drizzle-orm';
-import { sessionMiddleware, type SessionVariables } from '../../middleware/session-auth';
+import { sessionMiddleware, invalidateMembershipCache, type SessionVariables } from '../../middleware/session-auth';
 
 const app = new Hono<{ Variables: SessionVariables }>();
 
@@ -128,6 +128,9 @@ app.post('/:id/accept', sessionMiddleware, async (c) => {
     userId: user.id,
     role: invitation.role,
   });
+
+  // Invalidate membership cache for the user
+  await invalidateMembershipCache(user.id);
 
   // Mark invitation as accepted
   await db
