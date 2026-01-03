@@ -205,6 +205,14 @@ export const sapClient = {
         return { success: true, __sapResponseTime: sapResponseTime };
       }
 
+      // Check content type - $count returns text/plain with just a number
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/plain') || requestOptions.path.endsWith('/$count')) {
+        const textResponse = await response.text();
+        const count = parseInt(textResponse.trim(), 10);
+        return { count, __sapResponseTime: sapResponseTime };
+      }
+
       const rawJson = await response.json();
       const processedData = sapClient.processResponse(rawJson, requestOptions);
 
@@ -259,6 +267,14 @@ export const sapClient = {
 
         if (!retryHasContent) {
           return { success: true, __sapResponseTime: retrySapResponseTime };
+        }
+
+        // Check content type - $count returns text/plain with just a number
+        const retryContentType = response.headers.get('content-type') || '';
+        if (retryContentType.includes('text/plain') || requestOptions.path.endsWith('/$count')) {
+          const textResponse = await response.text();
+          const count = parseInt(textResponse.trim(), 10);
+          return { count, __sapResponseTime: retrySapResponseTime };
         }
 
         const rawJson = await response.json();
@@ -328,6 +344,14 @@ export const sapClient = {
 
         if (!oauthRetryHasContent) {
           return { success: true, __sapResponseTime: retrySapResponseTime };
+        }
+
+        // Check content type - $count returns text/plain with just a number
+        const oauthRetryContentType = response.headers.get('content-type') || '';
+        if (oauthRetryContentType.includes('text/plain') || requestOptions.path.endsWith('/$count')) {
+          const textResponse = await response.text();
+          const count = parseInt(textResponse.trim(), 10);
+          return { count, __sapResponseTime: retrySapResponseTime };
         }
 
         const rawJson = await response.json();
