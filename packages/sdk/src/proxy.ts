@@ -133,7 +133,12 @@ export function createEntityHandler<T = any>(
         buildQuery(options as QueryOptions<T>),
         extractRequestOptions(options as QueryOptions<T>)
       );
-      return typeof response === 'number' ? response : parseInt(String(response), 10);
+      // Handle both raw number and { count: N } response formats
+      if (typeof response === 'number') return response;
+      if (response && typeof response === 'object' && 'count' in response) {
+        return typeof response.count === 'number' ? response.count : parseInt(String(response.count), 10);
+      }
+      return parseInt(String(response), 10);
     },
 
     // ==========================================================================
