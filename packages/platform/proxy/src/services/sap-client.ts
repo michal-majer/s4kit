@@ -191,6 +191,20 @@ export const sapClient = {
       const sapEnd = Date.now();
       const sapResponseTime = sapEnd - sapStart;
 
+      // Handle 204 No Content (common for DELETE operations)
+      if (response.status === 204) {
+        return { success: true, __sapResponseTime: sapResponseTime };
+      }
+
+      // Check if response has content before parsing JSON
+      const contentLength = response.headers.get('content-length');
+      const hasContent = contentLength !== '0' && contentLength !== null;
+
+      if (!hasContent) {
+        // Empty response body - return success
+        return { success: true, __sapResponseTime: sapResponseTime };
+      }
+
       const rawJson = await response.json();
       const processedData = sapClient.processResponse(rawJson, requestOptions);
 
@@ -233,6 +247,19 @@ export const sapClient = {
         });
         const retrySapEnd = Date.now();
         const retrySapResponseTime = retrySapEnd - retrySapStart;
+
+        // Handle 204 No Content (common for DELETE operations)
+        if (response.status === 204) {
+          return { success: true, __sapResponseTime: retrySapResponseTime };
+        }
+
+        // Check if response has content before parsing JSON
+        const retryContentLength = response.headers.get('content-length');
+        const retryHasContent = retryContentLength !== '0' && retryContentLength !== null;
+
+        if (!retryHasContent) {
+          return { success: true, __sapResponseTime: retrySapResponseTime };
+        }
 
         const rawJson = await response.json();
         const processedData = sapClient.processResponse(rawJson, requestOptions);
@@ -289,6 +316,19 @@ export const sapClient = {
         });
         const retrySapEnd = Date.now();
         const retrySapResponseTime = retrySapEnd - retrySapStart;
+
+        // Handle 204 No Content (common for DELETE operations)
+        if (response.status === 204) {
+          return { success: true, __sapResponseTime: retrySapResponseTime };
+        }
+
+        // Check if response has content before parsing JSON
+        const oauthRetryContentLength = response.headers.get('content-length');
+        const oauthRetryHasContent = oauthRetryContentLength !== '0' && oauthRetryContentLength !== null;
+
+        if (!oauthRetryHasContent) {
+          return { success: true, __sapResponseTime: retrySapResponseTime };
+        }
 
         const rawJson = await response.json();
         const processedData = sapClient.processResponse(rawJson, requestOptions);
