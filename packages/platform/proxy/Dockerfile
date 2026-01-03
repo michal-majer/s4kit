@@ -42,9 +42,9 @@ ENV PORT=3002
 # Expose port
 EXPOSE 3002
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3002/health/ready || exit 1
+# Health check - use /health/live for liveness probe
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3002/health/live || exit 1
 
 # Start the application
 CMD ["bun", "run", "src/index.ts"]

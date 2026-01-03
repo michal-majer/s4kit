@@ -4,7 +4,7 @@ dockerfilePath = "packages/platform/proxy/Dockerfile"
 watchPatterns = ["packages/platform/proxy/**", "packages/shared/**"]
 
 [deploy]
-healthcheckPath = "/health/ready"
+healthcheckPath = "/health/live"
 healthcheckTimeout = 30
 numReplicas = 1
 restartPolicyType = "on_failure"

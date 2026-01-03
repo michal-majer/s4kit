@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { createDbClient } from '@s4kit/shared/db';
+import { createDbClient, sql } from '@s4kit/shared/db';
 import { redis } from './cache/redis.ts';
 import proxyRoute from './routes/proxy.ts';
 import healthRoute from './routes/health.ts';
@@ -50,6 +50,24 @@ const server = Bun.serve({
 });
 
 console.log(`S4Kit Proxy Service running at http://localhost:${server.port}`);
+
+// Warm up connections on startup to reduce first-request latency and ensure health checks pass
+async function warmupConnections() {
+  try {
+    // Warm up database connection
+    await db.execute(sql`SELECT 1`);
+    console.log('[Startup] Database connection warmed up');
+
+    // Warm up Redis connection (lazyConnect is enabled)
+    await redis.ping();
+    console.log('[Startup] Redis connection warmed up');
+  } catch (error) {
+    console.error('[Startup] Failed to warm up connections:', error);
+  }
+}
+
+// Run warmup - wait for it to complete so health checks pass
+warmupConnections();
 
 // Graceful shutdown
 const shutdown = async () => {
