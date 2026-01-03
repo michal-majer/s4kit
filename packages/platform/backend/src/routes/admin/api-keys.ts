@@ -414,10 +414,13 @@ app.get('/:id/access', requirePermission('apiKey:read'), async (c) => {
       }
     }
 
+    // Resolve entities: instance service override > system service fallback
+    const resolvedEntities = instService.entities !== null ? instService.entities : (svc?.entities || []);
+
     return {
       ...grant,
       instance: inst ? { id: inst.id, environment: inst.environment } : null,
-      systemService: svc ? { id: svc.id, name: svc.name, alias: svc.alias, entities: svc.entities } : null,
+      systemService: svc ? { id: svc.id, name: svc.name, alias: svc.alias, entities: resolvedEntities } : null,
       system
     };
   }));
