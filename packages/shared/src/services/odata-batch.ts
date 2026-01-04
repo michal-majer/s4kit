@@ -343,16 +343,58 @@ export function parseBatchResponse(
     const part = parts[i]!;
     console.log(`[odata-batch] Batch part ${i} (first 200 chars):\n${part.substring(0, 200)}...`);
 
-    // Check if this part is a changeset
-    const contentTypeMatch = part.match(/Content-Type:\s*multipart\/mixed;\s*boundary=([^\s\n]+)/i);
+    // Check if this part is a changeset (multipart/mixed with boundary)
+    const changesetMatch = part.match(/Content-Type:\s*multipart\/mixed;\s*boundary=([^\s\n]+)/i);
 
-    if (contentTypeMatch) {
+    if (changesetMatch) {
       // This is a changeset - parse nested responses
-      const changesetBoundary = contentTypeMatch[1]!.replace(/^["']|["']$/g, '');
+      const changesetBoundary = changesetMatch[1]!.replace(/^["']|["']$/g, '');
       const changesetResponses = parseChangesetResponse(part, changesetBoundary);
       responses.push(...changesetResponses);
+    } else if (part.match(/content-type:\s*application\/http/i)) {
+      // This is an individual response wrapped in application/http format
+      // CAP returns this format for changeset responses
+      // We need to extract the embedded HTTP response
+      console.log(`[odata-batch] Part ${i} is application/http wrapped response`);
+
+      const lines = part.split('\n');
+      let httpResponseStart = -1;
+
+      // Find the HTTP/1.1 status line
+      for (let j = 0; j < lines.length; j++) {
+        if (lines[j]!.trim().startsWith('HTTP/')) {
+          httpResponseStart = j;
+          break;
+        }
+      }
+
+      if (httpResponseStart >= 0) {
+        // Extract Content-ID from envelope headers if present
+        let contentId: string | undefined;
+        for (let j = 0; j < httpResponseStart; j++) {
+          const line = lines[j]!.toLowerCase();
+          if (line.startsWith('content-id:')) {
+            contentId = lines[j]!.substring(11).trim();
+            break;
+          }
+        }
+
+        const httpContent = lines.slice(httpResponseStart).join('\n');
+        console.log(`[odata-batch] Extracted HTTP content from part ${i}:\n${httpContent.substring(0, 200)}...`);
+
+        const httpResponse = parseHttpResponse(httpContent);
+        // Preserve Content-ID from envelope if not in response
+        if (contentId && !httpResponse.contentId) {
+          httpResponse.contentId = contentId;
+        }
+        console.log(`[odata-batch] Parsed response from part ${i}: status=${httpResponse.status}, body type=${typeof httpResponse.body}`);
+        responses.push(httpResponse);
+      } else {
+        console.log(`[odata-batch] No HTTP status line found in application/http part ${i}`);
+      }
     } else {
-      // This is a direct response (GET or error)
+      // This is a direct response (GET or error) - no envelope
+      console.log(`[odata-batch] Part ${i} is direct response (no envelope)`);
       const httpResponse = parseHttpResponse(part);
       if (httpResponse.status > 0) {
         responses.push(httpResponse);
