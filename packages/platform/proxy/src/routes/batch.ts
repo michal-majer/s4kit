@@ -4,12 +4,15 @@
  */
 
 import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 import { db } from '../index.ts';
 import { authConfigurations, eq } from '@s4kit/shared/db';
 import { apiKeyService } from '../services/api-key.ts';
 import { accessResolver } from '../services/access-resolver.ts';
 import { sapClient, type ResolvedAuthConfig } from '../services/sap-client.ts';
+import { rateLimitMiddleware } from '../middleware/rate-limit.ts';
+import { loggingMiddleware } from '../middleware/logging.ts';
 import type { Variables, SecureLogData } from '../types.ts';
 import {
   generateRequestId,
@@ -19,6 +22,45 @@ import {
 } from '../utils/log-helpers.ts';
 
 const app = new Hono<{ Variables: Variables }>();
+
+// Helper to get client IP
+function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
+  return (
+    c.req.header('CF-Connecting-IP') ||
+    c.req.header('X-Real-IP') ||
+    c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
+  );
+}
+
+// Lightweight auth middleware for batch - just validates API key
+// Service/instance resolution is done in the route handler since batch can have multiple entities
+const batchAuthMiddleware = createMiddleware<{ Variables: Variables }>(async (c, next) => {
+  const authHeader = c.req.header('Authorization');
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Missing or invalid Authorization header' }, 401);
+  }
+
+  const key = authHeader.split(' ')[1];
+  if (!key) {
+    return c.json({ error: 'Missing API key' }, 401);
+  }
+
+  const clientIp = getClientIp(c);
+  const validationResult = await apiKeyService.validateKey(key, clientIp);
+
+  if (!validationResult.valid || !validationResult.apiKey) {
+    return c.json({ error: validationResult.error || 'Invalid or expired API key' }, 401);
+  }
+
+  c.set('apiKey', validationResult.apiKey);
+  await next();
+});
+
+// Apply middleware in order: auth first (sets apiKey), then rate limit, then logging
+app.use('*', batchAuthMiddleware);
+app.use('*', rateLimitMiddleware);
+app.use('*', loggingMiddleware);
 
 // Schema for batch operations (Zod 4 compatible)
 const dataSchema = z.record(z.string(), z.any());
@@ -63,15 +105,6 @@ interface BatchResult {
   status: number;
   data?: unknown;
   error?: { code: string; message: string };
-}
-
-// Helper to get client IP
-function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
-  return (
-    c.req.header('CF-Connecting-IP') ||
-    c.req.header('X-Real-IP') ||
-    c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
-  );
 }
 
 // Helper to format entity key for URL
@@ -136,6 +169,9 @@ app.post('/', async (c) => {
   const requestId = c.req.header('X-Request-ID') || generateRequestId();
   c.header('X-Request-ID', requestId);
 
+  // Get API key from middleware (already validated)
+  const apiKey = c.get('apiKey')!;
+
   // Initialize log data
   const logData: SecureLogData = {
     requestId,
@@ -145,37 +181,7 @@ app.post('/', async (c) => {
     // operation is left undefined for batch (it's a meta-operation)
   };
 
-  // 1. Validate API key
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    logData.errorCode = 'UNAUTHORIZED';
-    logData.errorCategory = 'auth';
-    logData.errorMessage = 'Missing or invalid Authorization header';
-    return c.json({ error: 'Missing or invalid Authorization header' }, 401);
-  }
-
-  const key = authHeader.split(' ')[1];
-  if (!key) {
-    logData.errorCode = 'UNAUTHORIZED';
-    logData.errorCategory = 'auth';
-    logData.errorMessage = 'Missing API key';
-    return c.json({ error: 'Missing API key' }, 401);
-  }
-
-  const clientIp = getClientIp(c);
-  const validationResult = await apiKeyService.validateKey(key, clientIp);
-
-  if (!validationResult.valid || !validationResult.apiKey) {
-    logData.errorCode = 'UNAUTHORIZED';
-    logData.errorCategory = 'auth';
-    logData.errorMessage = validationResult.error || 'Invalid or expired API key';
-    return c.json({ error: validationResult.error || 'Invalid or expired API key' }, 401);
-  }
-
-  const apiKey = validationResult.apiKey;
-  c.set('apiKey', apiKey);
-
-  // 2. Parse and validate request body
+  // 1. Parse and validate request body
   let batchRequest: BatchRequest;
   try {
     const body = await c.req.json();
@@ -327,11 +333,34 @@ app.post('/', async (c) => {
         stripMetadata,
       });
 
-      // Clean up internal metadata
-      let responseData = result;
-      if (result && typeof result === 'object' && '__sapResponseTime' in (result as Record<string, unknown>)) {
-        const { __sapResponseTime, ...cleanResult } = result as Record<string, unknown>;
-        responseData = cleanResult;
+      // Extract actual entity data from OData response wrapper
+      // sapClient.requestWithAuth returns { data: entity, count: N, __sapResponseTime: N }
+      // or for raw responses: { ID: ..., field: ... } directly
+      let responseData: unknown = undefined;
+      if (result && typeof result === 'object') {
+        const resultObj = result as Record<string, unknown>;
+
+        // Debug: log response structure
+        console.log(`Batch op ${op.method} ${op.entity} response keys:`, Object.keys(resultObj));
+
+        // Case 1: OData response wrapper with 'data' property
+        if ('data' in resultObj && resultObj.data !== undefined) {
+          responseData = resultObj.data;
+        }
+        // Case 2: Success indicator only (no entity data, e.g., DELETE)
+        else if ('success' in resultObj && Object.keys(resultObj).filter(k => k !== '__sapResponseTime' && k !== 'success').length === 0) {
+          responseData = undefined;
+        }
+        // Case 3: Direct entity response (no wrapper) - strip internal metadata
+        else {
+          const { __sapResponseTime, success, count, ...cleanResult } = resultObj;
+          // Only use if there are actual entity properties (has ID or other fields)
+          if (Object.keys(cleanResult).length > 0) {
+            responseData = cleanResult;
+          }
+        }
+
+        console.log(`Batch op ${op.method} ${op.entity} extracted data:`, responseData ? 'has data' : 'undefined');
       }
 
       results.push({
