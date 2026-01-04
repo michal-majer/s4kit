@@ -262,16 +262,19 @@ async function executeAtomicBatch(
   auth: ResolvedAuthConfig
 ): Promise<BatchResult[]> {
   // Build OData batch operations
+  // IMPORTANT: Paths inside $batch are RELATIVE to the service root
+  // The $batch endpoint is at {serviceUrl}/$batch, so operations use just entity names
   const odataOps: ODataBatchOperation[] = operations.map((op, index) => {
     let path: string;
 
+    // Use relative paths (just entity name) - NOT full service path
     if (op.method === 'POST') {
-      path = `${servicePath}/${op.entity}`.replace(/\/+/g, '/');
+      path = op.entity;
     } else if (op.method === 'DELETE') {
-      path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
+      path = `${op.entity}(${formatKey(op.id)})`;
     } else {
       // PATCH or PUT
-      path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
+      path = `${op.entity}(${formatKey(op.id)})`;
     }
 
     return {
@@ -288,9 +291,9 @@ async function executeAtomicBatch(
   // Build auth headers
   const { headers: authHeaders } = await buildAuthHeaders(auth, baseUrl);
 
-  // Build the $batch endpoint URL
-  const batchPath = buildBatchPath(servicePath);
-  const batchUrl = `${baseUrl.replace(/\/+$/, '')}/${batchPath.replace(/^\/+/, '')}`;
+  // Build the $batch endpoint URL: {baseUrl}/{servicePath}/$batch
+  const cleanServicePath = servicePath.replace(/^\/+|\/+$/g, '');
+  const batchUrl = `${baseUrl.replace(/\/+$/, '')}/${cleanServicePath}/$batch`;
 
   console.log(`Atomic batch: sending ${operations.length} operations to ${batchUrl}`);
   console.log(`Batch request body:\n${body.substring(0, 500)}...`);
