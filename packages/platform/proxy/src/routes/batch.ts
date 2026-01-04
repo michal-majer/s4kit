@@ -328,6 +328,8 @@ async function executeAtomicBatch(
     // Map responses to our result format
     const results: BatchResult[] = parsed.responses.map((resp, index) => {
       const isSuccess = resp.status >= 200 && resp.status < 300;
+      console.log(`Mapping response ${index}: status=${resp.status}, success=${isSuccess}`);
+      console.log(`  resp.body type: ${typeof resp.body}, value: ${JSON.stringify(resp.body)?.substring(0, 300)}`);
 
       if (isSuccess) {
         // Extract entity data from response body
@@ -335,15 +337,26 @@ async function executeAtomicBatch(
         if (resp.body && typeof resp.body === 'object') {
           // OData v4: might be wrapped in { value: [...] } or { d: {...} }
           const bodyObj = resp.body as Record<string, unknown>;
+          console.log(`  bodyObj keys: ${Object.keys(bodyObj).join(', ')}`);
           if ('d' in bodyObj) {
             data = bodyObj.d;
+            console.log(`  Extracted from 'd' wrapper`);
           } else if ('value' in bodyObj && Array.isArray(bodyObj.value)) {
             data = bodyObj.value[0]; // Single entity from collection
+            console.log(`  Extracted from 'value' array`);
           } else {
             data = bodyObj;
+            console.log(`  Using bodyObj directly`);
           }
+        } else if (resp.body) {
+          // Body exists but isn't an object - use as-is
+          data = resp.body;
+          console.log(`  Using non-object body directly`);
+        } else {
+          console.log(`  No body found!`);
         }
 
+        console.log(`  Extracted data: ${JSON.stringify(data)?.substring(0, 200)}`);
         return {
           success: true,
           status: resp.status,
@@ -371,6 +384,11 @@ async function executeAtomicBatch(
       }
     });
 
+    console.log(`Mapped ${results.length} results:`);
+    results.forEach((r, i) => {
+      console.log(`  Result ${i}: success=${r.success}, status=${r.status}, data=${JSON.stringify(r.data)?.substring(0, 100)}`);
+    });
+
     // If changeset failed, all operations should be marked as failed
     // SAP returns a single error response for the entire changeset
     if (parsed.hasErrors && results.length < operations.length) {
@@ -378,6 +396,7 @@ async function executeAtomicBatch(
       const errorResult = results.find(r => !r.success);
       const errorInfo = errorResult?.error || { code: 'CHANGESET_FAILED', message: 'Transaction failed' };
 
+      console.log('Changeset failed, marking all operations as failed');
       return operations.map(() => ({
         success: false,
         status: errorResult?.status || 500,
@@ -385,6 +404,7 @@ async function executeAtomicBatch(
       }));
     }
 
+    console.log('Returning results from atomic batch');
     return results;
   } catch (error: unknown) {
     console.error('Batch request failed:', error);

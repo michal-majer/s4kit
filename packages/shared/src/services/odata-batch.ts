@@ -273,17 +273,34 @@ function parseChangesetResponse(content: string, changesetBoundary: string): Bat
     const part = parts[partIndex]!;
     console.log(`[odata-batch] Changeset part ${partIndex}:\n${part.substring(0, 300)}...`);
 
-    // Each part should contain headers and an HTTP response
-    // Skip Content-Type/Content-Transfer-Encoding headers to get to the HTTP response
+    // Each part should contain Content-Type/Content-Transfer-Encoding headers
+    // followed by an empty line, then the HTTP response
+    // We need to find the HTTP/1.1 line specifically
     const lines = part.split('\n');
-    let httpResponseStart = 0;
+    let httpResponseStart = -1;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!.trim();
-      if (line === '' || line.startsWith('HTTP/')) {
+      if (line.startsWith('HTTP/')) {
         httpResponseStart = i;
         break;
       }
+    }
+
+    // If no HTTP line found, try to find content after headers
+    if (httpResponseStart === -1) {
+      // Look for double newline (header/body separator)
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i]!.trim() === '' && i + 1 < lines.length) {
+          httpResponseStart = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (httpResponseStart === -1) {
+      console.log(`[odata-batch] No HTTP response found in part ${partIndex}`);
+      continue;
     }
 
     const httpContent = lines.slice(httpResponseStart).join('\n');
