@@ -60,9 +60,13 @@ jobs:
           echo "Bumped $OLD_VERSION → $NEW_VERSION"
 
       - name: Publish to npm
-        run: cd packages/sdk && npm publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd packages/sdk
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+          npm publish
+          rm .npmrc
 
       - name: Commit and tag
         env:
