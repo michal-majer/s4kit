@@ -34,7 +34,7 @@ const partners = await client.A_BusinessPartner.list({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | required | Your S4Kit API key |
-| `baseUrl` | `string` | `https://api.s4kit.com/api/proxy` | API endpoint |
+| `baseUrl` | `string` | `https://staging.proxy.s4kit.com/api/proxy` | API endpoint |
 | `connection` | `string` | - | Default SAP connection alias |
 | `timeout` | `number` | `30000` | Request timeout (ms) |
 | `retries` | `number` | `0` | Retry failed requests |
@@ -69,7 +69,7 @@ The platform handles CSRF tokens, authentication, and connection pooling — you
 Generate TypeScript types from your SAP system for full autocomplete and type safety:
 
 ```bash
-npx s4kit generate-types --api-key sk_live_... --output ./types
+npx s4kit generate-types --api-key sk_live_... --base-url https://staging.proxy.s4kit.com/api/proxy --output ./types
 ```
 
 ```typescript
