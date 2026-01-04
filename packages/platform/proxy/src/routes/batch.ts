@@ -1,11 +1,21 @@
 /**
  * Batch operations route for SDK clients
  * Executes multiple operations in a single request
+ *
+ * For atomic operations (transactions), uses OData $batch with changeset:
+ * - All operations wrapped in a single changeset boundary
+ * - SAP processes as a single database transaction
+ * - If any fails, SAP rolls back ALL changes automatically
+ *
+ * For non-atomic operations:
+ * - Operations executed sequentially
+ * - Each operation independent (no rollback on failure)
  */
 
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
+import ky from 'ky';
 import { db } from '../index.ts';
 import { authConfigurations, eq } from '@s4kit/shared/db';
 import { apiKeyService } from '../services/api-key.ts';
@@ -13,6 +23,13 @@ import { accessResolver } from '../services/access-resolver.ts';
 import { sapClient, type ResolvedAuthConfig } from '../services/sap-client.ts';
 import { rateLimitMiddleware } from '../middleware/rate-limit.ts';
 import { loggingMiddleware } from '../middleware/logging.ts';
+import { encryption } from '@s4kit/shared/services';
+import {
+  buildBatchRequest,
+  parseBatchResponse,
+  buildBatchPath,
+  type ODataBatchOperation,
+} from '@s4kit/shared/services';
 import type { Variables, SecureLogData } from '../types.ts';
 import {
   generateRequestId,
@@ -20,6 +37,7 @@ import {
   methodToOperation,
   calculateSize,
 } from '../utils/log-helpers.ts';
+import { redis } from '../index.ts';
 
 const app = new Hono<{ Variables: Variables }>();
 
@@ -162,6 +180,306 @@ async function resolveAuth(
 }
 
 /**
+ * Build auth headers for a request
+ */
+async function buildAuthHeaders(
+  auth: ResolvedAuthConfig,
+  baseUrl: string
+): Promise<{ headers: Record<string, string>; csrfToken?: string }> {
+  const headers: Record<string, string> = {};
+
+  if (auth.type === 'none') {
+    return { headers };
+  }
+
+  if (auth.type === 'basic') {
+    const username = auth.username ? encryption.decrypt(auth.username) : '';
+    const password = auth.password ? encryption.decrypt(auth.password) : '';
+    headers['Authorization'] = `Basic ${btoa(`${username}:${password}`)}`;
+
+    // Get CSRF token for basic auth
+    const csrfCacheKey = `csrf:${baseUrl}:${username}`;
+    let csrfToken = await redis.get(csrfCacheKey);
+
+    if (!csrfToken) {
+      try {
+        const response = await ky.head(baseUrl, {
+          headers: {
+            'Authorization': headers['Authorization'],
+            'X-CSRF-Token': 'Fetch',
+          },
+        });
+        csrfToken = response.headers.get('x-csrf-token') || '';
+        if (csrfToken) {
+          await redis.set(csrfCacheKey, csrfToken, 'EX', 3600);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch CSRF token for batch:', e);
+      }
+    }
+
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    return { headers, csrfToken: csrfToken || undefined };
+  }
+
+  if (auth.type === 'api_key') {
+    const credentials = auth.credentials as any;
+    const authConfig = auth.config as any;
+    if (credentials?.apiKey) {
+      const apiKey = encryption.decrypt(credentials.apiKey);
+      const headerName = authConfig?.headerName || 'X-API-Key';
+      headers[headerName] = apiKey;
+    }
+    return { headers };
+  }
+
+  if (auth.type === 'custom') {
+    const authConfig = auth.config as any;
+    const credentials = auth.credentials as any;
+    if (authConfig?.headerName && credentials?.headerValue) {
+      headers[authConfig.headerName] = encryption.decrypt(credentials.headerValue);
+    }
+    return { headers };
+  }
+
+  // OAuth2 would require more complex token handling
+  // For now, basic auth covers most SAP scenarios
+
+  return { headers };
+}
+
+/**
+ * Execute batch atomically using OData $batch with changeset
+ * SAP handles the transaction - if any operation fails, all are rolled back
+ */
+async function executeAtomicBatch(
+  operations: Array<{ method: string; entity: string; id?: unknown; data?: unknown }>,
+  servicePath: string,
+  baseUrl: string,
+  auth: ResolvedAuthConfig
+): Promise<BatchResult[]> {
+  // Build OData batch operations
+  const odataOps: ODataBatchOperation[] = operations.map((op, index) => {
+    let path: string;
+
+    if (op.method === 'POST') {
+      path = `${servicePath}/${op.entity}`.replace(/\/+/g, '/');
+    } else if (op.method === 'DELETE') {
+      path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
+    } else {
+      // PATCH or PUT
+      path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
+    }
+
+    return {
+      method: op.method as ODataBatchOperation['method'],
+      path,
+      body: op.data,
+      contentId: String(index + 1),
+    };
+  });
+
+  // Build the multipart/mixed batch request
+  const { body, contentType } = buildBatchRequest(odataOps, true);
+
+  // Build auth headers
+  const { headers: authHeaders } = await buildAuthHeaders(auth, baseUrl);
+
+  // Build the $batch endpoint URL
+  const batchPath = buildBatchPath(servicePath);
+  const batchUrl = `${baseUrl.replace(/\/+$/, '')}/${batchPath.replace(/^\/+/, '')}`;
+
+  console.log(`Atomic batch: sending ${operations.length} operations to ${batchUrl}`);
+  console.log(`Batch request body:\n${body.substring(0, 500)}...`);
+
+  try {
+    // Send the batch request to SAP
+    const response = await ky.post(batchUrl, {
+      body,
+      headers: {
+        ...authHeaders,
+        'Content-Type': contentType,
+        'Accept': 'multipart/mixed',
+      },
+      retry: 0,
+    });
+
+    const responseContentType = response.headers.get('content-type') || '';
+    const responseBody = await response.text();
+
+    console.log(`Batch response status: ${response.status}`);
+    console.log(`Batch response content-type: ${responseContentType}`);
+    console.log(`Batch response body:\n${responseBody.substring(0, 500)}...`);
+
+    // Parse the multipart response
+    const parsed = parseBatchResponse(responseBody, responseContentType);
+
+    console.log(`Parsed ${parsed.responses.length} responses, hasErrors: ${parsed.hasErrors}`);
+
+    // Map responses to our result format
+    const results: BatchResult[] = parsed.responses.map((resp, index) => {
+      const isSuccess = resp.status >= 200 && resp.status < 300;
+
+      if (isSuccess) {
+        // Extract entity data from response body
+        let data: unknown = undefined;
+        if (resp.body && typeof resp.body === 'object') {
+          // OData v4: might be wrapped in { value: [...] } or { d: {...} }
+          const bodyObj = resp.body as Record<string, unknown>;
+          if ('d' in bodyObj) {
+            data = bodyObj.d;
+          } else if ('value' in bodyObj && Array.isArray(bodyObj.value)) {
+            data = bodyObj.value[0]; // Single entity from collection
+          } else {
+            data = bodyObj;
+          }
+        }
+
+        return {
+          success: true,
+          status: resp.status,
+          data,
+        };
+      } else {
+        // Error response
+        let errorCode = 'BATCH_OPERATION_ERROR';
+        let errorMessage = resp.statusText || 'Operation failed';
+
+        if (resp.body && typeof resp.body === 'object') {
+          const bodyObj = resp.body as Record<string, unknown>;
+          if (bodyObj.error && typeof bodyObj.error === 'object') {
+            const error = bodyObj.error as Record<string, unknown>;
+            errorCode = (error.code as string) || errorCode;
+            errorMessage = (error.message as string) || errorMessage;
+          }
+        }
+
+        return {
+          success: false,
+          status: resp.status,
+          error: { code: errorCode, message: errorMessage },
+        };
+      }
+    });
+
+    // If changeset failed, all operations should be marked as failed
+    // SAP returns a single error response for the entire changeset
+    if (parsed.hasErrors && results.length < operations.length) {
+      // The changeset was rejected - all operations failed
+      const errorResult = results.find(r => !r.success);
+      const errorInfo = errorResult?.error || { code: 'CHANGESET_FAILED', message: 'Transaction failed' };
+
+      return operations.map(() => ({
+        success: false,
+        status: errorResult?.status || 500,
+        error: errorInfo,
+      }));
+    }
+
+    return results;
+  } catch (error: unknown) {
+    console.error('Batch request failed:', error);
+
+    // If the batch request itself failed, all operations fail
+    const err = error as { message?: string; response?: { status: number } };
+    const status = err.response?.status || 500;
+    const message = err.message || 'Batch request failed';
+
+    return operations.map(() => ({
+      success: false,
+      status,
+      error: { code: 'BATCH_REQUEST_FAILED', message },
+    }));
+  }
+}
+
+/**
+ * Execute operations sequentially (non-atomic)
+ * Each operation is independent - failures don't affect other operations
+ */
+async function executeSequentialBatch(
+  operations: Array<{ method: string; entity: string; id?: unknown; data?: unknown }>,
+  servicePath: string,
+  baseUrl: string,
+  auth: ResolvedAuthConfig,
+  stripMetadata: boolean
+): Promise<BatchResult[]> {
+  const results: BatchResult[] = [];
+
+  for (const op of operations) {
+    try {
+      let path: string;
+      const method: string = op.method;
+      let body: unknown = undefined;
+
+      if (op.method === 'POST') {
+        path = `${servicePath}/${op.entity}`.replace(/\/+/g, '/');
+        body = op.data;
+      } else if (op.method === 'DELETE') {
+        path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
+      } else {
+        // PATCH or PUT
+        path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
+        body = op.data;
+      }
+
+      const result = await sapClient.requestWithAuth({
+        baseUrl,
+        auth,
+        method,
+        path,
+        body,
+        stripMetadata,
+      });
+
+      // Extract actual entity data from OData response wrapper
+      let responseData: unknown = undefined;
+      if (result && typeof result === 'object') {
+        const resultObj = result as Record<string, unknown>;
+
+        if ('data' in resultObj && resultObj.data !== undefined) {
+          responseData = resultObj.data;
+        } else if ('success' in resultObj && Object.keys(resultObj).filter(k => k !== '__sapResponseTime' && k !== 'success').length === 0) {
+          responseData = undefined;
+        } else {
+          const { __sapResponseTime, success, count, ...cleanResult } = resultObj;
+          if (Object.keys(cleanResult).length > 0) {
+            responseData = cleanResult;
+          }
+        }
+      }
+
+      results.push({
+        success: true,
+        status: op.method === 'POST' ? 201 : op.method === 'DELETE' ? 204 : 200,
+        data: responseData,
+      });
+    } catch (error: unknown) {
+      const err = error as {
+        message?: string;
+        status?: number;
+        odataError?: { code?: string; message?: string };
+        response?: { status: number };
+      };
+
+      results.push({
+        success: false,
+        status: err.status || err.response?.status || 500,
+        error: {
+          code: err.odataError?.code || 'BATCH_OPERATION_ERROR',
+          message: err.odataError?.message || err.message || 'Operation failed',
+        },
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
  * POST /api/proxy/batch
  * Execute multiple operations in a single request
  */
@@ -297,111 +615,37 @@ app.post('/', async (c) => {
 
   // 7. Build service path
   const servicePath = accessGrant.instanceService.servicePathOverride || accessGrant.systemService.servicePath;
-
-  // 8. Execute operations
-  const results: BatchResult[] = [];
   const stripMetadata = c.req.header('X-S4Kit-Strip-Metadata') !== 'false';
 
   console.log(`Batch request: ${batchRequest.operations.length} operations, atomic: ${batchRequest.atomic}`);
 
-  // For non-atomic, execute sequentially
-  // TODO: For atomic, use OData $batch changeset
-  for (const op of batchRequest.operations) {
-    try {
-      let path: string;
-      let method: string = op.method;
-      let body: unknown = undefined;
+  // 8. Execute operations
+  let results: BatchResult[];
 
-      // Build path based on operation type
-      if (op.method === 'POST') {
-        path = `${servicePath}/${op.entity}`.replace(/\/+/g, '/');
-        body = op.data;
-      } else if (op.method === 'DELETE') {
-        path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
-      } else {
-        // PATCH or PUT
-        path = `${servicePath}/${op.entity}(${formatKey(op.id)})`.replace(/\/+/g, '/');
-        body = op.data;
-      }
+  if (batchRequest.atomic) {
+    // ATOMIC: Use OData $batch with changeset
+    // SAP processes all operations in a single transaction
+    // If ANY operation fails, SAP rolls back ALL changes
+    console.log('Executing atomic batch via OData $batch changeset...');
 
-      const result = await sapClient.requestWithAuth({
-        baseUrl: accessGrant.instance.baseUrl,
-        auth: authConfig,
-        method,
-        path,
-        body,
-        stripMetadata,
-      });
+    results = await executeAtomicBatch(
+      batchRequest.operations,
+      servicePath,
+      accessGrant.instance.baseUrl,
+      authConfig
+    );
+  } else {
+    // NON-ATOMIC: Execute sequentially
+    // Each operation is independent - failures don't affect others
+    console.log('Executing non-atomic batch sequentially...');
 
-      // Extract actual entity data from OData response wrapper
-      // sapClient.requestWithAuth returns { data: entity, count: N, __sapResponseTime: N }
-      // or for raw responses: { ID: ..., field: ... } directly
-      let responseData: unknown = undefined;
-      if (result && typeof result === 'object') {
-        const resultObj = result as Record<string, unknown>;
-
-        // Debug: log response structure
-        console.log(`Batch op ${op.method} ${op.entity} response keys:`, Object.keys(resultObj));
-
-        // Case 1: OData response wrapper with 'data' property
-        if ('data' in resultObj && resultObj.data !== undefined) {
-          responseData = resultObj.data;
-        }
-        // Case 2: Success indicator only (no entity data, e.g., DELETE)
-        else if ('success' in resultObj && Object.keys(resultObj).filter(k => k !== '__sapResponseTime' && k !== 'success').length === 0) {
-          responseData = undefined;
-        }
-        // Case 3: Direct entity response (no wrapper) - strip internal metadata
-        else {
-          const { __sapResponseTime, success, count, ...cleanResult } = resultObj;
-          // Only use if there are actual entity properties (has ID or other fields)
-          if (Object.keys(cleanResult).length > 0) {
-            responseData = cleanResult;
-          }
-        }
-
-        console.log(`Batch op ${op.method} ${op.entity} extracted data:`, responseData ? 'has data' : 'undefined');
-      }
-
-      results.push({
-        success: true,
-        status: op.method === 'POST' ? 201 : op.method === 'DELETE' ? 204 : 200,
-        data: responseData,
-      });
-    } catch (error: unknown) {
-      const err = error as {
-        message?: string;
-        status?: number;
-        odataError?: { code?: string; message?: string };
-        response?: { status: number };
-      };
-
-      results.push({
-        success: false,
-        status: err.status || err.response?.status || 500,
-        error: {
-          code: err.odataError?.code || 'BATCH_OPERATION_ERROR',
-          message: err.odataError?.message || err.message || 'Operation failed',
-        },
-      });
-
-      // For atomic operations, stop on first error
-      if (batchRequest.atomic) {
-        // Fill remaining results with aborted status
-        const remaining = batchRequest.operations.length - results.length;
-        for (let i = 0; i < remaining; i++) {
-          results.push({
-            success: false,
-            status: 0,
-            error: {
-              code: 'ABORTED',
-              message: 'Transaction aborted due to previous error',
-            },
-          });
-        }
-        break;
-      }
-    }
+    results = await executeSequentialBatch(
+      batchRequest.operations,
+      servicePath,
+      accessGrant.instance.baseUrl,
+      authConfig,
+      stripMetadata
+    );
   }
 
   // 9. Update log data

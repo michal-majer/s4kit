@@ -42,3 +42,11 @@ export {
   generateTypeScriptFile,
   filterEntityTypes,
 } from './type-generator.ts';
+export {
+  buildBatchRequest,
+  parseBatchResponse,
+  buildBatchPath,
+  type BatchOperation as ODataBatchOperation,
+  type BatchResponse as ODataBatchResponse,
+  type ParsedBatchResponse,
+} from './odata-batch.ts';
