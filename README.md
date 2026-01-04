@@ -81,105 +81,53 @@ partners.forEach(p => console.log(p.BusinessPartnerName));  // ← Autocomplete 
 
 ## Features
 
-<table>
-<tr>
-<td width="50%">
-
-**Type-Safe Queries**
-
+### Type-Safe Queries
 Filter with objects, not strings. Full operator support.
-
 ```typescript
-filter: {
-  StandardPrice: { gt: 100 },
-  Name: { contains: 'Pro' }
-}
+filter: { Price: { gt: 100 }, Name: { contains: 'Pro' } }
 ```
 
-</td>
-<td width="50%">
-
-**Full CRUD**
-
+### Full CRUD
 Every operation you need, with a clean API.
-
 ```typescript
-await client.Entity.list({ top: 10 });
-await client.Entity.get('key');
-await client.Entity.create({ ... });
-await client.Entity.update('key', { ... });
-await client.Entity.delete('key');
+client.Entity.list()    // Read all
+client.Entity.get(id)   // Read one
+client.Entity.create()  // Create
+client.Entity.update()  // Update
+client.Entity.delete()  // Delete
 ```
 
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Batch Operations**
-
+### Batch Operations
 Multiple operations in a single request.
-
 ```typescript
-await client.Entity.createMany([
-  { name: 'First' },
-  { name: 'Second' },
-  { name: 'Third' }
-]);
+await client.Entity.createMany([{ name: 'A' }, { name: 'B' }]);
+await client.Entity.deleteMany([id1, id2, id3]);
 ```
 
-</td>
-<td width="50%">
-
-**Atomic Transactions**
-
+### Atomic Transactions
 All-or-nothing. If one fails, all roll back.
-
 ```typescript
-const [order, items] = await client.transaction(tx => [
+await client.transaction(tx => [
   tx.Orders.create({ ... }),
   tx.Items.createMany([...])
 ]);
 ```
 
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Smart Pagination**
-
+### Smart Pagination
 Async iterators for efficient data processing.
-
 ```typescript
-for await (const page of client.Entity.paginate()) {
-  process(page);
-}
-
-// Or get everything
-const all = await client.Entity.all();
+for await (const page of client.Entity.paginate()) { ... }
+const all = await client.Entity.all();  // Or get everything
 ```
 
-</td>
-<td width="50%">
-
-**Error Handling**
-
+### Error Handling
 Typed errors with helpful messages.
-
 ```typescript
-try {
-  await client.Entity.get('invalid');
-} catch (e) {
-  if (e instanceof NotFoundError) {
-    console.log(e.help);
-  }
+catch (e) {
+  if (e instanceof NotFoundError) console.log(e.help);
+  if (e instanceof ValidationError) console.log(e.fieldErrors);
 }
 ```
-
-</td>
-</tr>
-</table>
 
 ---
 
