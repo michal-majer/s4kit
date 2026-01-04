@@ -159,8 +159,25 @@ export function createEntityHandler<T = any>(
 
     /**
      * Create with related entities (deep insert)
+     * Note: Only works with Composition relationships, not Associations
      */
     async createDeep(data: DeepInsertData<T>, options?: QueryOptions<T>): Promise<T> {
+      // Warn about Composition requirement when nested data is detected
+      if (client.isDebug) {
+        const nestedKeys = Object.entries(data as Record<string, unknown>)
+          .filter(([_, v]) => v !== null && typeof v === 'object' && !Array.isArray(v) || Array.isArray(v))
+          .filter(([_, v]) => Array.isArray(v) ? v.length > 0 : Object.keys(v as object).length > 0)
+          .map(([k]) => k);
+
+        if (nestedKeys.length > 0) {
+          client.warn(
+            `createDeep() called on ${entityName} with nested properties: [${nestedKeys.join(', ')}]. ` +
+            `Deep insert only works with Composition relationships. ` +
+            `For Associations, nested data will be ignored - use separate create calls instead.`
+          );
+        }
+      }
+
       const response = await client.post<any>(
         basePath,
         data,

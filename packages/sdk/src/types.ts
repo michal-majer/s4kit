@@ -382,13 +382,37 @@ export interface EntityHandler<T = any> {
   create(data: Partial<T> | T, options?: QueryOptions<T>): Promise<T>;
 
   /**
-   * Create with related entities (deep insert)
-   * @example
+   * Create entity with nested related entities (OData deep insert)
+   *
+   * **Important:** Deep insert only works with **Composition** relationships.
+   * For Association relationships, nested data is silently ignored by OData.
+   *
+   * **Composition** (deep insert works):
+   * - Parent "owns" children (e.g., Order owns OrderItems)
+   * - Deleting parent cascades to children
+   *
+   * **Association** (deep insert does NOT work):
+   * - Entities are independent (e.g., Book references Author)
+   * - Use separate create calls or transactions instead
+   *
+   * @example Composition relationship (works)
    * ```ts
    * const order = await client.sap.Orders.createDeep({
    *   OrderID: '001',
-   *   Items: [{ Product: 'A', Quantity: 10 }]
+   *   Items: [{ Product: 'A', Quantity: 10 }]  // Created with order
    * });
+   * ```
+   *
+   * @example Association relationship (use separate calls instead)
+   * ```ts
+   * // DON'T: This won't create the books - they'll be ignored
+   * await client.sap.Authors.createDeep({ name: 'Author', books: [{...}] });
+   *
+   * // DO: Create separately with FK reference
+   * const author = await client.sap.Authors.create({ name: 'Author' });
+   * await client.sap.Books.createMany([
+   *   { title: 'Book 1', author_ID: author.ID }
+   * ]);
    * ```
    */
   createDeep(data: DeepInsertData<T>, options?: QueryOptions<T>): Promise<T>;
@@ -575,10 +599,17 @@ export type EntityKey = string | number | CompositeKey;
 export type CompositeKey = Record<string, string | number>;
 
 /**
- * Deep insert data type
+ * Deep insert data type - extends entity with navigation properties
+ *
+ * Allows nested objects/arrays for Composition relationships.
+ * Note: TypeScript cannot validate at compile time whether a relationship
+ * is Composition or Association. Use `createDeep()` only when you know
+ * the target entity has Composition relationships.
+ *
+ * @see {@link EntityHandler.createDeep} for usage examples and limitations
  */
 export type DeepInsertData<T> = T & {
-  [K in string]?: any[] | any;
+  [K in string]?: unknown[] | Record<string, unknown>;
 };
 
 // ============================================================================

@@ -167,6 +167,13 @@ export class HttpClient {
   // Debug Logging
   // ==========================================================================
 
+  /**
+   * Check if debug mode is enabled
+   */
+  get isDebug(): boolean {
+    return this.debug;
+  }
+
   private log(message: string, data?: any): void {
     if (!this.debug) return;
     const timestamp = new Date().toISOString();
@@ -176,6 +183,15 @@ export class HttpClient {
     } else {
       console.log(prefix, message);
     }
+  }
+
+  /**
+   * Log a warning if debug mode is enabled
+   */
+  warn(message: string): void {
+    if (!this.debug) return;
+    const timestamp = new Date().toISOString();
+    console.warn(`[s4kit ${timestamp}]`, message);
   }
 
   // ==========================================================================
