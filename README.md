@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./packages/platform/frontend/public/logo.svg" alt="S4Kit Logo" width="80" height="80" />
+
 # S4Kit
 
 ### Consume SAP APIs with ease.
