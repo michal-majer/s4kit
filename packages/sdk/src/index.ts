@@ -3,7 +3,15 @@
 // ============================================================================
 
 // Core client
-export { S4Kit, createClient, type S4KitClient, type S4KitClientWithDynamicAccess } from './client';
+export {
+  S4Kit,
+  createClient,
+  type S4KitClient,
+  type S4KitClientWithDynamicAccess,
+  type DeferredOperation,
+  type TransactionEntityHandler,
+  type TransactionContext,
+} from './client';
 
 // Types
 export type {
@@ -40,12 +48,7 @@ export type {
 
   // Batch operations
   BatchOperation,
-  BatchGet,
-  BatchCreate,
-  BatchUpdate,
-  BatchDelete,
   BatchResult,
-  Changeset,
 
   // Errors
   ODataError,
@@ -79,7 +82,6 @@ export {
   ConflictError,
   RateLimitError,
   ServerError,
-  BatchError,
   parseHttpError,
   parseODataError,
   isRetryable,

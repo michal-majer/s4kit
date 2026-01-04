@@ -7,27 +7,57 @@ import { createProxy, createEntityHandler } from './proxy';
 import type {
   S4KitConfig,
   EntityHandler,
+  EntityKey,
   BatchOperation,
   BatchResult,
-  Changeset,
   RequestInterceptor,
   ResponseInterceptor,
   ErrorInterceptor,
 } from './types';
 
 // ============================================================================
+// Transaction Types
+// ============================================================================
+
+/**
+ * Deferred operation - collected during transaction callback
+ */
+export interface DeferredOperation<T = unknown> {
+  __deferred: true;
+  operation: BatchOperation;
+  _resultType?: T;
+}
+
+/**
+ * Transaction entity handler - collects operations instead of executing them
+ */
+export interface TransactionEntityHandler<T = unknown> {
+  create(data: Partial<T>): DeferredOperation<T>;
+  update(id: EntityKey, data: Partial<T>): DeferredOperation<T>;
+  delete(id: EntityKey): DeferredOperation<void>;
+}
+
+/**
+ * Transaction context passed to transaction callback
+ */
+export type TransactionContext = {
+  [entityName: string]: TransactionEntityHandler<any>;
+};
+
+// ============================================================================
 // Client Interface for TypeScript
 // ============================================================================
 
 /**
- * S4Kit client methods (interceptors, batch operations)
+ * S4Kit client methods (interceptors, transactions)
  */
 export interface S4KitMethods {
   onRequest(interceptor: RequestInterceptor): S4KitClient;
   onResponse(interceptor: ResponseInterceptor): S4KitClient;
   onError(interceptor: ErrorInterceptor): S4KitClient;
-  batch<T = any>(operations: BatchOperation<T>[]): Promise<BatchResult<T>[]>;
-  changeset<T = any>(changeset: Changeset): Promise<BatchResult<T>[]>;
+  transaction<T extends DeferredOperation<any>[]>(
+    fn: (tx: TransactionContext) => T
+  ): Promise<{ [K in keyof T]: T[K] extends DeferredOperation<infer R> ? R : unknown }>;
 }
 
 /**
@@ -156,52 +186,63 @@ class S4KitBase {
   }
 
   // ==========================================================================
-  // Batch Operations
+  // Transactions
   // ==========================================================================
 
   /**
-   * Execute multiple operations in a single batch request
-   *
-   * @example
-   * ```ts
-   * const results = await client.batch([
-   *   { method: 'GET', entity: 'Products', id: 1 },
-   *   { method: 'POST', entity: 'Products', data: { Name: 'New Product' } },
-   *   { method: 'PATCH', entity: 'Products', id: 2, data: { Price: 29.99 } },
-   *   { method: 'DELETE', entity: 'Products', id: 3 },
-   * ]);
-   *
-   * // Check results
-   * for (const result of results) {
-   *   if (result.success) {
-   *     console.log('Success:', result.data);
-   *   } else {
-   *     console.error('Failed:', result.error);
-   *   }
-   * }
-   * ```
-   */
-  async batch<T = any>(operations: BatchOperation<T>[]): Promise<BatchResult<T>[]> {
-    return this.httpClient.batch<T>(operations);
-  }
-
-  /**
-   * Execute operations in an atomic changeset (all succeed or all fail)
+   * Execute operations atomically (all succeed or all fail)
    *
    * @example
    * ```ts
    * // All operations succeed or all fail together
-   * const results = await client.changeset({
-   *   operations: [
-   *     { method: 'POST', entity: 'Orders', data: orderData },
-   *     { method: 'POST', entity: 'OrderItems', data: item1Data },
-   *     { method: 'POST', entity: 'OrderItems', data: item2Data },
-   *   ]
-   * });
+   * const [book1, book2] = await client.transaction(tx => [
+   *   tx.Books.create({ title: 'Book 1', price: 9.99 }),
+   *   tx.Books.create({ title: 'Book 2', price: 10.99 }),
+   *   tx.Authors.update(1, { bookCount: 5 }),
+   * ]);
    * ```
    */
-  async changeset<T = any>(changeset: Changeset): Promise<BatchResult<T>[]> {
-    return this.httpClient.changeset<T>(changeset);
+  async transaction<T extends DeferredOperation<any>[]>(
+    fn: (tx: TransactionContext) => T
+  ): Promise<{ [K in keyof T]: T[K] extends DeferredOperation<infer R> ? R : unknown }> {
+    // Create transaction context that collects operations
+    const txContext: TransactionContext = new Proxy({} as TransactionContext, {
+      get: (_target, entityName: string) => {
+        return {
+          create: (data: Record<string, unknown>): DeferredOperation => ({
+            __deferred: true,
+            operation: { method: 'POST', entity: entityName, data },
+          }),
+          update: (id: EntityKey, data: Record<string, unknown>): DeferredOperation => ({
+            __deferred: true,
+            operation: { method: 'PATCH', entity: entityName, id, data },
+          }),
+          delete: (id: EntityKey): DeferredOperation<void> => ({
+            __deferred: true,
+            operation: { method: 'DELETE', entity: entityName, id },
+          }),
+        };
+      },
+    });
+
+    // Collect operations from callback
+    const deferredOps = fn(txContext);
+
+    // Extract operations
+    const operations = deferredOps.map(d => d.operation);
+
+    // Execute atomically
+    const results = await this.httpClient.batchRequest(operations, { atomic: true });
+
+    // Check for failures
+    const failed = results.filter(r => !r.success);
+    if (failed.length > 0) {
+      const errors = failed.map((f, i) => `Operation ${i + 1}: ${f.error?.message || 'Unknown error'}`);
+      throw new Error(`Transaction failed: ${errors.join('; ')}`);
+    }
+
+    // Return results mapped to operations
+    return results.map(r => r.data) as any;
   }
 }
 
@@ -214,8 +255,7 @@ const RESERVED_METHODS = new Set([
   'onRequest',
   'onResponse',
   'onError',
-  'batch',
-  'changeset',
+  'transaction',
   'constructor',
   'httpClient',
   // Internal properties

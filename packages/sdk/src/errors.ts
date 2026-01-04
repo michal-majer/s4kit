@@ -227,33 +227,6 @@ export class ServerError extends S4KitError {
   }
 }
 
-/**
- * Batch operation error with per-request results
- */
-export class BatchError extends S4KitError {
-  public readonly results: Array<{ success: boolean; error?: S4KitError; index: number }>;
-
-  constructor(message: string, results: Array<{ success: boolean; error?: S4KitError; index: number }>) {
-    super(message, { code: 'BATCH_ERROR' });
-    this.name = 'BatchError';
-    this.results = results;
-  }
-
-  /**
-   * Get all failed operations
-   */
-  get failures() {
-    return this.results.filter(r => !r.success);
-  }
-
-  /**
-   * Get all successful operations
-   */
-  get successes() {
-    return this.results.filter(r => r.success);
-  }
-}
-
 // ============================================================================
 // Error Parsing Utilities
 // ============================================================================

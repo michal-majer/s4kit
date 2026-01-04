@@ -12,7 +12,6 @@ import type {
   InterceptedResponse,
   BatchOperation,
   BatchResult,
-  Changeset,
 } from './types';
 import {
   S4KitError,
@@ -315,186 +314,34 @@ export class HttpClient {
 
   /**
    * Execute multiple operations in a single batch request
+   * Uses the new JSON batch format
    * @example
    * ```ts
-   * const results = await client.batch([
-   *   { method: 'GET', entity: 'Products', id: 1 },
-   *   { method: 'POST', entity: 'Products', data: { Name: 'New' } },
-   *   { method: 'DELETE', entity: 'Products', id: 2 },
+   * const results = await client.batchRequest([
+   *   { method: 'POST', entity: 'Books', data: { title: 'Book 1' } },
+   *   { method: 'DELETE', entity: 'Books', id: 123 },
    * ]);
    * ```
    */
-  async batch<T = any>(
-    operations: BatchOperation<T>[],
-    options?: RequestOptions
+  async batchRequest<T = unknown>(
+    operations: BatchOperation[],
+    options?: RequestOptions & { atomic?: boolean }
   ): Promise<BatchResult<T>[]> {
-    const boundary = `batch_${generateUUID()}`;
-    const body = this.buildBatchBody(operations, boundary);
+    const headers = this.buildHeaders(options);
 
-    const headers = {
-      ...this.buildHeaders(options),
-      'Content-Type': `multipart/mixed; boundary=${boundary}`,
-    };
+    this.log(`→ POST batch (${operations.length} operations, atomic: ${options?.atomic ?? false})`);
 
-    const response = await this.client.post('$batch', {
-      body,
+    const response = await this.client.post('batch', {
+      json: {
+        atomic: options?.atomic ?? false,
+        operations,
+      },
       headers,
     });
 
-    return this.parseBatchResponse<T>(await response.text());
-  }
+    const results = await response.json() as BatchResult<T>[];
 
-  /**
-   * Execute operations in an atomic changeset (all succeed or all fail)
-   * @example
-   * ```ts
-   * const results = await client.changeset({
-   *   operations: [
-   *     { method: 'POST', entity: 'Orders', data: orderData },
-   *     { method: 'POST', entity: 'OrderItems', data: itemData },
-   *   ]
-   * });
-   * ```
-   */
-  async changeset<T = any>(
-    changeset: Changeset,
-    options?: RequestOptions
-  ): Promise<BatchResult<T>[]> {
-    const batchBoundary = `batch_${generateUUID()}`;
-    const changesetBoundary = `changeset_${generateUUID()}`;
-
-    const body = this.buildChangesetBody(changeset, batchBoundary, changesetBoundary);
-
-    const headers = {
-      ...this.buildHeaders(options),
-      'Content-Type': `multipart/mixed; boundary=${batchBoundary}`,
-    };
-
-    const response = await this.client.post('$batch', {
-      body,
-      headers,
-    });
-
-    return this.parseBatchResponse<T>(await response.text());
-  }
-
-  private buildBatchBody(operations: BatchOperation[], boundary: string): string {
-    const parts: string[] = [];
-
-    for (const op of operations) {
-      parts.push(`--${boundary}`);
-      parts.push('Content-Type: application/http');
-      parts.push('Content-Transfer-Encoding: binary');
-      parts.push('');
-      parts.push(this.buildBatchPart(op));
-    }
-
-    parts.push(`--${boundary}--`);
-    return parts.join('\r\n');
-  }
-
-  private buildChangesetBody(
-    changeset: Changeset,
-    batchBoundary: string,
-    changesetBoundary: string
-  ): string {
-    const parts: string[] = [];
-
-    // Start batch
-    parts.push(`--${batchBoundary}`);
-    parts.push(`Content-Type: multipart/mixed; boundary=${changesetBoundary}`);
-    parts.push('');
-
-    // Changeset operations
-    for (const op of changeset.operations) {
-      parts.push(`--${changesetBoundary}`);
-      parts.push('Content-Type: application/http');
-      parts.push('Content-Transfer-Encoding: binary');
-      parts.push('');
-      parts.push(this.buildBatchPart(op));
-    }
-
-    parts.push(`--${changesetBoundary}--`);
-    parts.push(`--${batchBoundary}--`);
-
-    return parts.join('\r\n');
-  }
-
-  private buildBatchPart(op: BatchOperation): string {
-    const lines: string[] = [];
-    let path: string;
-
-    switch (op.method) {
-      case 'GET':
-        path = op.id ? `${op.entity}(${this.formatKey(op.id)})` : op.entity;
-        lines.push(`GET ${path} HTTP/1.1`);
-        lines.push('Accept: application/json');
-        break;
-
-      case 'POST':
-        lines.push(`POST ${op.entity} HTTP/1.1`);
-        lines.push('Content-Type: application/json');
-        lines.push('');
-        lines.push(JSON.stringify(op.data));
-        break;
-
-      case 'PATCH':
-      case 'PUT':
-        path = `${op.entity}(${this.formatKey(op.id)})`;
-        lines.push(`${op.method} ${path} HTTP/1.1`);
-        lines.push('Content-Type: application/json');
-        lines.push('');
-        lines.push(JSON.stringify(op.data));
-        break;
-
-      case 'DELETE':
-        path = `${op.entity}(${this.formatKey(op.id)})`;
-        lines.push(`DELETE ${path} HTTP/1.1`);
-        break;
-    }
-
-    return lines.join('\r\n');
-  }
-
-  private formatKey(key: string | number | Record<string, string | number>): string {
-    if (typeof key === 'number') return String(key);
-    if (typeof key === 'string') return `'${key}'`;
-    return Object.entries(key)
-      .map(([k, v]) => `${k}=${typeof v === 'string' ? `'${v}'` : v}`)
-      .join(',');
-  }
-
-  private parseBatchResponse<T>(responseText: string): BatchResult<T>[] {
-    // Simplified batch response parsing
-    // In production, this would need more robust parsing
-    const results: BatchResult<T>[] = [];
-    const parts = responseText.split(/--batch_[a-f0-9-]+/);
-
-    for (const part of parts) {
-      if (!part.trim() || part.trim() === '--') continue;
-
-      const statusMatch = part.match(/HTTP\/1\.1 (\d+)/);
-      if (!statusMatch || !statusMatch[1]) continue;
-
-      const status = parseInt(statusMatch[1], 10);
-      const jsonMatch = part.match(/\{[\s\S]*\}/);
-
-      if (status >= 200 && status < 300) {
-        results.push({
-          success: true,
-          status,
-          data: jsonMatch ? JSON.parse(jsonMatch[0]) : undefined,
-        });
-      } else {
-        results.push({
-          success: false,
-          status,
-          error: jsonMatch
-            ? { code: 'BATCH_ERROR', message: JSON.parse(jsonMatch[0])?.error?.message ?? 'Unknown error' }
-            : { code: 'BATCH_ERROR', message: 'Unknown error' },
-        });
-      }
-    }
+    this.log(`← batch: ${results.filter(r => r.success).length}/${results.length} succeeded`);
 
     return results;
   }

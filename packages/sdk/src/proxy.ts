@@ -226,6 +226,78 @@ export function createEntityHandler<T = any>(
     },
 
     // ==========================================================================
+    // Bulk Operations
+    // ==========================================================================
+
+    /**
+     * Create multiple entities in a single batch request
+     */
+    async createMany(items: Array<Partial<T>>, options?: QueryOptions<T>): Promise<T[]> {
+      const operations = items.map(data => ({
+        method: 'POST' as const,
+        entity: entityName,
+        data: data as Record<string, unknown>,
+      }));
+
+      const results = await client.batchRequest<T>(operations, extractRequestOptions(options));
+
+      // Throw if any operation failed
+      const failed = results.filter(r => !r.success);
+      if (failed.length > 0) {
+        const errors = failed.map((f, i) => `Item ${i + 1}: ${f.error?.message || 'Unknown error'}`);
+        throw new Error(`createMany failed: ${errors.join('; ')}`);
+      }
+
+      return results.map(r => r.data as T);
+    },
+
+    /**
+     * Update multiple entities in a single batch request
+     */
+    async updateMany(
+      items: Array<{ id: EntityKey; data: Partial<T> }>,
+      options?: QueryOptions<T>
+    ): Promise<T[]> {
+      const operations = items.map(({ id, data }) => ({
+        method: 'PATCH' as const,
+        entity: entityName,
+        id,
+        data: data as Record<string, unknown>,
+      }));
+
+      const results = await client.batchRequest<T>(operations, extractRequestOptions(options));
+
+      // Throw if any operation failed
+      const failed = results.filter(r => !r.success);
+      if (failed.length > 0) {
+        const errors = failed.map((f, i) => `Item ${i + 1}: ${f.error?.message || 'Unknown error'}`);
+        throw new Error(`updateMany failed: ${errors.join('; ')}`);
+      }
+
+      return results.map(r => r.data as T);
+    },
+
+    /**
+     * Delete multiple entities in a single batch request
+     */
+    async deleteMany(ids: EntityKey[], options?: QueryOptions<T>): Promise<void> {
+      const operations = ids.map(id => ({
+        method: 'DELETE' as const,
+        entity: entityName,
+        id,
+      }));
+
+      const results = await client.batchRequest(operations, extractRequestOptions(options));
+
+      // Throw if any operation failed
+      const failed = results.filter(r => !r.success);
+      if (failed.length > 0) {
+        const errors = failed.map((f, i) => `ID ${ids[i]}: ${f.error?.message || 'Unknown error'}`);
+        throw new Error(`deleteMany failed: ${errors.join('; ')}`);
+      }
+    },
+
+    // ==========================================================================
     // Navigation Properties
     // ==========================================================================
 

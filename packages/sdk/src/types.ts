@@ -433,6 +433,44 @@ export interface EntityHandler<T = any> {
    */
   delete(id: EntityKey, options?: QueryOptions<T>): Promise<void>;
 
+  // ==================== Bulk Operations ====================
+
+  /**
+   * Create multiple entities in a single batch request
+   * @example
+   * ```ts
+   * const books = await client.Books.createMany([
+   *   { title: 'Book 1', price: 9.99 },
+   *   { title: 'Book 2', price: 10.99 },
+   * ]);
+   * ```
+   */
+  createMany(items: Array<Partial<T>>, options?: QueryOptions<T>): Promise<T[]>;
+
+  /**
+   * Update multiple entities in a single batch request
+   * @example
+   * ```ts
+   * const updated = await client.Books.updateMany([
+   *   { id: 1, data: { price: 19.99 } },
+   *   { id: 2, data: { price: 29.99 } },
+   * ]);
+   * ```
+   */
+  updateMany(
+    items: Array<{ id: EntityKey; data: Partial<T> }>,
+    options?: QueryOptions<T>
+  ): Promise<T[]>;
+
+  /**
+   * Delete multiple entities in a single batch request
+   * @example
+   * ```ts
+   * await client.Books.deleteMany([1, 2, 3]);
+   * ```
+   */
+  deleteMany(ids: EntityKey[], options?: QueryOptions<T>): Promise<void>;
+
   // ==================== Navigation Properties ====================
 
   /**
@@ -544,57 +582,36 @@ export type DeepInsertData<T> = T & {
 };
 
 // ============================================================================
-// Batch Operations
+// Batch Operations (JSON format)
 // ============================================================================
 
 /**
- * Batch operation types
+ * Batch operation - supports POST, PATCH, PUT, DELETE
+ * @example
+ * ```ts
+ * // Create
+ * { method: 'POST', entity: 'Books', data: { title: 'New Book' } }
+ *
+ * // Update
+ * { method: 'PATCH', entity: 'Books', id: 123, data: { price: 9.99 } }
+ *
+ * // Delete
+ * { method: 'DELETE', entity: 'Books', id: 123 }
+ * ```
  */
-export type BatchOperation<T = any> =
-  | BatchGet<T>
-  | BatchCreate<T>
-  | BatchUpdate<T>
-  | BatchDelete;
+export type BatchOperation =
+  | { method: 'POST'; entity: string; data: Record<string, unknown> }
+  | { method: 'PATCH' | 'PUT'; entity: string; id: EntityKey; data: Record<string, unknown> }
+  | { method: 'DELETE'; entity: string; id: EntityKey };
 
-export interface BatchGet<T = any> {
-  method: 'GET';
-  entity: string;
-  id?: EntityKey;
-  options?: QueryOptions<T>;
-}
-
-export interface BatchCreate<T = any> {
-  method: 'POST';
-  entity: string;
-  data: Partial<T>;
-}
-
-export interface BatchUpdate<T = any> {
-  method: 'PATCH' | 'PUT';
-  entity: string;
-  id: EntityKey;
-  data: Partial<T>;
-}
-
-export interface BatchDelete {
-  method: 'DELETE';
-  entity: string;
-  id: EntityKey;
-}
-
-export interface BatchResult<T = any> {
+/**
+ * Result of a batch operation
+ */
+export interface BatchResult<T = unknown> {
   success: boolean;
   status: number;
   data?: T;
-  error?: ODataError;
-}
-
-// ============================================================================
-// Changeset (Atomic Transactions)
-// ============================================================================
-
-export interface Changeset {
-  operations: Array<BatchCreate<any> | BatchUpdate<any> | BatchDelete>;
+  error?: { code: string; message: string };
 }
 
 // ============================================================================

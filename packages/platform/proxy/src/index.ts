@@ -5,6 +5,7 @@ import { redis } from './cache/redis.ts';
 import proxyRoute from './routes/proxy.ts';
 import healthRoute from './routes/health.ts';
 import typesRoute from './routes/types.ts';
+import batchRoute from './routes/batch.ts';
 
 // Initialize shared clients
 const databaseUrl = process.env.DATABASE_URL;
@@ -37,6 +38,7 @@ app.route('/health', healthRoute);
 
 // API routes
 app.route('/api/proxy/$types', typesRoute);
+app.route('/api/proxy/batch', batchRoute);
 app.route('/api/proxy', proxyRoute);
 
 // Start server
