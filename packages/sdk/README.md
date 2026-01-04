@@ -6,7 +6,7 @@ Type-safe SDK for consuming SAP APIs. Build Clean Core applications faster.
 [![TypeScript](https://img.shields.io/npm/types/s4kit)](https://www.npmjs.com/package/s4kit)
 [![Bundle](https://img.shields.io/bundlephobia/minzip/s4kit)](https://bundlephobia.com/package/s4kit)
 
-Works with Next.js, Express, Hono, Fastify, NestJS, Remix, and more.
+Works with Next.js, Express, Hono, Fastify, NestJS, Remix, and any Node.js framework.
 
 [Documentation](https://docs.s4kit.com) · [Get API Key](https://staging.app.s4kit.com) · [Examples](./examples/)
 
