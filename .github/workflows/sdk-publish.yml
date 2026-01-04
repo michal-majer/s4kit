@@ -6,6 +6,7 @@ on:
     paths:
       - 'packages/sdk/**'
       - '!packages/sdk/package.json'
+  workflow_dispatch:
 
 jobs:
   publish:
