@@ -315,12 +315,15 @@ async function executeAtomicBatch(
 
     console.log(`Batch response status: ${response.status}`);
     console.log(`Batch response content-type: ${responseContentType}`);
-    console.log(`Batch response body:\n${responseBody.substring(0, 500)}...`);
+    console.log(`Batch response body (full):\n${responseBody}`);
 
     // Parse the multipart response
     const parsed = parseBatchResponse(responseBody, responseContentType);
 
     console.log(`Parsed ${parsed.responses.length} responses, hasErrors: ${parsed.hasErrors}`);
+    parsed.responses.forEach((r, i) => {
+      console.log(`  Response ${i}: status=${r.status}, contentId=${r.contentId}, body=${JSON.stringify(r.body)?.substring(0, 200)}`);
+    });
 
     // Map responses to our result format
     const results: BatchResult[] = parsed.responses.map((resp, index) => {

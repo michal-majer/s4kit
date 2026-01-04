@@ -264,10 +264,15 @@ function parseHttpResponse(content: string): BatchResponse {
  * Parse a changeset response (may contain multiple responses)
  */
 function parseChangesetResponse(content: string, changesetBoundary: string): BatchResponse[] {
+  console.log(`[odata-batch] Parsing changeset with boundary: ${changesetBoundary}`);
   const parts = splitByBoundary(content, changesetBoundary);
+  console.log(`[odata-batch] Found ${parts.length} parts in changeset`);
   const responses: BatchResponse[] = [];
 
-  for (const part of parts) {
+  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+    const part = parts[partIndex]!;
+    console.log(`[odata-batch] Changeset part ${partIndex}:\n${part.substring(0, 300)}...`);
+
     // Each part should contain headers and an HTTP response
     // Skip Content-Type/Content-Transfer-Encoding headers to get to the HTTP response
     const lines = part.split('\n');
@@ -282,8 +287,12 @@ function parseChangesetResponse(content: string, changesetBoundary: string): Bat
     }
 
     const httpContent = lines.slice(httpResponseStart).join('\n');
+    console.log(`[odata-batch] HTTP content for part ${partIndex}:\n${httpContent.substring(0, 300)}...`);
+
     if (httpContent.trim()) {
-      responses.push(parseHttpResponse(httpContent));
+      const parsed = parseHttpResponse(httpContent);
+      console.log(`[odata-batch] Parsed response ${partIndex}: status=${parsed.status}, body=${JSON.stringify(parsed.body)?.substring(0, 100)}`);
+      responses.push(parsed);
     }
   }
 
@@ -301,7 +310,9 @@ export function parseBatchResponse(
   responseBody: string,
   contentType: string
 ): ParsedBatchResponse {
+  console.log(`[odata-batch] parseBatchResponse called with contentType: ${contentType}`);
   const batchBoundary = extractBoundary(contentType);
+  console.log(`[odata-batch] Extracted batch boundary: ${batchBoundary}`);
 
   if (!batchBoundary) {
     throw new Error('Could not extract batch boundary from Content-Type');
@@ -309,8 +320,12 @@ export function parseBatchResponse(
 
   const responses: BatchResponse[] = [];
   const parts = splitByBoundary(responseBody, batchBoundary);
+  console.log(`[odata-batch] Found ${parts.length} batch parts`);
 
-  for (const part of parts) {
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]!;
+    console.log(`[odata-batch] Batch part ${i} (first 200 chars):\n${part.substring(0, 200)}...`);
+
     // Check if this part is a changeset
     const contentTypeMatch = part.match(/Content-Type:\s*multipart\/mixed;\s*boundary=([^\s\n]+)/i);
 
