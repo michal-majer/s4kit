@@ -59,6 +59,17 @@ jobs:
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Bumped $OLD_VERSION → $NEW_VERSION"
 
+      - name: Check NPM_TOKEN
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "ERROR: NPM_TOKEN secret is not set!"
+            exit 1
+          else
+            echo "NPM_TOKEN is set (length: ${#NPM_TOKEN} chars)"
+          fi
+
       - name: Publish to npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
