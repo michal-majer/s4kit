@@ -35,6 +35,8 @@ Type-safe access to S/4HANA and CAP services. Zero boilerplate.
 
 ## Quick Start
 
+> **Get your API key:** Create a free account at [staging.app.s4kit.com](https://staging.app.s4kit.com)
+
 ```bash
 npm install s4kit
 ```
@@ -127,6 +129,35 @@ catch (e) {
   if (e instanceof NotFoundError) console.log(e.help);
   if (e instanceof ValidationError) console.log(e.fieldErrors);
 }
+```
+
+---
+
+## Architecture
+
+```
+Your Application
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│                   S4Kit SDK                       │
+│  • Type-safe queries    • Batch operations        │
+│  • Error handling       • Pagination              │
+└───────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│               S4Kit Proxy Service                 │
+│  • API key auth         • Rate limiting           │
+│  • Request logging      • Connection management   │
+└───────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│            SAP S/4HANA  /  CAP Services           │
+│  • S/4HANA Cloud        • S/4HANA On-Premise      │
+│  • CAP Applications     • Any OData Service       │
+└───────────────────────────────────────────────────┘
 ```
 
 ---
@@ -238,35 +269,6 @@ await client.transaction(tx => [
 ```
 
 See the [complete demo](./packages/sdk/examples/demo.ts) for a full walkthrough.
-
----
-
-## Architecture
-
-```
-Your Application
-        │
-        ▼
-┌───────────────────────────────────────────────────┐
-│                   S4Kit SDK                       │
-│  • Type-safe queries    • Batch operations        │
-│  • Error handling       • Pagination              │
-└───────────────────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────────────────┐
-│               S4Kit Proxy Service                 │
-│  • API key auth         • Rate limiting           │
-│  • Request logging      • Connection management   │
-└───────────────────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────────────────┐
-│            SAP S/4HANA  /  CAP Services           │
-│  • S/4HANA Cloud        • S/4HANA On-Premise      │
-│  • CAP Applications     • Any OData Service       │
-└───────────────────────────────────────────────────┘
-```
 
 ---
 
