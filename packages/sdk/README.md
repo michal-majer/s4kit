@@ -2,7 +2,6 @@
 
 Type-safe SDK for consuming SAP APIs. Build Clean Core applications faster.
 
-
 [![npm](https://img.shields.io/npm/v/s4kit)](https://www.npmjs.com/package/s4kit)
 [![TypeScript](https://img.shields.io/npm/types/s4kit)](https://www.npmjs.com/package/s4kit)
 [![Bundle](https://img.shields.io/bundlephobia/minzip/s4kit)](https://bundlephobia.com/package/s4kit)
