@@ -74,10 +74,9 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           cd packages/sdk
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
-          npm publish
-          rm .npmrc
+          npm publish --ignore-scripts
 
       - name: Commit and tag
         env:
