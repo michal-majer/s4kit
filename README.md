@@ -2,15 +2,19 @@
 
 # S4Kit
 
-**The Stripe-like SDK for SAP S/4HANA**
+### Consume SAP APIs with ease.
 
-One line of code to query any SAP entity. Type-safe. No boilerplate.
+The modern TypeScript SDK for building Clean Core applications.
+Type-safe access to S/4HANA and CAP services. Zero boilerplate.
 
-[![npm version](https://img.shields.io/npm/v/s4kit.svg)](https://www.npmjs.com/package/s4kit)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue.svg)](https://www.typescriptlang.org/)
+[![npm](https://img.shields.io/npm/v/s4kit?style=flat-square)](https://www.npmjs.com/package/s4kit)
+[![npm downloads](https://img.shields.io/npm/dm/s4kit?style=flat-square)](https://www.npmjs.com/package/s4kit)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](https://opensource.org/licenses/MIT)
 
-[Documentation](#documentation) · [Quick Start](#quick-start) · [Features](#features) · [Self-Hosting](#self-hosting)
+**Works with:** Next.js · Express · Hono · Fastify · NestJS · Remix · any Node.js framework
+
+[Get Started](#quick-start) &nbsp;&bull;&nbsp; [Docs](https://docs.s4kit.com) &nbsp;&bull;&nbsp; [Try S4Kit](https://staging.app.s4kit.com)
 
 </div>
 
@@ -18,13 +22,16 @@ One line of code to query any SAP entity. Type-safe. No boilerplate.
 
 ## Why S4Kit?
 
-| Traditional SAP Integration | With S4Kit |
-|-----------------------------|------------|
-| Weeks of OData setup | **Minutes** to first query |
-| Complex `$filter` syntax | Intuitive object filters |
-| Manual type definitions | Generated TypeScript types |
-| Build your own rate limiting | Built-in with Redis |
-| DIY audit logging | Comprehensive request logs |
+| Traditional Approach | With S4Kit |
+|---------------------|------------|
+| Destinations, CSRF tokens, auth setup | **One API key** |
+| Manual `$filter=substringof(...)` syntax | Type-safe filter objects |
+| No SDK — raw `fetch()` or generated clients | Clean, intuitive API |
+| No types, runtime errors everywhere | Full TypeScript inference |
+| DIY pagination and batch requests | Built-in with async iterators |
+| Custom error handling per API | `NotFoundError`, `ValidationError`, etc. |
+
+---
 
 ## Quick Start
 
@@ -35,278 +42,321 @@ npm install s4kit
 ```typescript
 import { S4Kit } from 's4kit';
 
-const client = S4Kit({
-  apiKey: 'sk_live_xxx',
-  connection: 'erp-prod'
-});
+const client = S4Kit({ apiKey: 'sk_live_...' });
 
-// Query any SAP entity - that's it.
+// That's it. Query any SAP entity.
 const partners = await client.A_BusinessPartner.list({
   filter: { BusinessPartnerCategory: '1' },
-  select: ['BusinessPartner', 'BusinessPartnerName'],
   top: 10
 });
 ```
 
-## Features
+---
 
-### SDK
+## Type Generation
 
-- **Dynamic Entity Access** - Query any OData entity without code generation
-- **Full CRUD Operations** - `list()`, `get()`, `create()`, `update()`, `delete()`
-- **Type-Safe Queries** - Generated TypeScript interfaces from SAP metadata
-- **Fluent Query Builder** - Chainable, readable query construction
-- **Advanced Filtering** - Object notation, logical operators (`$or`, `$and`, `$not`)
-- **Batch Operations** - Atomic and non-atomic batch requests
-- **Navigation Properties** - Access related entities with `expand`
-- **OData Functions & Actions** - Call bound and unbound operations
-- **Pagination** - Built-in `paginate()` with async iterators
-- **Interceptors** - Request/response/error hooks
-
-### Platform (Optional)
-
-Self-host the S4Kit platform for enterprise features:
-
-- **Multi-Tenant Architecture** - SaaS-ready with organization isolation
-- **1,049 Predefined SAP APIs** - Built-in catalog for S/4HANA Cloud & On-Premise
-- **Stripe-like API Keys** - Secure key management with hashing & masking
-- **Rate Limiting** - Redis-backed distributed rate limits
-- **Audit Logging** - Comprehensive request logs with privacy controls
-- **Role-Based Access Control** - Owner, Admin, Developer roles
-- **Multi-Level Auth** - Instance, Service, and System-level credentials
-
-## Installation
+Generate TypeScript types from your SAP system for full autocomplete and type safety:
 
 ```bash
-# npm
-npm install s4kit
-
-# yarn
-yarn add s4kit
-
-# pnpm
-pnpm add s4kit
-
-# bun
-bun add s4kit
+npx s4kit generate-types --api-key sk_live_... --output ./types
 ```
 
-## Usage Examples
-
-### Filtering
-
 ```typescript
-// Simple equality
+import { S4Kit } from 's4kit';
+import './types';  // Enable type inference
+
+const client = S4Kit({ apiKey: 'sk_live_...' });
+
+// Full autocomplete on entity names and fields
 const partners = await client.A_BusinessPartner.list({
+  select: ['BusinessPartner', 'BusinessPartnerName'],  // ← Type-safe!
   filter: { BusinessPartnerCategory: '1' }
 });
 
-// Comparison operators
-const products = await client.A_Product.list({
-  filter: {
-    StandardPrice: { gt: 100, lt: 500 },
-    ProductType: 'FINISHED'
+// partners is A_BusinessPartner[], not any[]
+partners.forEach(p => console.log(p.BusinessPartnerName));  // ← Autocomplete works!
+```
+
+---
+
+## Features
+
+<table>
+<tr>
+<td width="50%">
+
+**Type-Safe Queries**
+
+Filter with objects, not strings. Full operator support.
+
+```typescript
+filter: {
+  StandardPrice: { gt: 100 },
+  Name: { contains: 'Pro' }
+}
+```
+
+</td>
+<td width="50%">
+
+**Full CRUD**
+
+Every operation you need, with a clean API.
+
+```typescript
+await client.Entity.list({ top: 10 });
+await client.Entity.get('key');
+await client.Entity.create({ ... });
+await client.Entity.update('key', { ... });
+await client.Entity.delete('key');
+```
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Batch Operations**
+
+Multiple operations in a single request.
+
+```typescript
+await client.Entity.createMany([
+  { name: 'First' },
+  { name: 'Second' },
+  { name: 'Third' }
+]);
+```
+
+</td>
+<td width="50%">
+
+**Atomic Transactions**
+
+All-or-nothing. If one fails, all roll back.
+
+```typescript
+const [order, items] = await client.transaction(tx => [
+  tx.Orders.create({ ... }),
+  tx.Items.createMany([...])
+]);
+```
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Smart Pagination**
+
+Async iterators for efficient data processing.
+
+```typescript
+for await (const page of client.Entity.paginate()) {
+  process(page);
+}
+
+// Or get everything
+const all = await client.Entity.all();
+```
+
+</td>
+<td width="50%">
+
+**Error Handling**
+
+Typed errors with helpful messages.
+
+```typescript
+try {
+  await client.Entity.get('invalid');
+} catch (e) {
+  if (e instanceof NotFoundError) {
+    console.log(e.help);
   }
+}
+```
+
+</td>
+</tr>
+</table>
+
+---
+
+## Try S4Kit
+
+<div align="center">
+
+### Get started in minutes
+
+1. Create a free account on [**staging.app.s4kit.com**](https://staging.app.s4kit.com)
+2. Connect your SAP system (S/4HANA, BTP, or CAP service)
+3. Generate an API key and start building
+
+[**Create Free Account**](https://staging.app.s4kit.com) &nbsp; &nbsp; [Documentation](https://docs.s4kit.com)
+
+</div>
+
+---
+
+## SAP S/4HANA Examples
+
+Real-world examples using SAP S/4HANA entities:
+
+```typescript
+import { S4Kit } from 's4kit';
+
+const client = S4Kit({
+  apiKey: 'sk_live_...',
 });
 
-// Logical operators
-const orders = await client.A_SalesOrder.list({
+// Query Business Partners with filtering
+const partners = await client.A_BusinessPartner.list({
   filter: {
-    $or: [
-      { SalesOrderType: 'OR' },
-      { TotalNetAmount: { gt: 10000 } }
-    ]
-  }
+    BusinessPartnerCategory: '1',
+    CreationDate: { gt: '2024-01-01' }
+  },
+  select: ['BusinessPartner', 'BusinessPartnerName', 'Industry'],
+  orderBy: { BusinessPartnerName: 'asc' },
+  top: 50
 });
-```
 
-### Type Generation (Optional)
-
-Generate TypeScript interfaces from your SAP system:
-
-```bash
-npx s4kit generate-types --api-key sk_live_xxx --output ./types
-```
-
-```typescript
-import type { A_BusinessPartner } from './types';
-
-// Full autocomplete and type checking
-const partner: A_BusinessPartner = await client.A_BusinessPartner.get('1000000');
-```
-
-### Fluent Query Builder
-
-```typescript
-import { query } from 's4kit';
-
-const results = await query(client.A_Product)
-  .select('Product', 'ProductType', 'StandardPrice')
-  .where('ProductType', 'eq', 'FINISHED')
-  .and('StandardPrice', 'gt', 100)
-  .orderBy('StandardPrice', 'desc')
-  .top(20)
-  .execute();
-```
-
-### Batch Operations
-
-```typescript
-// Atomic batch - all succeed or all fail
-const results = await client.batch([
-  { method: 'POST', entity: 'A_BusinessPartner', data: partner1 },
-  { method: 'POST', entity: 'A_BusinessPartner', data: partner2 },
-], { atomic: true });
-```
-
-### Navigation Properties
-
-```typescript
-// Expand related entities
-const orders = await client.A_SalesOrder.list({
+// Get Sales Order with line items expanded
+const order = await client.A_SalesOrder.get('12345', {
   expand: {
     to_Item: {
       select: ['SalesOrderItem', 'Material', 'NetAmount'],
-      top: 10
+      orderBy: { SalesOrderItem: 'asc' }
     }
   }
 });
 
-// Or use nav() for direct access
-const items = await client.A_SalesOrder.nav('12345', 'to_Item').list();
+// Create multiple products atomically
+const products = await client.transaction(tx => [
+  tx.A_Product.create({ Product: 'PROD001', ProductType: 'FINISHED' }),
+  tx.A_Product.create({ Product: 'PROD002', ProductType: 'FINISHED' }),
+  tx.A_Product.create({ Product: 'PROD003', ProductType: 'FINISHED' }),
+]);
 ```
+
+---
+
+## CAP Bookshop Examples
+
+Examples using the SAP CAP Bookshop sample service:
+
+```typescript
+const client = S4Kit({ apiKey: 'sk_live_...' });
+
+// List books with type-safe filtering
+const cheapBooks = await client.Books.list({
+  filter: { price: { lt: 15 } },
+  orderBy: { price: 'asc' },
+  select: ['title', 'author', 'price']
+});
+
+// Authors with their books expanded
+const authors = await client.Authors.list({
+  expand: {
+    books: {
+      select: ['title', 'price'],
+      top: 5
+    }
+  }
+});
+
+// Deep insert: Book with localized texts (Composition)
+const book = await client.Books.createDeep({
+  title: "The Hitchhiker's Guide",
+  price: 42.00,
+  texts: [
+    { locale: 'de', title: 'Per Anhalter durch die Galaxis' },
+    { locale: 'fr', title: 'Le Guide du voyageur galactique' }
+  ]
+});
+
+// Batch create with automatic cleanup
+const books = await client.Books.createMany([
+  { title: 'Book 1', price: 9.99 },
+  { title: 'Book 2', price: 14.99 },
+  { title: 'Book 3', price: 19.99 }
+]);
+
+// Transaction with rollback on failure
+await client.transaction(tx => [
+  tx.Authors.create({ name: 'New Author' }),
+  tx.Books.create({ title: 'New Book', author_ID: 101 })
+]);
+```
+
+See the [complete demo](./packages/sdk/examples/demo.ts) for a full walkthrough.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Your Application                          │
-│                                                             │
-│    import { S4Kit } from 's4kit';                           │
-│    const client = S4Kit({ apiKey: 'sk_live_xxx' });         │
-│    await client.A_BusinessPartner.list();                   │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   S4Kit Proxy Service                        │
-│                                                             │
-│  • API Key Authentication    • Rate Limiting                │
-│  • Permission Checking       • Request Logging              │
-│  • Service Resolution        • Response Normalization       │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    SAP S/4HANA                               │
-│                                                             │
-│  • S/4HANA Cloud (Public)    • S/4HANA On-Premise          │
-│  • S/4HANA Private Cloud     • SAP BTP Services            │
-└─────────────────────────────────────────────────────────────┘
+Your Application
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│                   S4Kit SDK                       │
+│  • Type-safe queries    • Batch operations        │
+│  • Error handling       • Pagination              │
+└───────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│               S4Kit Proxy Service                 │
+│  • API key auth         • Rate limiting           │
+│  • Request logging      • Connection management   │
+└───────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────┐
+│            SAP S/4HANA  /  CAP Services           │
+│  • S/4HANA Cloud        • S/4HANA On-Premise      │
+│  • CAP Applications     • Any OData Service       │
+└───────────────────────────────────────────────────┘
 ```
-
-## Self-Hosting
-
-Deploy the S4Kit platform with Docker:
-
-```bash
-# Clone the repository
-git clone https://github.com/michal-majer/s4kit.git
-cd s4kit
-
-# Start the platform
-docker-compose -f docker/docker-compose.prod.yml up -d
-```
-
-### Services
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Frontend | 3001 | Admin dashboard (Next.js) |
-| Backend | 3000 | Admin API (Hono.js) |
-| Proxy | 3002 | SDK proxy service (Hono.js) |
-| PostgreSQL | 5433 | Database |
-| Redis | 6379 | Cache & rate limiting |
-
-### Environment Variables
-
-```env
-# Required
-DATABASE_URL=postgresql://user:pass@localhost:5433/s4kit
-REDIS_URL=redis://localhost:6379
-ENCRYPTION_KEY=<32-byte-hex-key>
-BETTER_AUTH_SECRET=<random-string>
-
-# Optional
-MODE=selfhost  # or 'saas' for multi-tenant
-```
-
-## Configuration
-
-### SDK Options
-
-```typescript
-const client = S4Kit({
-  apiKey: 'sk_live_xxx',        // Required: Your API key
-  baseUrl: 'https://api.s4kit.com', // Platform URL
-  connection: 'erp-prod',       // Default SAP connection
-  timeout: 30000,               // Request timeout (ms)
-  retries: 3,                   // Retry failed requests
-  debug: false,                 // Enable debug logging
-});
-```
-
-### Per-Request Overrides
-
-```typescript
-// Override connection for specific requests
-const devData = await client.A_Product.list({
-  connection: 'erp-dev',
-  top: 5
-});
-```
-
-## Documentation
-
-- [SDK Reference](./packages/sdk/README.md)
-- [Platform Guide](./packages/platform/README.md)
-- [API Reference](./docs/api.md)
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| SDK | TypeScript, Bun |
-| Backend | Hono.js, Drizzle ORM |
-| Frontend | Next.js 16, React 19, Tailwind CSS |
-| Database | PostgreSQL 16 |
-| Cache | Redis 7 |
-| Auth | better-auth |
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-```bash
-# Setup development environment
-bun install
-docker-compose up -d  # Start PostgreSQL + Redis
-
-# Run services
-bun run dev:platform  # Start all platform services
-cd packages/sdk && bun run dev  # SDK development
-```
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
+## Self-Hosting (Work in progress)
+
+Deploy S4Kit on your own infrastructure:
+
+```bash
+git clone https://github.com/michal-majer/s4kit.git
+cd s4kit
+docker-compose -f docker/docker-compose.prod.yml up -d
+```
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend | 3001 | Admin dashboard |
+| Backend | 3000 | Admin API |
+| Proxy | 3002 | SDK proxy |
+
+See [Platform Guide](./packages/platform/README.md) for detailed setup.
+
+---
+
+## Documentation
+
+| Resource | Description |
+|----------|-------------|
+| [docs.s4kit.com](https://docs.s4kit.com) | Full documentation |
+| [SDK Reference](./packages/sdk/README.md) | SDK quick reference |
+| [Examples](./packages/sdk/examples/) | Working code examples |
+
+---
+
+
 <div align="center">
 
-**Built with love for SAP developers who deserve better tools.**
+**Build Clean Core applications faster.**
 
-[Get Started](#quick-start) · [Star on GitHub](https://github.com/michal-majer/s4kit)
+[Get Started](#quick-start) &nbsp;&bull;&nbsp; [GitHub](https://github.com/michal-majer/s4kit)
 
 </div>
