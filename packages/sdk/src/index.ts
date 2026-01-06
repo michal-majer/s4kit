@@ -17,6 +17,7 @@ export {
 export type {
   // Config
   S4KitConfig,
+  InstanceEnvironment,
 
   // Query options
   QueryOptions,

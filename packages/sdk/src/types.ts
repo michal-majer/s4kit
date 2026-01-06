@@ -3,12 +3,17 @@
 // ============================================================================
 
 /**
+ * Instance environment levels (ordered by priority: production highest)
+ */
+export type InstanceEnvironment = 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production';
+
+/**
  * SDK configuration options
  */
 export interface S4KitConfig {
   apiKey: string;
   baseUrl?: string;           // Platform URL (default: https://api.s4kit.com)
-  connection?: string;        // Default connection alias (e.g., "erp-dev") - REQUIRED for requests
+  connection?: InstanceEnvironment;  // Target instance environment
   service?: string;           // Default service alias - OPTIONAL (auto-resolved from entity)
   timeout?: number;           // Request timeout in milliseconds (default: 30000)
   retries?: number;           // Number of retries on failure (default: 0)
