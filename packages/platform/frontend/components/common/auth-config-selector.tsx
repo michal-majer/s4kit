@@ -572,26 +572,35 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
                     )}
                   </Button>
                   {showImportSection && (
-                    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Paste your VCAP_SERVICES JSON (from Cloud Foundry) or service binding JSON.
-                        You can paste both VCAP_SERVICES and VCAP_APPLICATION together.
-                      </p>
+                    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
                       <Textarea
-                        placeholder='{"VCAP_SERVICES": {"xsuaa": [...]}}'
+                        placeholder="Paste VCAP_SERVICES or service binding JSON here..."
                         value={bindingJson}
                         onChange={(e) => setBindingJson(e.target.value)}
-                        className="min-h-[80px] max-h-[150px] font-mono text-xs resize-none"
+                        className="h-20 font-mono text-xs resize-none overflow-auto"
                       />
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleParseBinding}
-                        disabled={!bindingJson.trim()}
-                        className="w-full"
-                      >
-                        Parse & Fill Fields
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleParseBinding}
+                          disabled={!bindingJson.trim()}
+                          className="flex-1"
+                        >
+                          Parse & Fill Fields
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setBindingJson('');
+                            setShowImportSection(false);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
