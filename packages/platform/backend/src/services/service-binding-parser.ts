@@ -85,6 +85,50 @@ interface ServiceBinding {
 }
 
 /**
+ * Try to extract valid JSON containing VCAP_SERVICES from potentially malformed input
+ * (e.g., when user pastes both VCAP_SERVICES and VCAP_APPLICATION together)
+ */
+function extractVcapServicesJson(input: string): string {
+  const vcapServicesMatch = input.match(/\{\s*"VCAP_SERVICES"\s*:\s*\{/);
+  if (vcapServicesMatch) {
+    const startIndex = vcapServicesMatch.index!;
+    let braceCount = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = startIndex; i < input.length; i++) {
+      const char = input[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (char === '\\' && inString) {
+        escape = true;
+        continue;
+      }
+
+      if (char === '"' && !escape) {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') braceCount++;
+        if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            return input.slice(startIndex, i + 1);
+          }
+        }
+      }
+    }
+  }
+  return input;
+}
+
+/**
  * Unwrap outer VCAP_SERVICES wrapper if present
  * Handles format: { "VCAP_SERVICES": { "xsuaa": [...] } }
  */
@@ -100,7 +144,9 @@ function unwrapVcapServices(parsed: any): any {
  */
 export function detectBindingFormat(json: string): BindingFormat {
   try {
-    let parsed = JSON.parse(json);
+    // Try to extract valid VCAP_SERVICES JSON if input contains multiple objects
+    const cleanedJson = extractVcapServicesJson(json.trim());
+    let parsed = JSON.parse(cleanedJson);
 
     // Unwrap outer VCAP_SERVICES wrapper if present
     parsed = unwrapVcapServices(parsed);
@@ -134,8 +180,10 @@ export function detectBindingFormat(json: string): BindingFormat {
  */
 export function parseVcapServices(json: string, preferredService?: string): ParsedBinding | null {
   try {
+    // Try to extract valid VCAP_SERVICES JSON if input contains multiple objects
+    const cleanedJson = extractVcapServicesJson(json.trim());
     // Unwrap outer VCAP_SERVICES wrapper if present
-    const parsed = unwrapVcapServices(JSON.parse(json)) as VcapServices;
+    const parsed = unwrapVcapServices(JSON.parse(cleanedJson)) as VcapServices;
 
     // Try XSUAA first (most common for CAP applications)
     if ((!preferredService || preferredService === 'xsuaa') && parsed.xsuaa && parsed.xsuaa.length > 0) {
@@ -186,7 +234,9 @@ export function parseVcapServices(json: string, preferredService?: string): Pars
  */
 export function parseServiceBinding(json: string): ParsedBinding | null {
   try {
-    const parsed = JSON.parse(json) as ServiceBinding;
+    // Try to extract valid JSON if input contains multiple objects
+    const cleanedJson = extractVcapServicesJson(json.trim());
+    const parsed = JSON.parse(cleanedJson) as ServiceBinding;
 
     // Check for credentials at root level
     if (parsed.clientid && parsed.clientsecret && parsed.url) {

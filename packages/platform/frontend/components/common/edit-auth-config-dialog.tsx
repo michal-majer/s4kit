@@ -41,6 +41,50 @@ function buildTokenUrl(baseUrl: string): string {
 }
 
 /**
+ * Try to extract valid JSON containing VCAP_SERVICES from potentially malformed input
+ * (e.g., when user pastes both VCAP_SERVICES and VCAP_APPLICATION together)
+ */
+function extractVcapServicesJson(input: string): string {
+  const vcapServicesMatch = input.match(/\{\s*"VCAP_SERVICES"\s*:\s*\{/);
+  if (vcapServicesMatch) {
+    const startIndex = vcapServicesMatch.index!;
+    let braceCount = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = startIndex; i < input.length; i++) {
+      const char = input[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (char === '\\' && inString) {
+        escape = true;
+        continue;
+      }
+
+      if (char === '"' && !escape) {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') braceCount++;
+        if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            return input.slice(startIndex, i + 1);
+          }
+        }
+      }
+    }
+  }
+  return input;
+}
+
+/**
  * Parse service binding JSON to extract OAuth credentials
  */
 function parseServiceBinding(json: string): {
@@ -50,7 +94,8 @@ function parseServiceBinding(json: string): {
   scope?: string;
 } | null {
   try {
-    let parsed = JSON.parse(json);
+    const cleanedJson = extractVcapServicesJson(json.trim());
+    let parsed = JSON.parse(cleanedJson);
 
     // Unwrap outer VCAP_SERVICES wrapper if present
     if (parsed.VCAP_SERVICES && typeof parsed.VCAP_SERVICES === 'object') {
