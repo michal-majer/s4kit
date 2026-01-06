@@ -5,6 +5,7 @@
 import ky, { type KyInstance, type Options as KyOptions, type HTTPError } from 'ky';
 import type {
   S4KitConfig,
+  InstanceEnvironment,
   RequestInterceptor,
   ResponseInterceptor,
   ErrorInterceptor,
@@ -34,7 +35,7 @@ function generateUUID(): string {
 // ============================================================================
 
 export interface RequestOptions {
-  connection?: string;
+  connection?: InstanceEnvironment;
   service?: string;
   raw?: boolean;
   headers?: Record<string, string>;
@@ -200,10 +201,10 @@ export class HttpClient {
 
   private buildHeaders(options?: RequestOptions): Record<string, string> {
     const headers: Record<string, string> = {};
-    const conn = options?.connection || this.config.connection;
+    const instance = options?.connection || this.config.connection;
     const svc = options?.service || this.config.service;
 
-    if (conn) headers['X-S4Kit-Connection'] = conn;
+    if (instance) headers['X-S4Kit-Instance'] = instance;
     if (svc) headers['X-S4Kit-Service'] = svc;
     if (options?.raw) headers['X-S4Kit-Raw'] = 'true';
 

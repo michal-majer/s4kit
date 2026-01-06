@@ -67,8 +67,8 @@ export interface QueryOptions<T = any> {
   /** Full-text search query */
   search?: string;
 
-  /** Override connection for this request */
-  connection?: string;
+  /** Override instance environment for this request */
+  connection?: InstanceEnvironment;
 
   /** Override service for this request */
   service?: string;
