@@ -572,18 +572,23 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
                     )}
                   </Button>
                   {showImportSection && (
-                    <div className="space-y-2 rounded-md border p-3">
+                    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Paste your VCAP_SERVICES JSON (from Cloud Foundry) or service binding JSON.
+                        You can paste both VCAP_SERVICES and VCAP_APPLICATION together.
+                      </p>
                       <Textarea
-                        placeholder="Paste VCAP_SERVICES or service binding JSON..."
+                        placeholder='{"VCAP_SERVICES": {"xsuaa": [...]}}'
                         value={bindingJson}
                         onChange={(e) => setBindingJson(e.target.value)}
-                        className="min-h-[100px] font-mono text-xs"
+                        className="min-h-[80px] max-h-[150px] font-mono text-xs resize-none"
                       />
                       <Button
                         type="button"
                         size="sm"
                         onClick={handleParseBinding}
                         disabled={!bindingJson.trim()}
+                        className="w-full"
                       >
                         Parse & Fill Fields
                       </Button>
