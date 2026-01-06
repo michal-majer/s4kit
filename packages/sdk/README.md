@@ -641,6 +641,36 @@ const raw = await client.Products.list({
 });
 ```
 
+### Instance Selection
+
+When your API key has access to multiple instances (e.g., sandbox, dev, production) for the same service, the platform automatically selects the **highest-level instance** by default:
+
+**Priority order:** `production` > `preprod` > `quality` > `dev` > `sandbox`
+
+To explicitly target a specific instance, use custom headers:
+
+```typescript
+const client = S4Kit({
+  apiKey: 'sk_live_...',
+  headers: {
+    'X-S4Kit-Instance': 'sandbox'  // Force sandbox instance
+  }
+});
+
+// Or per-request:
+await client.Products.list({
+  headers: {
+    'X-S4Kit-Instance': 'dev'
+  }
+});
+```
+
+Available headers:
+| Header | Description |
+|--------|-------------|
+| `X-S4Kit-Instance` | Target instance environment (`sandbox`, `dev`, `quality`, `preprod`, `production`) |
+| `X-S4Kit-Service` | Override service alias (optional, auto-resolved from entity name) |
+
 ### Search
 
 ```typescript

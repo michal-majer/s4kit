@@ -5,6 +5,15 @@ import type { Instance, SystemService, InstanceService, EntityPermissions } from
 // Cache TTL in seconds
 const ACCESS_CACHE_TTL = 30; // 30 seconds
 
+// Environment priority (highest level first)
+const ENVIRONMENT_PRIORITY: Record<string, number> = {
+  production: 5,
+  preprod: 4,
+  quality: 3,
+  dev: 2,
+  sandbox: 1
+};
+
 export interface ResolvedAccess {
   instance: Instance;
   systemService: SystemService;
@@ -248,6 +257,14 @@ export const accessResolver = {
       if (first) {
         result = first;
       }
+    } else if (instAccess.length > 1) {
+      // Multiple instances available - pick the highest level one
+      const sorted = [...instAccess].sort((a, b) => {
+        const priorityA = ENVIRONMENT_PRIORITY[a.instance.environment] ?? 0;
+        const priorityB = ENVIRONMENT_PRIORITY[b.instance.environment] ?? 0;
+        return priorityB - priorityA; // Descending order (highest first)
+      });
+      result = sorted[0] ?? null;
     }
 
     // Cache the result

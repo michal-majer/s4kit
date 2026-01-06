@@ -78,3 +78,27 @@ bun run dev
 ```
 
 Open http://localhost:3000
+
+## Proxy Service
+
+The proxy service runs on port 3002 and handles SDK requests. See `packages/platform/proxy/` for details.
+
+### Proxy Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token with API key (`Bearer sk_live_...`) |
+| `X-S4Kit-Service` | No | Service alias (auto-resolved from entity name) |
+| `X-S4Kit-Instance` | No | Target instance environment |
+| `X-S4Kit-Raw` | No | Return raw OData response if `true` |
+
+### Instance Selection
+
+When an API key has access to multiple instances for the same service and no `X-S4Kit-Instance` header is provided, the proxy automatically selects the **highest-level instance**:
+
+**Priority order:** `production` > `preprod` > `quality` > `dev` > `sandbox`
+
+To target a specific instance, include the header:
+```
+X-S4Kit-Instance: sandbox
+```
