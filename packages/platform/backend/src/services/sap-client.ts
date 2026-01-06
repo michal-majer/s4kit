@@ -168,6 +168,8 @@ export const sapClient = {
         if (csrfToken) {
           headers['X-CSRF-Token'] = csrfToken;
         }
+      } else if (authType === 'oauth2' && authHeader) {
+        headers['Authorization'] = authHeader;
       }
       
       // Build OData-compatible query string (don't encode $ in parameter names)
