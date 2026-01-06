@@ -577,7 +577,7 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
                         placeholder="Paste VCAP_SERVICES or service binding JSON here..."
                         value={bindingJson}
                         onChange={(e) => setBindingJson(e.target.value)}
-                        className="h-20 font-mono text-xs resize-none overflow-auto"
+                        className="h-20 font-mono text-xs resize-none overflow-y-auto overflow-x-hidden break-all whitespace-pre-wrap"
                       />
                       <div className="flex items-center gap-2">
                         <Button
