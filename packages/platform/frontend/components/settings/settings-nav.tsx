@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Building2, Shield, User, ChevronRight, type LucideIcon } from 'lucide-react';
+import { Building2, Shield, User, ChevronRight, KeyRound, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 
 interface NavItem {
@@ -21,6 +21,12 @@ const settingsNavItems: NavItem[] = [
     description: 'Manage your organization settings',
     icon: Building2,
     ownerOnly: true,
+  },
+  {
+    href: '/settings/authentication',
+    label: 'SAP Authentication',
+    description: 'Manage SAP connection credentials',
+    icon: KeyRound,
   },
   {
     href: '/settings/security',

@@ -7,8 +7,8 @@ import { requirePermission, type SessionVariables } from '../../middleware/sessi
 
 const app = new Hono<{ Variables: SessionVariables }>();
 
-// Zod schema for creating/updating auth configurations
-const authConfigSchema = z.object({
+// Base Zod schema for auth configuration fields (no refinement)
+const authConfigBaseSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(500).optional().nullable(),
   authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).default('basic'),
@@ -35,7 +35,10 @@ const authConfigSchema = z.object({
   // Raw config/credentials (for advanced use cases)
   authConfig: z.any().optional(),
   credentials: z.any().optional(),
-}).refine((data) => {
+});
+
+// Schema for creating auth configurations (requires credentials)
+const authConfigSchema = authConfigBaseSchema.refine((data) => {
   if (data.authType === 'none') return true;
   if (data.authType === 'basic') return !!(data.username && data.password);
   if (data.authType === 'api_key') return !!data.apiKey;
@@ -46,6 +49,9 @@ const authConfigSchema = z.object({
   message: 'Required authentication fields are missing for the selected auth type',
   path: ['authType']
 });
+
+// Schema for updating auth configurations (credentials are optional - preserves existing if not provided)
+const authConfigUpdateSchema = authConfigBaseSchema.partial();
 
 // Helper to build auth config and credentials from form data
 function buildAuthData(data: z.infer<typeof authConfigSchema>) {
@@ -121,6 +127,106 @@ function buildAuthData(data: z.infer<typeof authConfigSchema>) {
   }
 
   return result;
+}
+
+/**
+ * Build update data that preserves existing secrets when not provided
+ */
+function buildAuthDataForUpdate(
+  data: z.infer<typeof authConfigUpdateSchema>,
+  existing: typeof authConfigurations.$inferSelect
+) {
+  const updateFields: any = {
+    updatedAt: new Date(),
+  };
+
+  // Update non-secret fields if provided
+  if (data.name !== undefined) updateFields.name = data.name;
+  if (data.description !== undefined) updateFields.description = data.description;
+  if (data.authType !== undefined) updateFields.authType = data.authType;
+
+  const authType = data.authType ?? existing.authType;
+
+  // Handle auth type-specific updates
+  if (authType === 'none') {
+    // Clear all auth data for 'none' type
+    updateFields.username = null;
+    updateFields.password = null;
+    updateFields.authConfig = null;
+    updateFields.credentials = null;
+  } else if (authType === 'basic') {
+    // Only update username if provided
+    if (data.username) {
+      updateFields.username = encryption.encrypt(data.username);
+    }
+    // Only update password if provided
+    if (data.password) {
+      updateFields.password = encryption.encrypt(data.password);
+    }
+    // Clear other auth types' data when changing to basic
+    if (data.authType && data.authType !== existing.authType) {
+      updateFields.authConfig = null;
+      updateFields.credentials = null;
+    }
+  } else if (authType === 'oauth2') {
+    // Build authConfig with updates, preserving existing values
+    const existingAuthConfig = (existing.authConfig as any) || {};
+    updateFields.authConfig = {
+      tokenUrl: data.oauth2TokenUrl ?? existingAuthConfig.tokenUrl,
+      scope: data.oauth2Scope !== undefined ? data.oauth2Scope : existingAuthConfig.scope,
+      authorizationUrl: data.oauth2AuthorizationUrl ?? existingAuthConfig.authorizationUrl,
+      clientId: data.oauth2ClientId ?? existingAuthConfig.clientId,
+    };
+    // Only update clientSecret if provided
+    if (data.oauth2ClientSecret) {
+      updateFields.credentials = {
+        clientSecret: encryption.encrypt(data.oauth2ClientSecret),
+      };
+    }
+    // Clear basic auth data when changing to oauth2
+    if (data.authType && data.authType !== existing.authType) {
+      updateFields.username = null;
+      updateFields.password = null;
+    }
+  } else if (authType === 'api_key') {
+    // Build authConfig
+    const existingAuthConfig = (existing.authConfig as any) || {};
+    updateFields.authConfig = {
+      headerName: data.apiKeyHeaderName ?? existingAuthConfig.headerName ?? 'X-API-Key',
+    };
+    // Only update apiKey if provided
+    if (data.apiKey) {
+      updateFields.credentials = {
+        apiKey: encryption.encrypt(data.apiKey),
+      };
+    }
+    // Clear other auth data when changing to api_key
+    if (data.authType && data.authType !== existing.authType) {
+      updateFields.username = null;
+      updateFields.password = null;
+    }
+  } else if (authType === 'custom') {
+    // Build authConfig
+    const existingAuthConfig = (existing.authConfig as any) || {};
+    if (data.customHeaderName || existingAuthConfig.headerName) {
+      updateFields.authConfig = {
+        headerName: data.customHeaderName ?? existingAuthConfig.headerName,
+      };
+    }
+    // Only update headerValue if provided
+    if (data.customHeaderValue) {
+      updateFields.credentials = {
+        headerValue: encryption.encrypt(data.customHeaderValue),
+      };
+    }
+    // Clear other auth data when changing to custom
+    if (data.authType && data.authType !== existing.authType) {
+      updateFields.username = null;
+      updateFields.password = null;
+    }
+  }
+
+  return updateFields;
 }
 
 // Safe representation (without secrets)
@@ -213,29 +319,19 @@ app.patch('/:id', requirePermission('system:update'), async (c) => {
     return c.json({ error: 'Auth configuration not found' }, 404);
   }
 
-  const updateSchema = authConfigSchema.partial();
-  const result = updateSchema.safeParse(body);
+  // Use the update schema (no required credentials validation)
+  const result = authConfigUpdateSchema.safeParse(body);
 
   if (!result.success) {
     return c.json({ error: result.error }, 400);
   }
 
-  // Merge with existing data for auth type validation
-  const merged = {
-    name: result.data.name ?? existing.name,
-    description: result.data.description ?? existing.description,
-    authType: result.data.authType ?? existing.authType,
-    ...result.data,
-  };
-
-  const authData = buildAuthData(merged as z.infer<typeof authConfigSchema>);
+  // Build update data preserving existing secrets when not provided
+  const updateFields = buildAuthDataForUpdate(result.data, existing);
 
   try {
     const [updated] = await db.update(authConfigurations)
-      .set({
-        ...authData,
-        updatedAt: new Date(),
-      })
+      .set(updateFields)
       .where(eq(authConfigurations.id, id))
       .returning();
 

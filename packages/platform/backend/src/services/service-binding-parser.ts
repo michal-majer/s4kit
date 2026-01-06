@@ -85,11 +85,25 @@ interface ServiceBinding {
 }
 
 /**
+ * Unwrap outer VCAP_SERVICES wrapper if present
+ * Handles format: { "VCAP_SERVICES": { "xsuaa": [...] } }
+ */
+function unwrapVcapServices(parsed: any): any {
+  if (parsed && typeof parsed === 'object' && parsed.VCAP_SERVICES && typeof parsed.VCAP_SERVICES === 'object') {
+    return parsed.VCAP_SERVICES;
+  }
+  return parsed;
+}
+
+/**
  * Detect the format of the provided JSON
  */
 export function detectBindingFormat(json: string): BindingFormat {
   try {
-    const parsed = JSON.parse(json);
+    let parsed = JSON.parse(json);
+
+    // Unwrap outer VCAP_SERVICES wrapper if present
+    parsed = unwrapVcapServices(parsed);
 
     // Check if it's VCAP_SERVICES format (has service type keys like 'xsuaa', 'destination')
     if (parsed.xsuaa || parsed.destination || parsed.connectivity) {
@@ -120,7 +134,8 @@ export function detectBindingFormat(json: string): BindingFormat {
  */
 export function parseVcapServices(json: string, preferredService?: string): ParsedBinding | null {
   try {
-    const parsed = JSON.parse(json) as VcapServices;
+    // Unwrap outer VCAP_SERVICES wrapper if present
+    const parsed = unwrapVcapServices(JSON.parse(json)) as VcapServices;
 
     // Try XSUAA first (most common for CAP applications)
     if ((!preferredService || preferredService === 'xsuaa') && parsed.xsuaa && parsed.xsuaa.length > 0) {
