@@ -21,6 +21,7 @@ import { authConfigurations, eq } from '@s4kit/shared/db';
 import { apiKeyService } from '../services/api-key.ts';
 import { accessResolver } from '../services/access-resolver.ts';
 import { sapClient, type ResolvedAuthConfig } from '../services/sap-client.ts';
+import { oauthTokenService, type OAuthTokenConfig } from '../services/oauth.ts';
 import { rateLimitMiddleware } from '../middleware/rate-limit.ts';
 import { loggingMiddleware } from '../middleware/logging.ts';
 import { encryption } from '@s4kit/shared/services';
@@ -245,8 +246,34 @@ async function buildAuthHeaders(
     return { headers };
   }
 
-  // OAuth2 would require more complex token handling
-  // For now, basic auth covers most SAP scenarios
+  if (auth.type === 'oauth2') {
+    const authConfig = auth.config as any;
+    const credentials = auth.credentials as any;
+
+    if (!authConfig?.tokenUrl || !authConfig?.clientId) {
+      console.warn('OAuth2 tokenUrl and clientId are required');
+      return { headers };
+    }
+    if (!credentials?.clientSecret) {
+      console.warn('OAuth2 clientSecret is required');
+      return { headers };
+    }
+
+    const oauthConfig: OAuthTokenConfig = {
+      tokenUrl: authConfig.tokenUrl,
+      clientId: authConfig.clientId,
+      clientSecret: encryption.decrypt(credentials.clientSecret),
+      scope: authConfig.scope,
+      grantType: authConfig.grantType || 'client_credentials',
+    };
+
+    // Use baseUrl + clientId for cache key
+    const cacheKey = `oauth:${baseUrl}:${authConfig.clientId}`;
+    const accessToken = await oauthTokenService.getToken(oauthConfig, cacheKey);
+    headers['Authorization'] = `Bearer ${accessToken}`;
+
+    return { headers };
+  }
 
   return { headers };
 }
