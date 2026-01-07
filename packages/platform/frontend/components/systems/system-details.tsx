@@ -403,20 +403,19 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                             <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
+                              variant="outline"
+                              size="sm"
                               onClick={() => setEditingInstance(instance)}
-                              title="Edit instance"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Settings className="h-4 w-4 mr-2" />
+                              Settings
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
                               onClick={() => setDeletingInstance(instance)}
                               title="Delete instance"
                             >
