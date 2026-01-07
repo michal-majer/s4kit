@@ -242,7 +242,7 @@ export function InstanceServiceDetails({
       </div>
 
       {/* Status Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className={`border-l-4 ${
           instanceService.verificationStatus === 'verified' ? 'border-l-green-500' :
           instanceService.verificationStatus === 'failed' ? 'border-l-red-500' :
@@ -381,7 +381,7 @@ export function InstanceServiceDetails({
               <Separator />
 
               {/* Breakdown */}
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">

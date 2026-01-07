@@ -335,11 +335,11 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
                 </Button>
               </div>
               <div className="group relative overflow-hidden rounded-lg border bg-slate-950 p-4">
-                <div className="flex items-start gap-3 overflow-x-auto">
+                <div className="flex items-start gap-3">
                   <Badge className="shrink-0 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20">
                     GET
                   </Badge>
-                  <code className="whitespace-nowrap font-mono text-sm text-slate-300">
+                  <code className="break-all font-mono text-sm text-slate-300">
                     {previewUrl}
                   </code>
                 </div>

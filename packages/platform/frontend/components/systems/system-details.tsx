@@ -348,7 +348,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                         key={instance.environment}
                         value={instance.environment}
                         unstyled
-                        className={`relative flex flex-col items-center gap-0.5 px-12 py-3 rounded-t-lg cursor-pointer transition-all ${
+                        className={`relative flex flex-col items-center gap-0.5 px-4 sm:px-8 md:px-12 py-2 sm:py-3 rounded-t-lg cursor-pointer transition-all ${
                           isActive
                             ? `${envBgColors[instance.environment]} border border-b-0 ${envBorderAllColors[instance.environment]} -mb-px`
                             : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
@@ -460,7 +460,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                   placeholder="Search..."
                                   value={serviceSearch}
                                   onChange={(e) => setServiceSearch(e.target.value)}
-                                  className="h-8 w-[180px] pl-8 text-sm"
+                                  className="h-8 w-full sm:w-[180px] pl-8 text-sm"
                                 />
                               </div>
                             )}
