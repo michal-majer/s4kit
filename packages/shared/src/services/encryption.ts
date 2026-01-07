@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { getSecret } from './cf-env-parser.ts';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // GCM standard
@@ -14,10 +15,14 @@ const AUTH_TAG_LENGTH = 16;
  *
  * Rejects raw strings to prevent weak keys from padding/truncation.
  *
+ * Key is loaded from (in order):
+ * 1. ENCRYPTION_KEY environment variable
+ * 2. VCAP_SERVICES user-provided service (Cloud Foundry)
+ *
  * @throws Error if key format is invalid or key length is incorrect
  */
 function getEncryptionKey(): Buffer {
-  const keyString = process.env.ENCRYPTION_KEY;
+  const keyString = getSecret('ENCRYPTION_KEY');
 
   if (!keyString) {
     throw new Error(
