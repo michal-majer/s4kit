@@ -1,11 +1,11 @@
-# Cloud Foundry Manifest for S4Kit Proxy Service
+# Cloud Foundry Manifest for S4Kit Backend (Admin API)
 # Deploy with: cf push -f manifest.yml from monorepo root
 ---
 applications:
-  - name: s4kit-proxy
+  - name: s4kit-backend
     path: ../../../
     memory: 512M
-    instances: 2
+    instances: 1
     disk_quota: 1G
 
     # Bun buildpack for Cloud Foundry
@@ -13,28 +13,24 @@ applications:
       - https://github.com/michal-majer/cloudfoundry-buildpack-bun.git
 
     # Start command (run from monorepo root)
-    command: cd packages/platform/proxy && bun run start
+    command: cd packages/platform/backend && bun run start
 
     # Health check
     health-check-type: http
-    health-check-http-endpoint: /health/live
+    health-check-http-endpoint: /health
 
     # Environment variables (PORT is set by CF automatically)
     env:
       NODE_ENV: production
+      MODE: selfhost
+      FRONTEND_URL: https://s4kit-frontend.cfapps.us10-001.hana.ondemand.com
 
     # Routes (us10-001 region)
     routes:
-      - route: s4kit-proxy.cfapps.us10-001.hana.ondemand.com
+      - route: s4kit-backend.cfapps.us10-001.hana.ondemand.com
 
     # Services (bind to user-provided services)
     services:
       - s4kit-postgres
       - s4kit-redis
       - s4kit-secrets
-
-# Notes:
-# 1. Create PostgreSQL service: cf create-service postgresql standard s4kit-postgres
-# 2. Create Redis service: cf create-service redis standard s4kit-redis
-# 3. Set encryption key: cf set-env s4kit-proxy ENCRYPTION_KEY <your-key>
-# 4. Push: cf push -f manifest.yml

@@ -1,0 +1,64 @@
+_schema-version: "3.1"
+ID: s4kit-external-db
+extends: s4kit
+
+# ============================================================================
+# S4Kit External Database Extension
+# ============================================================================
+# Use this extension when deploying with external PostgreSQL and Redis
+# databases that are hosted outside of SAP BTP.
+#
+# Usage:
+#   1. Create user-provided services with your external database credentials:
+#
+#      cf create-user-provided-service s4kit-postgres -p '{
+#        "uri": "postgres://user:pass@external-host:5432/s4kit?sslmode=require"
+#      }'
+#
+#      cf create-user-provided-service s4kit-redis -p '{
+#        "uri": "redis://:password@external-redis:6379"
+#      }'
+#
+#   2. Create the secrets service:
+#
+#      cf create-user-provided-service s4kit-secrets -p '{
+#        "ENCRYPTION_KEY": "your-64-char-hex-key",
+#        "BETTER_AUTH_SECRET": "your-base64-secret",
+#        "ADMIN_EMAIL": "admin@example.com",
+#        "ADMIN_PASSWORD": "secure-password",
+#        "ADMIN_NAME": "Admin",
+#        "ORGANIZATION_NAME": "My Company"
+#      }'
+#
+#   3. Deploy with this extension:
+#
+#      cf deploy mta_archives/s4kit_1.0.0.mtar -e s4kit-external-db.mtaext
+#
+# ============================================================================
+
+resources:
+  # ================================================================
+  # EXTERNAL POSTGRESQL (User-Provided Service)
+  # ================================================================
+  - name: s4kit-postgres
+    type: org.cloudfoundry.user-provided-service
+    parameters:
+      # Service should be created manually before deployment:
+      # cf create-user-provided-service s4kit-postgres -p '{"uri":"postgres://..."}'
+      config:
+        uri: "${EXTERNAL_POSTGRES_URI}"
+    properties:
+      uri: ~{credentials/uri}
+
+  # ================================================================
+  # EXTERNAL REDIS (User-Provided Service)
+  # ================================================================
+  - name: s4kit-redis
+    type: org.cloudfoundry.user-provided-service
+    parameters:
+      # Service should be created manually before deployment:
+      # cf create-user-provided-service s4kit-redis -p '{"uri":"redis://..."}'
+      config:
+        uri: "${EXTERNAL_REDIS_URI}"
+    properties:
+      uri: ~{credentials/uri}

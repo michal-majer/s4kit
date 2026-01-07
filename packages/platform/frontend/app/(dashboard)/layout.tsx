@@ -147,7 +147,7 @@ export default async function DashboardLayout({
     >
       <div className="flex h-screen bg-muted/30">
         <Sidebar user={session.user} />
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto pt-14 md:pt-0">{children}</main>
       </div>
     </AuthProvider>
   );

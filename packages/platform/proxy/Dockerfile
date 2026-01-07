@@ -37,14 +37,15 @@ WORKDIR /app/packages/platform/proxy
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=3002
+# Default to CF standard port 8080, can be overridden
+ENV PORT=8080
 
-# Expose port
-EXPOSE 3002
+# Expose port (CF uses 8080)
+EXPOSE 8080
 
-# Health check - use /health/live for liveness probe
+# Health check using PORT variable for CF compatibility
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3002/health/live || exit 1
+  CMD curl -f http://localhost:${PORT}/health/live || exit 1
 
 # Start the application
 CMD ["bun", "run", "src/index.ts"]

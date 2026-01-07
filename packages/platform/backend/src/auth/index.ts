@@ -9,12 +9,48 @@ import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
 
-// Auto-detect backend URL from Railway or explicit config
+// Auto-detect backend URL from CF, Railway, or explicit config
 const getBackendUrl = () => {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+
+  // Cloud Foundry
+  if (process.env.VCAP_APPLICATION) {
+    try {
+      const vcap = JSON.parse(process.env.VCAP_APPLICATION);
+      if (vcap.application_uris?.[0]) {
+        return `https://${vcap.application_uris[0]}`;
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Railway
   if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
   if (process.env.RAILWAY_STATIC_URL) return process.env.RAILWAY_STATIC_URL;
+
   return 'http://localhost:3000';
+};
+
+// Auto-detect cookie domain for cross-subdomain cookies
+const getCookieDomain = (): string | undefined => {
+  if (process.env.COOKIE_DOMAIN) return process.env.COOKIE_DOMAIN;
+
+  // Cloud Foundry: extract parent domain from app URI
+  // e.g., "s4kit-backend.cfapps.us10-001.hana.ondemand.com" -> ".cfapps.us10-001.hana.ondemand.com"
+  if (process.env.VCAP_APPLICATION) {
+    try {
+      const vcap = JSON.parse(process.env.VCAP_APPLICATION);
+      const uri = vcap.application_uris?.[0];
+      if (uri) {
+        const parts = uri.split('.');
+        if (parts.length > 2) {
+          // Remove app name, keep parent domain with leading dot
+          return '.' + parts.slice(1).join('.');
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  return undefined;
 };
 
 export const auth = betterAuth({
@@ -35,11 +71,11 @@ export const auth = betterAuth({
 
   advanced: {
     defaultCookieAttributes: {
-      // With custom domain: use secure 'lax' + cross-subdomain cookies
-      // Without custom domain (staging on railway.app): use 'none' for cross-site cookies
-      sameSite: process.env.COOKIE_DOMAIN ? 'lax' : 'none',
+      // With cookie domain (CF or explicit): use secure 'lax' + cross-subdomain cookies
+      // Without cookie domain (local dev): use 'none' for cross-site cookies
+      sameSite: getCookieDomain() ? 'lax' : 'none',
       secure: true,
-      ...(process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
+      ...(getCookieDomain() && { domain: getCookieDomain() }),
     },
   },
 

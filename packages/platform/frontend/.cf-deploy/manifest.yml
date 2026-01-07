@@ -1,0 +1,21 @@
+---
+applications:
+  - name: s4kit-frontend
+    memory: 256M
+    instances: 1
+    disk_quota: 1G
+
+    buildpacks:
+      - nodejs_buildpack
+
+    command: node server.js
+
+    health-check-type: http
+    health-check-http-endpoint: /
+
+    env:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+
+    routes:
+      - route: s4kit-frontend.cfapps.us10-001.hana.ondemand.com

@@ -1,0 +1,182 @@
+_schema-version: "3.1"
+ID: s4kit
+version: 1.0.0
+description: S4Kit Platform - SAP S/4HANA Integration SDK
+
+parameters:
+  # CF default domain - auto-resolved
+  default-domain: ${default-domain}
+  # Docker registry for container images (set via --var or .mtaext)
+  docker-registry: ~{docker-registry}
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - echo "Building S4Kit MTA for SAP BTP Cloud Foundry"
+
+modules:
+  # ================================================================
+  # BACKEND SERVICE (Admin API)
+  # ================================================================
+  - name: s4kit-backend
+    type: application
+    path: packages/platform/backend
+    parameters:
+      docker:
+        image: ${docker-registry}/s4kit-backend:${VERSION:-latest}
+      memory: 512M
+      disk-quota: 1G
+      instances: 1
+      health-check-type: http
+      health-check-http-endpoint: /health
+      command: null  # Use Dockerfile CMD
+    properties:
+      PORT: 8080
+      NODE_ENV: production
+      FRONTEND_URL: https://s4kit-frontend.${default-domain}
+      MODE: selfhost
+    requires:
+      - name: s4kit-postgres
+        group: destinations
+        properties:
+          DATABASE_URL: ~{uri}
+      - name: s4kit-redis
+        group: destinations
+        properties:
+          REDIS_URL: ~{uri}
+      - name: s4kit-secrets
+    provides:
+      - name: s4kit-backend-api
+        properties:
+          url: https://s4kit-backend.${default-domain}
+    routes:
+      - route: s4kit-backend.${default-domain}
+
+  # ================================================================
+  # PROXY SERVICE (SDK Proxy)
+  # ================================================================
+  - name: s4kit-proxy
+    type: application
+    path: packages/platform/proxy
+    parameters:
+      docker:
+        image: ${docker-registry}/s4kit-proxy:${VERSION:-latest}
+      memory: 512M
+      disk-quota: 1G
+      instances: 2
+      health-check-type: http
+      health-check-http-endpoint: /health/live
+      command: null  # Use Dockerfile CMD
+    properties:
+      PORT: 8080
+      NODE_ENV: production
+    requires:
+      - name: s4kit-postgres
+        group: destinations
+        properties:
+          DATABASE_URL: ~{uri}
+      - name: s4kit-redis
+        group: destinations
+        properties:
+          REDIS_URL: ~{uri}
+      - name: s4kit-secrets
+    routes:
+      - route: s4kit-proxy.${default-domain}
+
+  # ================================================================
+  # FRONTEND SERVICE (Next.js Dashboard)
+  # ================================================================
+  - name: s4kit-frontend
+    type: application
+    path: packages/platform/frontend
+    parameters:
+      docker:
+        image: ${docker-registry}/s4kit-frontend:${VERSION:-latest}
+      memory: 256M
+      disk-quota: 512M
+      instances: 1
+      health-check-type: http
+      health-check-http-endpoint: /
+      command: null  # Use Dockerfile CMD
+    properties:
+      PORT: 8080
+      NODE_ENV: production
+    requires:
+      - name: s4kit-backend-api
+        properties:
+          NEXT_PUBLIC_API_URL: ~{url}
+    routes:
+      - route: s4kit-frontend.${default-domain}
+
+  # ================================================================
+  # DATABASE DEPLOYER (One-time migration task)
+  # ================================================================
+  - name: s4kit-db-deployer
+    type: application
+    path: packages/platform/backend
+    parameters:
+      docker:
+        image: ${docker-registry}/s4kit-backend:${VERSION:-latest}
+      memory: 256M
+      disk-quota: 256M
+      instances: 1
+      no-route: true
+      health-check-type: process
+      # Run migrations and seed, then exit
+      command: bun run db:migrate && bun run db:seed
+    requires:
+      - name: s4kit-postgres
+        group: destinations
+        properties:
+          DATABASE_URL: ~{uri}
+      - name: s4kit-secrets
+    properties:
+      NODE_ENV: production
+    # Ensure database service exists before deploying
+    deployed-after:
+      - s4kit-postgres
+
+resources:
+  # ================================================================
+  # POSTGRESQL DATABASE (BTP Hyperscaler Option)
+  # ================================================================
+  - name: s4kit-postgres
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: postgresql-db
+      service-plan: standard
+      config:
+        engine_version: "16"
+    properties:
+      uri: ~{credentials/uri}
+
+  # ================================================================
+  # REDIS CACHE (BTP Hyperscaler Option)
+  # ================================================================
+  - name: s4kit-redis
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: redis-cache
+      service-plan: standard
+    properties:
+      uri: ~{credentials/uri}
+
+  # ================================================================
+  # SECRETS (User-Provided Service)
+  # Create before deployment with:
+  # cf create-user-provided-service s4kit-secrets -p '{"ENCRYPTION_KEY":"...","BETTER_AUTH_SECRET":"..."}'
+  # ================================================================
+  - name: s4kit-secrets
+    type: org.cloudfoundry.user-provided-service
+    parameters:
+      config:
+        # IMPORTANT: These are placeholders - create the service manually:
+        # openssl rand -hex 32  # For ENCRYPTION_KEY
+        # openssl rand -base64 32  # For BETTER_AUTH_SECRET
+        ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+        BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+        ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@example.com}"
+        ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+        ADMIN_NAME: "${ADMIN_NAME:-Admin}"
+        ORGANIZATION_NAME: "${ORGANIZATION_NAME:-My Company}"

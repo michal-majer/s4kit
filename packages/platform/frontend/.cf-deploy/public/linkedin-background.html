@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S4Kit LinkedIn Background</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #e5e5e5;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    .container {
+      width: 1584px;
+      height: 396px;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, #f8f7fc 0%, #f0eef8 30%, #ede8f5 50%, #e8f0f3 70%, #e8f4f3 100%);
+    }
+
+    /* Subtle grid pattern */
+    .grid-pattern {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59, 45, 128, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59, 45, 128, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Soft gradient orbs */
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(100px);
+    }
+
+    .orb-teal {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(20, 184, 166, 0.25) 0%, transparent 70%);
+      top: -300px;
+      right: -100px;
+    }
+
+    .orb-purple {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(59, 45, 128, 0.2) 0%, transparent 70%);
+      bottom: -250px;
+      left: -100px;
+    }
+
+    .orb-purple-2 {
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+      top: -150px;
+      left: 300px;
+    }
+
+    /* Main content - shifted right to avoid avatar overlay on left */
+    .content {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 60px;
+      padding: 0 80px 0 420px;
+    }
+
+    .left-section {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      flex: 1;
+    }
+
+    /* Logo and brand */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #3b2d80 0%, #4c3a99 100%);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px rgba(59, 45, 128, 0.25);
+    }
+
+    .logo-text {
+      font-size: 22px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-name {
+      font-size: 42px;
+      font-weight: 700;
+      color: #1a1a2e;
+      letter-spacing: -1px;
+    }
+
+    .brand-name span {
+      background: linear-gradient(135deg, #14b8a6 0%, #3b2d80 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Headline */
+    .headline {
+      font-size: 48px;
+      font-weight: 700;
+      color: #1a1a2e;
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+    }
+
+    .headline .gradient {
+      background: linear-gradient(135deg, #14b8a6 0%, #3b2d80 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Tagline */
+    .tagline {
+      font-size: 18px;
+      color: #64748b;
+      font-weight: 500;
+      letter-spacing: -0.2px;
+    }
+
+    /* Domain badge */
+    .domain {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(59, 45, 128, 0.08);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #3b2d80;
+      width: fit-content;
+    }
+
+    .domain::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #14b8a6;
+      border-radius: 50%;
+    }
+
+    /* Deploy options */
+    .deploy-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: -8px;
+    }
+
+    .deploy-label {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    .deploy-options {
+      display: flex;
+      gap: 8px;
+    }
+
+    .deploy-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(59, 45, 128, 0.1);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Code snippet on right */
+    .code-section {
+      background: #1a1a2e;
+      border-radius: 16px;
+      padding: 28px 32px;
+      box-shadow:
+        0 4px 40px rgba(26, 26, 46, 0.15),
+        0 0 0 1px rgba(59, 45, 128, 0.1);
+      min-width: 420px;
+    }
+
+    .code-header {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .code-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .code-dot.red { background: #ff5f57; }
+    .code-dot.yellow { background: #febc2e; }
+    .code-dot.green { background: #28c840; }
+
+    .code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .code-line {
+      white-space: nowrap;
+    }
+
+    .code .keyword { color: #c792ea; }
+    .code .variable { color: #82aaff; }
+    .code .property { color: #f78c6c; }
+    .code .method { color: #82aaff; }
+    .code .string { color: #c3e88d; }
+    .code .comment { color: #546e7a; }
+    .code .type { color: #ffcb6b; }
+    .code .bracket { color: #89ddff; }
+    .code .text { color: #a6accd; }
+
+    /* Decorative elements */
+    .decoration {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      border: 1px solid rgba(59, 45, 128, 0.08);
+      border-radius: 50%;
+      right: 80px;
+      bottom: -100px;
+    }
+
+    .decoration-2 {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border: 1px solid rgba(20, 184, 166, 0.1);
+      border-radius: 50%;
+      left: 60px;
+      top: -60px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Background elements -->
+    <div class="grid-pattern"></div>
+    <div class="orb orb-teal"></div>
+    <div class="orb orb-purple"></div>
+    <div class="orb orb-purple-2"></div>
+    <div class="decoration"></div>
+    <div class="decoration-2"></div>
+
+    <!-- Main content -->
+    <div class="content">
+      <div class="left-section">
+        <div class="brand">
+          <div class="logo">
+            <span class="logo-text">S4</span>
+          </div>
+          <div class="brand-name">S<span>4</span>Kit</div>
+        </div>
+        <div class="headline">
+          S/4HANA integration<br><span class="gradient">finally simple</span>
+        </div>
+        <div class="tagline">Type-safe SDK + Platform for every developer</div>
+        <div class="deploy-section">
+          <span class="deploy-label">Self-host anywhere:</span>
+          <div class="deploy-options">
+            <span class="deploy-tag">On-Premise</span>
+            <span class="deploy-tag">Any Cloud</span>
+            <span class="deploy-tag">SAP BTP</span>
+          </div>
+        </div>
+        <div class="domain">s4kit.com</div>
+      </div>
+
+      <div class="code-section">
+        <div class="code-header">
+          <div class="code-dot red"></div>
+          <div class="code-dot yellow"></div>
+          <div class="code-dot green"></div>
+        </div>
+        <div class="code">
+          <div class="code-line"><span class="keyword">import</span> <span class="bracket">{</span> <span class="type">S4Kit</span> <span class="bracket">}</span> <span class="keyword">from</span> <span class="string">'@s4kit/sdk'</span></div>
+          <div class="code-line"></div>
+          <div class="code-line"><span class="keyword">const</span> <span class="variable">client</span> <span class="text">=</span> <span class="keyword">new</span> <span class="type">S4Kit</span><span class="bracket">({</span> <span class="property">apiKey</span><span class="text">:</span> <span class="string">'sk_live_...'</span> <span class="bracket">})</span></div>
+          <div class="code-line"><span class="keyword">const</span> <span class="variable">orders</span> <span class="text">=</span> <span class="keyword">await</span> <span class="variable">client</span><span class="text">.</span><span class="property">sap</span><span class="text">.</span><span class="type">SalesOrder</span><span class="text">.</span><span class="method">list</span><span class="bracket">()</span></div>
+          <div class="code-line"></div>
+          <div class="code-line"><span class="comment">// → [{ SalesOrder: '5001', Customer: 'ACME Corp', ... }]</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+---
+applications:
+  - name: s4kit-frontend
+    path: ../../../
+    memory: 512M
+    instances: 1
+    disk_quota: 1G
+
+    # Bun buildpack for Cloud Foundry
+    buildpacks:
+      - https://github.com/michal-majer/cloudfoundry-buildpack-bun.git
+
+    # Build and start commands
+    command: cd packages/platform/frontend && NEXT_PUBLIC_API_URL=https://s4kit-backend.cfapps.us10-001.hana.ondemand.com bun run build && bun run start
+
+    health-check-type: http
+    health-check-http-endpoint: /
+    health-check-invocation-timeout: 120
+
+    env:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: https://s4kit-backend.cfapps.us10-001.hana.ondemand.com
+
+    routes:
+      - route: s4kit-frontend.cfapps.us10-001.hana.ondemand.com

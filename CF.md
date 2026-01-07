@@ -72,12 +72,9 @@ cf push -f packages/platform/backend/manifest.yml
 
 ### Backend Environment Variables
 
-Set after deployment:
+Set after deployment (optional):
 
 ```bash
-# Required for cross-subdomain cookies (adjust domain for your CF region)
-cf set-env s4kit-backend COOKIE_DOMAIN ".cfapps.us10-001.hana.ondemand.com"
-
 # Optional: Change mode (default: selfhost)
 # - selfhost: Single tenant, no signup
 # - saas: Multi-tenant with signup
@@ -86,6 +83,8 @@ cf set-env s4kit-backend MODE saas
 # Restart to apply
 cf restart s4kit-backend
 ```
+
+> **Note:** `COOKIE_DOMAIN` and `BETTER_AUTH_URL` are auto-detected from `VCAP_APPLICATION` on Cloud Foundry. No manual configuration needed.
 
 ## Step 3: Deploy Proxy
 
@@ -192,7 +191,7 @@ cf env s4kit-backend | grep -A5 s4kit-redis
 ```
 
 ### Cookies not working (login redirects to home)
-Ensure `COOKIE_DOMAIN` is set to the shared parent domain with leading dot:
+`COOKIE_DOMAIN` is auto-detected from `VCAP_APPLICATION`. If issues persist, set manually:
 ```bash
 cf set-env s4kit-backend COOKIE_DOMAIN ".cfapps.us10-001.hana.ondemand.com"
 cf restart s4kit-backend
@@ -221,10 +220,8 @@ cf create-user-provided-service s4kit-secrets -p "{
   \"BETTER_AUTH_SECRET\": \"$(openssl rand -base64 32)\"
 }" || true
 
-# 2. Deploy backend
+# 2. Deploy backend (COOKIE_DOMAIN auto-detected from VCAP_APPLICATION)
 cf push -f packages/platform/backend/manifest.yml
-cf set-env s4kit-backend COOKIE_DOMAIN ".${DOMAIN}"
-cf restart s4kit-backend
 
 # 3. Deploy proxy
 cf push -f packages/platform/proxy/manifest.yml

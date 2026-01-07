@@ -14,6 +14,7 @@ import {
   User,
   ChevronRight,
   Cloud,
+  Menu,
   type LucideIcon,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -27,6 +28,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { signOut } from '@/lib/auth-client';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/providers/auth-provider';
@@ -63,25 +66,17 @@ interface SidebarProps {
   user: SidebarUser;
 }
 
-export function Sidebar({ user }: SidebarProps) {
+interface SidebarContentProps {
+  user: SidebarUser;
+  mounted: boolean;
+  platformInfo: PlatformInfo | null;
+  organizationName: string;
+  onNavClick?: () => void;
+}
+
+function SidebarContent({ user, mounted, platformInfo, organizationName, onNavClick }: SidebarContentProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-  const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const { organizationName } = useAuth();
-
-  useEffect(() => {
-    // Fetch platform info
-    api.platform.getInfo()
-      .then((info) => {
-        setPlatformInfo(info);
-        setMounted(true);
-      })
-      .catch(() => {
-        // Silently fail - standalone is the default
-        setMounted(true);
-      });
-  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -109,7 +104,7 @@ export function Sidebar({ user }: SidebarProps) {
   };
 
   return (
-    <aside className="flex h-full w-[240px] flex-col border-r border-sidebar-border/50 bg-sidebar">
+    <div className="flex h-full w-full flex-col bg-sidebar">
       {/* Logo Section */}
       <div className="flex h-[56px] items-center gap-3 border-b border-sidebar-border/50 px-4">
         <div className="relative flex h-9 w-9 items-center justify-center">
@@ -172,6 +167,7 @@ export function Sidebar({ user }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavClick}
                 className={cn(
                   'group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-300',
                   active
@@ -226,6 +222,7 @@ export function Sidebar({ user }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavClick}
                 className={cn(
                   'group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-300',
                   active
@@ -296,7 +293,7 @@ export function Sidebar({ user }: SidebarProps) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild className="rounded-lg">
-                <Link href="/settings/profile" className="cursor-pointer">
+                <Link href="/settings/profile" onClick={onNavClick} className="cursor-pointer">
                   <User className="mr-2 h-4 w-4" />
                   Profile Settings
                 </Link>
@@ -326,6 +323,72 @@ export function Sidebar({ user }: SidebarProps) {
           </div>
         )}
       </div>
-    </aside>
+    </div>
+  );
+}
+
+export function Sidebar({ user }: SidebarProps) {
+  const [mounted, setMounted] = useState(false);
+  const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { organizationName } = useAuth();
+
+  useEffect(() => {
+    // Fetch platform info
+    api.platform.getInfo()
+      .then((info) => {
+        setPlatformInfo(info);
+        setMounted(true);
+      })
+      .catch(() => {
+        // Silently fail - standalone is the default
+        setMounted(true);
+      });
+  }, []);
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex h-full w-[240px] flex-shrink-0 flex-col border-r border-sidebar-border/50">
+        <SidebarContent
+          user={user}
+          mounted={mounted}
+          platformInfo={platformInfo}
+          organizationName={organizationName}
+        />
+      </aside>
+
+      {/* Mobile Header */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex h-14 items-center gap-3 border-b border-sidebar-border/50 bg-sidebar px-4 md:hidden">
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Toggle menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-[280px] p-0">
+            <SidebarContent
+              user={user}
+              mounted={mounted}
+              platformInfo={platformInfo}
+              organizationName={organizationName}
+              onNavClick={() => setMobileOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+        <div className="flex items-center gap-2">
+          <Image
+            src="/logo.svg"
+            alt="S4Kit"
+            width={28}
+            height={28}
+            className="rounded-lg"
+            priority
+          />
+          <span className="text-lg font-bold tracking-tight">S4Kit</span>
+        </div>
+      </div>
+    </>
   );
 }

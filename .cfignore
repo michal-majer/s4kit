@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+.github
+
+# Dependencies (will be installed by buildpack)
+node_modules
+
+# Build artifacts
+dist
+.next
+.turbo
+
+# Development files
+*.log
+*.md
+!README.md
+.env*
+.vscode
+.idea
+
+# Test files
+*.test.ts
+*.spec.ts
+test
+tests
+e2e
+coverage
+
+# Documentation
+docs
+
+# Docker (not needed for CF)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Frontend (deploy separately)
+packages/platform/frontend
+
+# SDK (not needed for platform deployment)
+packages/sdk
+
+# Other
+*.mtar
+mta_archives
