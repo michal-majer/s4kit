@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import {
   LayoutDashboard,
   Server,
@@ -15,6 +16,9 @@ import {
   ChevronRight,
   Cloud,
   Menu,
+  Sun,
+  Moon,
+  Monitor,
   type LucideIcon,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -27,6 +31,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -77,6 +84,7 @@ interface SidebarContentProps {
 function SidebarContent({ user, mounted, platformInfo, organizationName, onNavClick }: SidebarContentProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
 
   const handleSignOut = async () => {
     try {
@@ -298,6 +306,44 @@ function SidebarContent({ user, mounted, platformInfo, organizationName, onNavCl
                   Profile Settings
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="rounded-lg">
+                  {theme === 'dark' ? (
+                    <Moon className="mr-2 h-4 w-4" />
+                  ) : theme === 'light' ? (
+                    <Sun className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Monitor className="mr-2 h-4 w-4" />
+                  )}
+                  Theme
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="rounded-xl">
+                  <DropdownMenuItem
+                    onClick={() => setTheme('light')}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    <Sun className="mr-2 h-4 w-4" />
+                    Light
+                    {theme === 'light' && <span className="ml-auto text-xs">✓</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setTheme('dark')}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    <Moon className="mr-2 h-4 w-4" />
+                    Dark
+                    {theme === 'dark' && <span className="ml-auto text-xs">✓</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setTheme('system')}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    <Monitor className="mr-2 h-4 w-4" />
+                    System
+                    {theme === 'system' && <span className="ml-auto text-xs">✓</span>}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleSignOut}
