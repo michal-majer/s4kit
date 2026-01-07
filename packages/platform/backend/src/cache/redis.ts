@@ -1,6 +1,13 @@
 import Redis from 'ioredis';
+import { getRedisUrl } from '@s4kit/shared/services';
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+let redisUrl: string;
+try {
+  redisUrl = getRedisUrl();
+} catch {
+  // Fall back to localhost for local development
+  redisUrl = 'redis://localhost:6379';
+}
 
 export const redis = new Redis(redisUrl, {
   lazyConnect: true,
