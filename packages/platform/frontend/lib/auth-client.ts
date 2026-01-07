@@ -1,12 +1,12 @@
 import { createAuthClient } from 'better-auth/react';
-import { organizationClient } from 'better-auth/client/plugins';
+import { organizationClient, genericOAuthClient } from 'better-auth/client/plugins';
 
 // Direct backend URL - cross-site cookies handled via sameSite: 'none' on backend
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export const authClient = createAuthClient({
   baseURL: API_URL,
-  plugins: [organizationClient()],
+  plugins: [organizationClient(), genericOAuthClient()],
 });
 
 export const {

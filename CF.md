@@ -235,3 +235,35 @@ echo "Frontend: https://s4kit-frontend.${DOMAIN}"
 echo "Backend:  https://s4kit-backend.${DOMAIN}"
 echo "Proxy:    https://s4kit-proxy.${DOMAIN}"
 ```
+
+## SAP BTP Authentication (XSUAA)
+
+S4Kit includes XSUAA for SAP IDP authentication. Users can log in using "Continue with SAP" button.
+
+### Setup
+
+XSUAA is automatically created and bound during deployment. The service is configured via `xs-security.json`.
+
+For manual `cf push` deployment, create the service first:
+```bash
+cf create-service xsuaa application s4kit-xsuaa -c xs-security.json
+```
+
+### Role Assignment
+
+XSUAA provides three role templates defined in `xs-security.json`:
+
+| Role Template | S4Kit Role | Description |
+|---------------|------------|-------------|
+| `S4KitOwner` | owner | Full access to organization |
+| `S4KitAdmin` | admin | Manage systems and API keys |
+| `S4KitDeveloper` | developer | Read-only dashboard access |
+
+Assign roles to users in SAP BTP Cockpit under **Security > Role Collections**.
+
+### How It Works
+
+1. User clicks "Continue with SAP" on login page
+2. Redirected to SAP IDP for authentication
+3. After successful auth, user is created in S4Kit with their own organization
+4. Admin can adjust user roles via the S4Kit dashboard

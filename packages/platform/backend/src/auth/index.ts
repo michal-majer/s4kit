@@ -1,11 +1,13 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { organization } from 'better-auth/plugins/organization';
+import { genericOAuth, type GenericOAuthConfig } from 'better-auth/plugins';
 import { db, organizations } from '../db';
 import * as authSchema from '../db/auth-schema';
 import { config } from '../config/mode';
 import { eq, and } from 'drizzle-orm';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email';
+import { getXsuaaOAuthConfig, mapXsuaaScopesToRole } from './xsuaa-provider';
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
 
@@ -52,6 +54,35 @@ const getCookieDomain = (): string | undefined => {
 
   return undefined;
 };
+
+// Build XSUAA genericOAuth configuration if available
+const buildXsuaaOAuthConfig = (): GenericOAuthConfig | null => {
+  const xsuaaConfig = getXsuaaOAuthConfig();
+  if (!xsuaaConfig) return null;
+
+  return {
+    providerId: 'xsuaa',
+    clientId: xsuaaConfig.clientId,
+    clientSecret: xsuaaConfig.clientSecret,
+    authorizationUrl: xsuaaConfig.authorizationUrl,
+    tokenUrl: xsuaaConfig.tokenUrl,
+    userInfoUrl: xsuaaConfig.userinfoUrl,
+    scopes: ['openid'],
+    pkce: false,
+    // Map XSUAA user info to better-auth user format
+    mapProfileToUser: (profile: Record<string, unknown>) => {
+      return {
+        email: (profile.email as string) || (profile.user_name as string),
+        name: (profile.given_name as string)
+          ? `${profile.given_name} ${profile.family_name || ''}`.trim()
+          : (profile.user_name as string),
+        emailVerified: true, // XSUAA users are pre-verified
+      };
+    },
+  };
+};
+
+const xsuaaOAuthConfig = buildXsuaaOAuthConfig();
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -139,6 +170,10 @@ export const auth = betterAuth({
     organization({
       allowUserToCreateOrganization: config.features.multiOrg,
     }),
+    // Add XSUAA OAuth provider if available (SAP BTP)
+    ...(xsuaaOAuthConfig
+      ? [genericOAuth({ config: [xsuaaOAuthConfig] })]
+      : []),
   ],
 
   session: {
@@ -153,7 +188,7 @@ export const auth = betterAuth({
   account: {
     accountLinking: {
       enabled: true,
-      trustedProviders: ['google', 'github'],
+      trustedProviders: ['google', 'github', 'xsuaa'],
     },
   },
 

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { config } from '../../config/mode'
+import { isXsuaaAvailable } from '../../auth/xsuaa-provider'
 
 type Platform = 'sap-btp' | 'cloud-foundry' | 'standalone'
 type DeploymentMode = 'selfhost' | 'saas'
@@ -12,6 +13,8 @@ interface PlatformInfo {
     socialLogin: boolean
     billing: boolean
     multiOrg: boolean
+    xsuaaEnabled: boolean
+    xsuaaOnly: boolean  // When true, hide email/password and show only SAP login
   }
   space?: string
   organization?: string
@@ -30,14 +33,23 @@ interface VcapApplication {
 function detectPlatform(): PlatformInfo {
   const vcapAppRaw = process.env.VCAP_APPLICATION
 
+  const xsuaaEnabled = isXsuaaAvailable()
+  const isCloudFoundry = !!process.env.VCAP_APPLICATION
+
+  // CF + XSUAA + selfhost = SAP login only (enterprise SSO mode)
+  const xsuaaOnly = xsuaaEnabled && isCloudFoundry && config.mode === 'selfhost'
+
   // Base info with mode and features
   const baseInfo = {
     mode: config.mode,
     features: {
-      signup: config.features.signup,
-      socialLogin: config.features.socialLogin,
+      // When xsuaaOnly, disable signup and social login (Google/GitHub)
+      signup: xsuaaOnly ? false : config.features.signup,
+      socialLogin: xsuaaOnly ? false : config.features.socialLogin,
       billing: config.features.billing,
       multiOrg: config.features.multiOrg,
+      xsuaaEnabled,
+      xsuaaOnly,
     },
   }
 

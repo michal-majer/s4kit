@@ -1,0 +1,42 @@
+{
+  "xsappname": "s4kit",
+  "tenant-mode": "dedicated",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.owner",
+      "description": "Owner access - full control over organization"
+    },
+    {
+      "name": "$XSAPPNAME.admin",
+      "description": "Admin access - manage systems and API keys"
+    },
+    {
+      "name": "$XSAPPNAME.developer",
+      "description": "Developer access - read-only dashboard access"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "S4KitOwner",
+      "description": "Full access to S4Kit organization",
+      "scope-references": ["$XSAPPNAME.owner"]
+    },
+    {
+      "name": "S4KitAdmin",
+      "description": "Administrative access to S4Kit",
+      "scope-references": ["$XSAPPNAME.admin"]
+    },
+    {
+      "name": "S4KitDeveloper",
+      "description": "Developer read-only access to S4Kit",
+      "scope-references": ["$XSAPPNAME.developer"]
+    }
+  ],
+  "oauth2-configuration": {
+    "redirect-uris": [
+      "https://*.cfapps.*.hana.ondemand.com/**",
+      "http://localhost:3000/**",
+      "http://localhost:3001/**"
+    ]
+  }
+}

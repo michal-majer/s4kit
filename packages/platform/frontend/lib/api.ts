@@ -742,6 +742,8 @@ export const api = {
           socialLogin: boolean;
           billing: boolean;
           multiOrg: boolean;
+          xsuaaEnabled: boolean;
+          xsuaaOnly: boolean;
         };
       }>;
     },

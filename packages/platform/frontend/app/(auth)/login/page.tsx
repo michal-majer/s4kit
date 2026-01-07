@@ -16,6 +16,8 @@ type PlatformFeatures = {
   socialLogin: boolean;
   billing: boolean;
   multiOrg: boolean;
+  xsuaaEnabled: boolean;
+  xsuaaOnly: boolean;
 };
 
 function LoginContent() {
@@ -25,6 +27,7 @@ function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [features, setFeatures] = useState<PlatformFeatures | null>(null);
+  const [featuresLoading, setFeaturesLoading] = useState(true);
   const [showResendOption, setShowResendOption] = useState(false);
   const [resending, setResending] = useState(false);
 
@@ -36,8 +39,9 @@ function LoginContent() {
       .then((info) => setFeatures(info.features))
       .catch(() => {
         // Default to selfhost if can't fetch
-        setFeatures({ signup: false, socialLogin: false, billing: false, multiOrg: false });
-      });
+        setFeatures({ signup: false, socialLogin: false, billing: false, multiOrg: false, xsuaaEnabled: false, xsuaaOnly: false });
+      })
+      .finally(() => setFeaturesLoading(false));
   }, []);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -118,6 +122,31 @@ function LoginContent() {
     }
   };
 
+  const handleXsuaaLogin = async () => {
+    try {
+      await signIn.oauth2({
+        providerId: 'xsuaa',
+        callbackURL: redirectUrl || window.location.origin,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to sign in with SAP';
+      toast.error(message);
+    }
+  };
+
+  // Show loading skeleton while fetching platform features
+  if (featuresLoading) {
+    return (
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <div className="h-9 w-48 bg-muted animate-pulse rounded" />
+          <div className="h-5 w-64 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="h-12 w-full bg-muted animate-pulse rounded" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Email Verification Pending Banner */}
@@ -179,6 +208,39 @@ function LoginContent() {
         </p>
       </div>
 
+      {/* SAP BTP Login - only show if XSUAA is enabled */}
+      {features?.xsuaaEnabled && (
+        <>
+          <Button
+            type="button"
+            onClick={handleXsuaaLogin}
+            disabled={loading}
+            className="w-full h-12 bg-[#0070f2] hover:bg-[#0058c4] text-white font-medium shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span>Sign in with</span>
+              <div className="bg-white/20 rounded px-1.5 py-0.5">
+                <span className="text-xs font-bold tracking-wide">SAP</span>
+              </div>
+            </div>
+          </Button>
+
+          {/* Divider - only show if there are other login options */}
+          {!features?.xsuaaOnly && (
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-3 text-muted-foreground font-medium">
+                Or
+              </span>
+            </div>
+          </div>
+          )}
+        </>
+      )}
+
       {/* Social Login Buttons - only show if enabled */}
       {features?.socialLogin && (
         <>
@@ -226,7 +288,8 @@ function LoginContent() {
         </>
       )}
 
-      {/* Email Login Form */}
+      {/* Email Login Form - hide when xsuaaOnly */}
+      {!features?.xsuaaOnly && (
       <form onSubmit={handleEmailLogin} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="email" className="text-sm font-medium">
@@ -277,6 +340,7 @@ function LoginContent() {
           )}
         </Button>
       </form>
+      )}
 
       {/* Footer - only show signup link if enabled */}
       {features?.signup && (

@@ -46,6 +46,7 @@ modules:
         properties:
           REDIS_URL: ~{uri}
       - name: s4kit-secrets
+      - name: s4kit-xsuaa
     provides:
       - name: s4kit-backend-api
         properties:
@@ -180,3 +181,14 @@ resources:
         ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
         ADMIN_NAME: "${ADMIN_NAME:-Admin}"
         ORGANIZATION_NAME: "${ORGANIZATION_NAME:-My Company}"
+
+  # ================================================================
+  # XSUAA (SAP BTP Authentication)
+  # Enables "Login with SAP" button for SAP IDP authentication
+  # ================================================================
+  - name: s4kit-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json

@@ -22,7 +22,7 @@ applications:
     # Environment variables (PORT is set by CF automatically)
     env:
       NODE_ENV: production
-      MODE: selfhost
+      MODE: saas
       FRONTEND_URL: https://s4kit-frontend.cfapps.us10-001.hana.ondemand.com
 
     # Routes (us10-001 region)
@@ -30,7 +30,9 @@ applications:
       - route: s4kit-backend.cfapps.us10-001.hana.ondemand.com
 
     # Services (bind to user-provided services)
+    # s4kit-xsuaa is optional - enables SAP IDP login when bound
     services:
       - s4kit-postgres
       - s4kit-redis
       - s4kit-secrets
+      - s4kit-xsuaa
