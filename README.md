@@ -274,15 +274,35 @@ See the [complete demo](./packages/sdk/examples/demo.ts) for a full walkthrough.
 
 ---
 
-## Self-Hosting (Work in progress)
+## Self-Hosting
 
-Deploy S4Kit on your own infrastructure:
+Run S4Kit on your own infrastructure:
+
+**Prerequisites**: Docker, Bun 1.3.4+
 
 ```bash
+# Clone and install
 git clone https://github.com/michal-majer/s4kit.git
 cd s4kit
-docker-compose -f docker/docker-compose.prod.yml up -d
+bun install
+
+# Start services
+docker compose up -d postgres redis
+cd packages/platform/backend
+bun x drizzle-kit push --force
+bun run db:seed
+bun run db:setup-admin
+
+# Run production build
+cd ../..
+bun run build
+# Start services (3 terminals or use process manager)
+cd packages/platform/backend && bun run start
+cd packages/platform/frontend && bun run start
+cd packages/platform/proxy && bun run start
 ```
+
+**Access**: Frontend at http://localhost:3001
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -290,7 +310,7 @@ docker-compose -f docker/docker-compose.prod.yml up -d
 | Backend | 3000 | Admin API |
 | Proxy | 3002 | SDK proxy |
 
-See [Platform Guide](./packages/platform/README.md) for detailed setup.
+See [DEPLOY.md](./DEPLOY.md) for production deployment guide.
 
 ---
 
