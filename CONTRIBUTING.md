@@ -78,8 +78,4 @@ bun run db:push        # Push schema changes
 
 ## Need Help?
 
-- See [CLAUDE.md](./CLAUDE.md) for detailed architecture and patterns
-- Check existing [issues](https://github.com/michal-majer/s4kit/issues)
-- Backend docs: [packages/platform/backend/CLAUDE.md](./packages/platform/backend/CLAUDE.md)
-- Frontend docs: [packages/platform/frontend/CLAUDE.md](./packages/platform/frontend/CLAUDE.md)
-- SDK docs: [packages/sdk/CLAUDE.md](./packages/sdk/CLAUDE.md)
+Open an [issue on GitHub](https://github.com/michal-majer/s4kit/issues).
