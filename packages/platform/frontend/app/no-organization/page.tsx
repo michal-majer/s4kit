@@ -79,7 +79,7 @@ export default function NoOrganizationPage() {
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Need help?{' '}
-          <Link href="mailto:support@s4kit.com" className="text-primary hover:underline">
+          <Link href="mailto:contact@s4kit.com" className="text-primary hover:underline">
             Contact support
           </Link>
         </p>
