@@ -171,24 +171,51 @@ export function parseODataError(errorResponse: any): ODataError {
 
 /**
  * Strip OData metadata from entity
+ * Recursively cleans navigation properties and removes __deferred placeholders
  */
 export function stripODataMetadata<T extends Record<string, any>>(entity: T): T {
   if (!entity || typeof entity !== 'object') return entity;
+  if (Array.isArray(entity)) {
+    return entity.map(item => stripODataMetadata(item)) as T;
+  }
 
-  const cleaned = { ...entity };
+  const cleaned: Record<string, any> = {};
 
-  // Remove v2 metadata
-  delete (cleaned as any).__metadata;
-  delete (cleaned as any).__deferred;
+  for (const key of Object.keys(entity)) {
+    const value = entity[key];
 
-  // Remove v4 metadata
-  Object.keys(cleaned).forEach(key => {
-    if (key.startsWith('@odata.') || key.startsWith('odata.')) {
-      delete cleaned[key];
+    // Skip v2 metadata properties
+    if (key === '__metadata' || key === '__deferred' || key === '__count' || key === '__next') {
+      continue;
     }
-  });
 
-  return cleaned;
+    // Skip v4 metadata properties
+    if (key.startsWith('@odata.') || key.startsWith('odata.')) {
+      continue;
+    }
+
+    // Handle navigation properties that are __deferred placeholders
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      // Check if this is a deferred navigation property (only has __deferred key)
+      const keys = Object.keys(value);
+      if (keys.length === 1 && keys[0] === '__deferred') {
+        // Skip this property entirely - it's just a placeholder
+        continue;
+      }
+      // Recursively clean nested objects
+      cleaned[key] = stripODataMetadata(value);
+    } else if (Array.isArray(value)) {
+      // Recursively clean arrays (expanded navigation properties)
+      cleaned[key] = value.map(item =>
+        item && typeof item === 'object' ? stripODataMetadata(item) : item
+      );
+    } else {
+      // Keep primitive values
+      cleaned[key] = value;
+    }
+  }
+
+  return cleaned as T;
 }
 
 /**
