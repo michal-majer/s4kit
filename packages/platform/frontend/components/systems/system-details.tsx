@@ -98,7 +98,6 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
   const [activeTab, setActiveTabState] = useState(getInitialTab);
 
   const setActiveTab = useCallback((env: string) => {
-    if (env === activeTab) return;
     // Update local state immediately for instant UI response
     setActiveTabState(env);
     // Sync URL in background (non-blocking)
@@ -106,7 +105,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
     params.delete('instance');
     params.set('env', env);
     window.history.replaceState(null, '', `?${params.toString()}`);
-  }, [searchParams, activeTab]);
+  }, [searchParams]);
 
   const handleInstanceCreated = useCallback(async (newInstance: Instance) => {
     // Add instance to local state immediately
