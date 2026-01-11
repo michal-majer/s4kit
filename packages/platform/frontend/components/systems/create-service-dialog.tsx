@@ -4,10 +4,8 @@ import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -225,7 +223,7 @@ export function CreateServiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] flex flex-col max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Add Service</DialogTitle>
           <DialogDescription>
@@ -233,8 +231,8 @@ export function CreateServiceDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue={existingServices.length > 0 ? 'existing' : 'custom'}>
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue={existingServices.length > 0 ? 'existing' : 'custom'} className="flex flex-col min-h-0 flex-1 w-full min-w-0">
+          <TabsList className="grid w-full grid-cols-2 shrink-0">
             <TabsTrigger value="existing" disabled={existingServices.length === 0} className="cursor-pointer">
               Existing ({existingServices.length})
             </TabsTrigger>
@@ -243,46 +241,45 @@ export function CreateServiceDialog({
 
           {/* Instance selection - shared between tabs */}
           {showMultiSelect && (
-            <div className="grid gap-2 pt-4">
-              <Label>Link to Instances</Label>
-              <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                {sortedInstances.map((inst) => (
-                  <div key={inst.id} className="flex items-center gap-3">
-                    <Checkbox
-                      id={`inst-${inst.id}`}
-                      checked={selectedInstanceIds.includes(inst.id)}
-                      onCheckedChange={(checked) =>
-                        toggleInstance(inst.id, checked === true)
-                      }
-                    />
+            <div className="mt-4 shrink-0 px-3 py-3 bg-muted/30 rounded-lg border border-border/50">
+              <Label className="text-xs font-medium mb-2 block">Link to Instances</Label>
+              <div className="flex flex-wrap gap-2">
+                {sortedInstances.map((inst) => {
+                  const isSelected = selectedInstanceIds.includes(inst.id);
+                  return (
                     <label
-                      htmlFor={`inst-${inst.id}`}
-                      className="flex items-center gap-2 flex-1 cursor-pointer"
+                      key={inst.id}
+                      className={`
+                        flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer
+                        border transition-colors
+                        ${isSelected
+                          ? 'bg-background border-primary/50 shadow-sm'
+                          : 'bg-background/50 border-border/50 hover:border-border hover:bg-background'
+                        }
+                      `}
                     >
-                      <span
-                        className={`w-2 h-2 rounded-full ${envColors[inst.environment]}`}
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => toggleInstance(inst.id, checked === true)}
+                        className="h-4 w-4"
                       />
-                      <span className="text-sm font-medium">
-                        {envLabels[inst.environment]}
-                      </span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {inst.baseUrl}
-                      </span>
+                      <span className={`w-2 h-2 rounded-full ${envColors[inst.environment]} shrink-0`} />
+                      <span className="text-sm font-medium">{envLabels[inst.environment]}</span>
                     </label>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {selectedInstanceIds.length === 0 && (
-                <p className="text-xs text-destructive">
+                <p className="text-xs text-destructive mt-2">
                   Select at least one instance
                 </p>
               )}
             </div>
           )}
 
-          <TabsContent value="existing" className="space-y-4 pt-4">
+          <TabsContent value="existing" className="pt-4 flex flex-col min-h-0 min-w-0">
             {/* Search and filter */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -312,7 +309,7 @@ export function CreateServiceDialog({
             </div>
 
             {/* Service count */}
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <div className="flex items-center justify-between text-sm text-muted-foreground py-2 shrink-0">
               <span>
                 {filteredServices.length === existingServices.length
                   ? `${existingServices.length} APIs available`
@@ -326,12 +323,13 @@ export function CreateServiceDialog({
             </div>
 
             {/* Scrollable service list */}
-            <ScrollArea className="h-[280px] border rounded-lg">
-              <div className="p-2 space-y-1">
+            <div className="h-[280px] border rounded-lg overflow-y-auto">
+              <div className="p-2 space-y-0.5">
                 {filteredServices.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Package className="h-8 w-8 mb-2" />
-                    <p className="text-sm">No APIs match your search</p>
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Package className="h-10 w-10 mb-3 opacity-50" />
+                    <p className="text-sm font-medium">No APIs match your search</p>
+                    <p className="text-xs mt-1">Try adjusting your filters</p>
                   </div>
                 ) : (
                   filteredServices.map((service) => {
@@ -340,10 +338,12 @@ export function CreateServiceDialog({
                     return (
                       <div
                         key={service.id}
-                        className={`flex items-start gap-3 p-3 rounded-md transition-colors ${
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-md transition-all ${
                           isLinked
                             ? 'bg-muted/40 opacity-60'
-                            : 'hover:bg-muted/50'
+                            : isSelected
+                            ? 'bg-primary/10 border border-primary/20'
+                            : 'hover:bg-muted/50 border border-transparent'
                         }`}
                       >
                         <Checkbox
@@ -353,42 +353,36 @@ export function CreateServiceDialog({
                             toggleServiceSelection(service.id, checked === true)
                           }
                           disabled={isLinked}
-                          className="mt-1"
                         />
                         <label
                           htmlFor={`service-${service.id}`}
-                          className={`flex-1 space-y-1 ${isLinked ? '' : 'cursor-pointer'}`}
+                          className={`flex-1 min-w-0 ${isLinked ? '' : 'cursor-pointer'}`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{service.name}</span>
+                            <span className="font-semibold text-sm truncate">{service.name}</span>
                             {service.odataVersion && (
-                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
                                 {service.odataVersion}
                               </Badge>
                             )}
                             {isLinked && (
-                              <Badge variant="secondary" className="text-[10px]">
+                              <Badge variant="secondary" className="text-[10px] shrink-0">
                                 linked
                               </Badge>
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
                             {service.alias}
                           </div>
-                          {service.description && (
-                            <div className="text-xs text-muted-foreground line-clamp-2">
-                              {service.description}
-                            </div>
-                          )}
                         </label>
                       </div>
                     );
                   })
                 )}
               </div>
-            </ScrollArea>
+            </div>
 
-            <DialogFooter>
+            <DialogFooter className="pt-4 shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -404,70 +398,59 @@ export function CreateServiceDialog({
                   targetInstanceIds.length === 0
                 }
               >
-                {loading
-                  ? 'Adding...'
-                  : `Add ${selectedServiceIds.length || ''} Service${selectedServiceIds.length !== 1 ? 's' : ''}${
-                      targetInstanceIds.length > 1
-                        ? ` to ${targetInstanceIds.length} instances`
-                        : ''
-                    }`}
+                {loading ? 'Adding...' : `Add ${selectedServiceIds.length || ''} Service${selectedServiceIds.length !== 1 ? 's' : ''}`}
               </Button>
             </DialogFooter>
           </TabsContent>
 
-          <TabsContent value="custom" className="pt-4">
-            <form onSubmit={handleCreateCustom} className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Service Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="My Custom API"
-                  value={customService.name}
-                  onChange={(e) => setCustomService({ ...customService, name: e.target.value })}
-                  required
-                />
+          <TabsContent value="custom" className="pt-4 flex flex-col min-h-0 min-w-0">
+            <form onSubmit={handleCreateCustom} className="flex flex-col min-h-0 min-w-0 flex-1">
+              <div className="space-y-3 overflow-y-auto min-h-0 flex-1 pr-1">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="name">Service Name *</Label>
+                  <Input
+                    id="name"
+                    placeholder="My Custom API"
+                    value={customService.name}
+                    onChange={(e) => setCustomService({ ...customService, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="alias">Alias *</Label>
+                  <Input
+                    id="alias"
+                    placeholder="my_api"
+                    value={customService.alias}
+                    onChange={(e) => setCustomService({ ...customService, alias: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="servicePath">Service Path *</Label>
+                  <Input
+                    id="servicePath"
+                    placeholder="/sap/opu/odata/sap/MY_API"
+                    value={customService.servicePath}
+                    onChange={(e) => setCustomService({ ...customService, servicePath: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="description">Description (optional)</Label>
+                  <Input
+                    id="description"
+                    placeholder="What does this service do?"
+                    value={customService.description}
+                    onChange={(e) => setCustomService({ ...customService, description: e.target.value })}
+                  />
+                </div>
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="alias">Alias *</Label>
-                <Input
-                  id="alias"
-                  placeholder="my_api"
-                  value={customService.alias}
-                  onChange={(e) => setCustomService({ ...customService, alias: e.target.value })}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Used in SDK to reference this service
-                </p>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="servicePath">Service Path *</Label>
-                <Input
-                  id="servicePath"
-                  placeholder="/sap/opu/odata/sap/MY_API"
-                  value={customService.servicePath}
-                  onChange={(e) => setCustomService({ ...customService, servicePath: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="What does this service do?"
-                  value={customService.description}
-                  onChange={(e) => setCustomService({ ...customService, description: e.target.value })}
-                />
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Entities will be automatically detected after the service is added.
-              </p>
-
-              <DialogFooter>
+              <DialogFooter className="pt-4 shrink-0">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
@@ -475,7 +458,7 @@ export function CreateServiceDialog({
                   type="submit"
                   disabled={loading || !customService.name || !customService.alias || !customService.servicePath || targetInstanceIds.length === 0}
                 >
-                  {loading ? 'Creating...' : `Create Service${targetInstanceIds.length > 1 ? ` for ${targetInstanceIds.length} instances` : ''}`}
+                  {loading ? 'Creating...' : 'Create Service'}
                 </Button>
               </DialogFooter>
             </form>

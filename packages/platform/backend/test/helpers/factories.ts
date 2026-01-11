@@ -16,7 +16,7 @@ const uniqueId = () => `test_${Date.now()}_${++counter}`;
 
 export type SystemType = 's4_public' | 's4_private' | 'btp' | 'other';
 export type InstanceEnvironment = 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production';
-export type AuthType = 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
+export type AuthType = 'none' | 'basic' | 'oauth2' | 'custom';
 
 export interface CreateOrganizationOptions {
   name?: string;

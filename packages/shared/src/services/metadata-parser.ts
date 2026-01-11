@@ -44,6 +44,36 @@ async function fetchOAuthToken(config: {
   return tokenResponse.access_token;
 }
 
+/**
+ * Build a properly normalized URL from baseUrl and servicePath.
+ * Handles the case where baseUrl accidentally includes part of the service path,
+ * preventing duplicate path segments.
+ *
+ * Example:
+ *   baseUrl: "https://sandbox.api.sap.com/s4hanacloud/sap/opu/odata/sap/"
+ *   servicePath: "/sap/opu/odata/sap/API_BUSINESS_PARTNER"
+ *   Result: "https://sandbox.api.sap.com/s4hanacloud/sap/opu/odata/sap/API_BUSINESS_PARTNER"
+ *   (not: ".../sap/opu/odata/sap/sap/opu/odata/sap/API_BUSINESS_PARTNER")
+ */
+export function buildServiceUrl(rawBaseUrl: string, rawServicePath: string, suffix: string = ''): string {
+  let baseUrl = rawBaseUrl.replace(/\/$/, '');
+  const servicePath = rawServicePath.replace(/^\//, '').replace(/\/$/, '');
+
+  // Check if baseUrl ends with a prefix of servicePath (overlap detection)
+  // This handles cases where users include "/sap/opu/odata/sap/" in their base URL
+  const servicePathSegments = servicePath.split('/');
+  for (let i = servicePathSegments.length - 1; i > 0; i--) {
+    const prefix = servicePathSegments.slice(0, i).join('/');
+    if (prefix && (baseUrl.endsWith('/' + prefix) || baseUrl.endsWith(prefix))) {
+      // Remove overlapping prefix from baseUrl
+      baseUrl = baseUrl.slice(0, baseUrl.length - prefix.length).replace(/\/$/, '');
+      break;
+    }
+  }
+
+  return `${baseUrl}/${servicePath}${suffix}`;
+}
+
 export interface ODataEntity {
   name: string;
   entityType?: string;
@@ -306,18 +336,7 @@ async function buildAuthHeaders(
 
   const authType = auth.type || 'basic';
 
-  if (authType === 'api_key') {
-    const credentials = auth.credentials as any;
-    const authConfig = auth.config as any;
-
-    if (credentials?.apiKey) {
-      const apiKey = encryption.decrypt(credentials.apiKey);
-      const headerName = authConfig?.headerName || 'X-API-Key';
-      headers[headerName] = apiKey;
-    } else {
-      throw new Error('API Key not found in auth credentials');
-    }
-  } else if (authType === 'basic') {
+  if (authType === 'basic') {
     const username = auth.username ? encryption.decrypt(auth.username) : '';
     const password = auth.password ? encryption.decrypt(auth.password) : '';
     headers['Authorization'] = `Basic ${btoa(`${username}:${password}`)}`;
@@ -364,9 +383,7 @@ export const metadataParser = {
    */
   fetchMetadata: async (options: FetchMetadataOptions): Promise<ODataMetadataResult> => {
     try {
-      const baseUrl = options.baseUrl.replace(/\/$/, '');
-      const servicePath = options.servicePath.replace(/^\//, '').replace(/\/$/, '');
-      const metadataUrl = `${baseUrl}/${servicePath}/$metadata`;
+      const metadataUrl = buildServiceUrl(options.baseUrl, options.servicePath, '/$metadata');
 
       const headers = await buildAuthHeaders(options.auth, metadataUrl);
 
@@ -414,9 +431,7 @@ export const metadataParser = {
     password?: string;
   }): Promise<ODataMetadataResult> => {
     try {
-      const baseUrl = options.baseUrl.replace(/\/$/, '');
-      const servicePath = options.servicePath.replace(/^\//, '').replace(/\/$/, '');
-      const metadataUrl = `${baseUrl}/${servicePath}/$metadata`;
+      const metadataUrl = buildServiceUrl(options.baseUrl, options.servicePath, '/$metadata');
 
       const headers: Record<string, string> = {
         'Accept': 'application/xml'
@@ -476,9 +491,7 @@ export const metadataParser = {
    */
   fetchFullMetadata: async (options: FetchMetadataOptions): Promise<ODataMetadataFull> => {
     try {
-      const baseUrl = options.baseUrl.replace(/\/$/, '');
-      const servicePath = options.servicePath.replace(/^\//, '').replace(/\/$/, '');
-      const metadataUrl = `${baseUrl}/${servicePath}/$metadata`;
+      const metadataUrl = buildServiceUrl(options.baseUrl, options.servicePath, '/$metadata');
 
       const headers = await buildAuthHeaders(options.auth, metadataUrl);
 

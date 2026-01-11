@@ -50,6 +50,22 @@ export function ServicesTable({ services, systems, instanceServices = [] }: Serv
   const config: ConfigurableTableConfig<SystemService> = {
     columns: [
       {
+        id: 'name',
+        header: 'Name',
+        accessorKey: 'name',
+        cell: (service) => <span className="font-medium">{service.name}</span>,
+      },
+      {
+        id: 'alias',
+        header: 'Alias',
+        accessorKey: 'alias',
+        cell: (service) => (
+          <code className="text-xs bg-muted px-2 py-1 rounded-md font-mono">
+            {service.alias}
+          </code>
+        ),
+      },
+      {
         id: 'system',
         header: 'System',
         accessorFn: (service) => systemMap.get(service.systemId)?.name || '',
@@ -116,22 +132,6 @@ export function ServicesTable({ services, systems, instanceServices = [] }: Serv
             </div>
           );
         },
-      },
-      {
-        id: 'name',
-        header: 'Name',
-        accessorKey: 'name',
-        cell: (service) => <span className="font-medium">{service.name}</span>,
-      },
-      {
-        id: 'alias',
-        header: 'Alias',
-        accessorKey: 'alias',
-        cell: (service) => (
-          <code className="text-xs bg-muted px-2 py-1 rounded-md font-mono">
-            {service.alias}
-          </code>
-        ),
       },
       {
         id: 'servicePath',

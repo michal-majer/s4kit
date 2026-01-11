@@ -23,7 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { api, AuthConfiguration, AuthType } from '@/lib/api';
 import { toast } from 'sonner';
-import { Pencil, Trash2, Plus, ShieldCheck, KeyRound, Globe, Settings2, Key, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, ShieldCheck, KeyRound, Globe, Key, AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { EditAuthConfigDialog } from '@/components/common/edit-auth-config-dialog';
 
@@ -35,16 +35,14 @@ const authTypeLabels: Record<AuthType, string> = {
   none: 'No Auth',
   basic: 'Basic',
   oauth2: 'OAuth 2.0',
-  api_key: 'API Key',
-  custom: 'Custom',
+  custom: 'Custom Header',
 };
 
 const authTypeIcons: Record<AuthType, React.ReactNode> = {
   none: <Globe className="h-3.5 w-3.5" />,
   basic: <KeyRound className="h-3.5 w-3.5" />,
   oauth2: <ShieldCheck className="h-3.5 w-3.5" />,
-  api_key: <Key className="h-3.5 w-3.5" />,
-  custom: <Settings2 className="h-3.5 w-3.5" />,
+  custom: <Key className="h-3.5 w-3.5" />,
 };
 
 export function AuthConfigList({ initialConfigs }: AuthConfigListProps) {

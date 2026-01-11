@@ -11,15 +11,11 @@ const app = new Hono<{ Variables: SessionVariables }>();
 const authConfigBaseSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(500).optional().nullable(),
-  authType: z.enum(['none', 'basic', 'oauth2', 'api_key', 'custom']).default('basic'),
+  authType: z.enum(['none', 'basic', 'oauth2', 'custom']).default('basic'),
 
   // Basic auth fields
   username: z.string().min(1).optional(),
   password: z.string().min(1).optional(),
-
-  // API Key auth fields
-  apiKey: z.string().min(1).optional(),
-  apiKeyHeaderName: z.string().optional(),
 
   // OAuth2 auth fields
   oauth2ClientId: z.string().min(1).optional(),
@@ -28,7 +24,7 @@ const authConfigBaseSchema = z.object({
   oauth2Scope: z.string().optional(),
   oauth2AuthorizationUrl: z.string().url().optional(),
 
-  // Custom auth fields
+  // Custom Header auth fields
   customHeaderName: z.string().min(1).optional(),
   customHeaderValue: z.string().min(1).optional(),
 
@@ -41,7 +37,6 @@ const authConfigBaseSchema = z.object({
 const authConfigSchema = authConfigBaseSchema.refine((data) => {
   if (data.authType === 'none') return true;
   if (data.authType === 'basic') return !!(data.username && data.password);
-  if (data.authType === 'api_key') return !!data.apiKey;
   if (data.authType === 'oauth2') return !!(data.oauth2ClientId && data.oauth2ClientSecret && data.oauth2TokenUrl);
   if (data.authType === 'custom') return !!(data.customHeaderName && data.customHeaderValue) || !!(data.authConfig && data.credentials);
   return true;
@@ -59,8 +54,6 @@ function buildAuthData(data: z.infer<typeof authConfigSchema>) {
     authType,
     username,
     password,
-    apiKey,
-    apiKeyHeaderName,
     oauth2ClientId,
     oauth2ClientSecret,
     oauth2TokenUrl,
@@ -85,13 +78,6 @@ function buildAuthData(data: z.infer<typeof authConfigSchema>) {
   if (authType === 'basic' && username && password) {
     result.username = encryption.encrypt(username);
     result.password = encryption.encrypt(password);
-  } else if (authType === 'api_key' && apiKey) {
-    result.authConfig = {
-      headerName: apiKeyHeaderName || 'X-API-Key',
-    };
-    result.credentials = {
-      apiKey: encryption.encrypt(apiKey),
-    };
   } else if (authType === 'oauth2') {
     result.authConfig = {
       tokenUrl: oauth2TokenUrl,
@@ -184,23 +170,6 @@ function buildAuthDataForUpdate(
       };
     }
     // Clear basic auth data when changing to oauth2
-    if (data.authType && data.authType !== existing.authType) {
-      updateFields.username = null;
-      updateFields.password = null;
-    }
-  } else if (authType === 'api_key') {
-    // Build authConfig
-    const existingAuthConfig = (existing.authConfig as any) || {};
-    updateFields.authConfig = {
-      headerName: data.apiKeyHeaderName ?? existingAuthConfig.headerName ?? 'X-API-Key',
-    };
-    // Only update apiKey if provided
-    if (data.apiKey) {
-      updateFields.credentials = {
-        apiKey: encryption.encrypt(data.apiKey),
-      };
-    }
-    // Clear other auth data when changing to api_key
     if (data.authType && data.authType !== existing.authType) {
       updateFields.username = null;
       updateFields.password = null;

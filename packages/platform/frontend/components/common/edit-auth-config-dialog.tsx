@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { api, AuthConfiguration, AuthType } from '@/lib/api';
 import { toast } from 'sonner';
-import { Upload, ChevronDown, ChevronUp, ShieldCheck, KeyRound, Globe, Settings2, Key } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, ShieldCheck, KeyRound, Globe, Settings2 } from 'lucide-react';
 
 interface EditAuthConfigDialogProps {
   config: AuthConfiguration;
@@ -167,13 +167,11 @@ export function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: 
     oauth2TokenUrl: config.authConfig?.tokenUrl || '',
     oauth2ClientId: config.authConfig?.clientId || '',
     oauth2Scope: config.authConfig?.scope || '',
-    apiKeyHeaderName: config.authConfig?.headerName || 'X-API-Key',
     customHeaderName: config.authConfig?.headerName || '',
     // Secret fields start empty - show placeholder
     username: '',
     password: '',
     oauth2ClientSecret: '',
-    apiKey: '',
     customHeaderValue: '',
   });
 
@@ -187,12 +185,10 @@ export function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: 
         oauth2TokenUrl: config.authConfig?.tokenUrl || '',
         oauth2ClientId: config.authConfig?.clientId || '',
         oauth2Scope: config.authConfig?.scope || '',
-        apiKeyHeaderName: config.authConfig?.headerName || 'X-API-Key',
         customHeaderName: config.authConfig?.headerName || '',
         username: '',
         password: '',
         oauth2ClientSecret: '',
-        apiKey: '',
         customHeaderValue: '',
       });
       setBindingJson('');
@@ -243,9 +239,6 @@ export function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: 
         if (formData.oauth2ClientSecret) {
           data.oauth2ClientSecret = formData.oauth2ClientSecret;
         }
-      } else if (formData.authType === 'api_key') {
-        data.apiKeyHeaderName = formData.apiKeyHeaderName;
-        if (formData.apiKey) data.apiKey = formData.apiKey;
       } else if (formData.authType === 'custom') {
         data.customHeaderName = formData.customHeaderName;
         if (formData.customHeaderValue) data.customHeaderValue = formData.customHeaderValue;
@@ -268,15 +261,15 @@ export function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
+      <DialogContent className="sm:max-w-[500px] flex flex-col overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Edit Auth Configuration</DialogTitle>
             <DialogDescription>
               Update the authentication configuration. Leave password/secret fields empty to keep existing values.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="flex flex-col gap-4 py-4 overflow-y-auto flex-1 -mx-8 px-8">
             <div className="grid gap-2">
               <Label htmlFor="edit-auth-config-name">
                 Name <span className="text-destructive">*</span>
@@ -320,12 +313,6 @@ export function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: 
                     <span className="flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4" />
                       OAuth 2.0
-                    </span>
-                  </SelectItem>
-                  <SelectItem value="api_key">
-                    <span className="flex items-center gap-2">
-                      <Key className="h-4 w-4" />
-                      API Key
                     </span>
                   </SelectItem>
                   <SelectItem value="custom">
@@ -486,39 +473,6 @@ export function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: 
                     value={formData.oauth2Scope}
                     onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
                   />
-                </div>
-              </>
-            )}
-
-            {formData.authType === 'api_key' && (
-              <>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-auth-api-key-header">Header Name</Label>
-                  <Input
-                    id="edit-auth-api-key-header"
-                    placeholder="X-API-Key"
-                    value={formData.apiKeyHeaderName}
-                    onChange={(e) => setFormData({ ...formData, apiKeyHeaderName: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    The HTTP header name for the API key (default: X-API-Key)
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-auth-api-key">API Key</Label>
-                  <Input
-                    id="edit-auth-api-key"
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder={config.hasCredentials && config.authType === 'api_key' ? 'Leave empty to keep existing' : 'Enter API key'}
-                    value={formData.apiKey}
-                    onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  />
-                  {config.hasCredentials && config.authType === 'api_key' && (
-                    <p className="text-xs text-muted-foreground">
-                      Leave empty to keep existing API key
-                    </p>
-                  )}
                 </div>
               </>
             )}

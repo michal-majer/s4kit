@@ -14,19 +14,17 @@ function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const { data: session, isPending: sessionLoading } = useSession();
 
-  const [loading, setLoading] = useState(true);
-  const [accepting, setAccepting] = useState(false);
-  const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const invitationId = searchParams.get('id');
 
+  const [loading, setLoading] = useState(() => !!invitationId);
+  const [accepting, setAccepting] = useState(false);
+  const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    invitationId ? null : 'No invitation ID provided'
+  );
+
   useEffect(() => {
-    if (!invitationId) {
-      setError('No invitation ID provided');
-      setLoading(false);
-      return;
-    }
+    if (!invitationId) return;
 
     api.invitations.get(invitationId)
       .then((inv) => {

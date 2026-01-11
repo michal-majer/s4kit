@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { db, systems, systemServices, predefinedServices, instances, instanceServices, apiKeyAccess, authConfigurations } from '../../db';
 import { metadataParser } from '@s4kit/shared/services';
 import { z } from 'zod';
-import { count, desc, eq, and } from 'drizzle-orm';
+import { count, desc, eq, and, inArray } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
 const app = new Hono<{ Variables: SessionVariables }>();
@@ -42,10 +42,29 @@ const serviceSchema = z.object({
 
 // List system services (optionally by systemId)
 app.get('/', async (c) => {
+  const organizationId = c.get('organizationId')!;
   const systemId = c.req.query('systemId');
 
+  // Get all system IDs belonging to this organization
+  const orgSystems = await db.select({ id: systems.id })
+    .from(systems)
+    .where(eq(systems.organizationId, organizationId));
+
+  const orgSystemIds = orgSystems.map(s => s.id);
+
+  // If no systems exist for this org, return empty array
+  if (orgSystemIds.length === 0) {
+    return c.json([]);
+  }
+
+  // Build where conditions
+  const whereConditions = [inArray(systemServices.systemId, orgSystemIds)];
+  if (systemId) {
+    whereConditions.push(eq(systemServices.systemId, systemId));
+  }
+
   const services = await db.query.systemServices.findMany({
-    where: systemId ? eq(systemServices.systemId, systemId) : undefined,
+    where: and(...whereConditions),
     orderBy: [desc(systemServices.createdAt)]
   });
 

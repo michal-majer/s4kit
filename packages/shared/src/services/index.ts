@@ -30,6 +30,7 @@ export {
 } from './api-key-core.ts';
 export {
   metadataParser,
+  buildServiceUrl,
   type ODataEntity,
   type ODataProperty,
   type ODataNavigationProperty,

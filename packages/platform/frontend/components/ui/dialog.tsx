@@ -63,7 +63,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-6",
-          "rounded-3xl border-0 bg-background p-8 shadow-2xl shadow-black/25",
+          "rounded-3xl border-0 bg-card p-8 shadow-2xl shadow-black/25 overflow-hidden max-h-[90vh]",
           "duration-300 outline-none sm:max-w-lg",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",

@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, XCircle, Clock, HelpCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { getErrorMessage } from '@/lib/error-utils';
 
 interface ServiceVerificationStatusProps {
   status: 'pending' | 'verified' | 'failed' | null | undefined;
@@ -65,7 +66,7 @@ export function ServiceVerificationStatus({
     }
 
     if (status === 'failed' && error) {
-      parts.push(`Error: ${error}`);
+      parts.push(`Error: ${getErrorMessage(error)}`);
     }
 
     if (status === 'pending') {

@@ -122,7 +122,7 @@ export function SystemsTable({ systems }: { systems: SystemWithInstances[] }) {
     ],
     actions: {
       type: 'inline',
-      showOnHover: true,
+      showOnHover: false,
       items: [
         {
           label: 'View',

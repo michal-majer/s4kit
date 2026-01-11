@@ -64,7 +64,7 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
 // Types
 export type SystemType = 's4_public' | 's4_private' | 's4_onprem' | 'btp' | 'other';
 export type InstanceEnvironment = 'sandbox' | 'dev' | 'quality' | 'preprod' | 'production';
-export type AuthType = 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
+export type AuthType = 'none' | 'basic' | 'oauth2' | 'custom';
 
 export interface AuthConfiguration {
   id: string;
@@ -345,6 +345,9 @@ export interface OnboardingData {
   useCase?: 'integration' | 'development' | 'testing' | 'migration' | 'other';
   sapSystemTypes?: ('s4_public' | 's4_private' | 'btp')[];
   referralSource?: 'search' | 'social' | 'recommendation' | 'event' | 'other';
+  // SAP API Hub fields
+  apiHubApiKey?: string;
+  skipApiHubAuth?: boolean;
 }
 
 export interface OnboardingStatus {

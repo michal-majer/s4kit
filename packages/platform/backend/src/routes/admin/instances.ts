@@ -28,7 +28,7 @@ async function verifyAuthConfigOrg(authConfigId: string | null | undefined, orga
 
 // Helper to resolve auth configuration
 export async function resolveAuthConfig(authConfigId: string | null): Promise<{
-  authType: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
+  authType: 'none' | 'basic' | 'oauth2' | 'custom';
   username: string | null;
   password: string | null;
   authConfig: any;
@@ -248,7 +248,24 @@ app.post('/', requirePermission('instance:create'), async (c) => {
     }
   }
 
-  return c.json(newInstance, 201);
+  // Include auth config info if linked
+  let authConfigName: string | null = null;
+  let authType: string | null = null;
+
+  if (newInstance.authConfigId) {
+    const config = await db.query.authConfigurations.findFirst({
+      where: eq(authConfigurations.id, newInstance.authConfigId),
+      columns: { name: true, authType: true },
+    });
+    authConfigName = config?.name ?? null;
+    authType = config?.authType ?? null;
+  }
+
+  return c.json({
+    ...newInstance,
+    authConfigName,
+    authType,
+  }, 201);
 });
 
 // Get single instance (verify belongs to org via system)
@@ -331,7 +348,24 @@ app.patch('/:id', requirePermission('instance:update'), async (c) => {
     return c.json({ error: 'Instance not found' }, 404);
   }
 
-  return c.json(updated);
+  // Include auth config info if linked
+  let authConfigName: string | null = null;
+  let authType: string | null = null;
+
+  if (updated.authConfigId) {
+    const config = await db.query.authConfigurations.findFirst({
+      where: eq(authConfigurations.id, updated.authConfigId),
+      columns: { name: true, authType: true },
+    });
+    authConfigName = config?.name ?? null;
+    authType = config?.authType ?? null;
+  }
+
+  return c.json({
+    ...updated,
+    authConfigName,
+    authType,
+  });
 });
 
 // Import service binding JSON (VCAP_SERVICES or BTP service binding)

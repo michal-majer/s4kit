@@ -1,5 +1,5 @@
 import ky from 'ky';
-import { encryption } from '@s4kit/shared/services';
+import { encryption, buildServiceUrl } from '@s4kit/shared/services';
 import { redis } from '../index.ts';
 import { oauthTokenService, type OAuthTokenConfig } from './oauth.ts';
 import {
@@ -87,18 +87,6 @@ export const sapClient = {
 
     if (authType === 'none') {
       // No authentication
-    } else if (authType === 'api_key') {
-      // API Key authentication
-      const credentials = auth.credentials as any;
-      const authConfig = auth.config as any;
-
-      if (credentials?.apiKey) {
-        const apiKey = encryption.decrypt(credentials.apiKey);
-        const headerName = authConfig?.headerName || 'X-API-Key';
-        apiKeyHeader = { name: headerName, value: apiKey };
-      } else {
-        throw new Error('API Key not found in auth credentials');
-      }
     } else if (authType === 'basic') {
       // Basic authentication
       const username = auth.username ? encryption.decrypt(auth.username) : '';
@@ -151,6 +139,13 @@ export const sapClient = {
       throw new Error(`Authentication type '${authType}' is not supported`);
     }
 
+    // Normalize URL to handle overlapping baseUrl and path segments (before try block so it's accessible in catch)
+    // e.g., baseUrl: ".../sap/opu/odata/sap" + path: "sap/opu/odata/sap/API_BP/..."
+    const normalizedUrl = buildServiceUrl(baseUrl, requestOptions.path);
+    const urlParts = new URL(normalizedUrl);
+    const normalizedBaseUrl = `${urlParts.protocol}//${urlParts.host}`;
+    const normalizedPath = urlParts.pathname.replace(/^\//, '');
+
     // Make request
     try {
       const headers: Record<string, string> = {
@@ -159,9 +154,7 @@ export const sapClient = {
       };
 
       // Add authentication headers based on auth type
-      if (authType === 'api_key' && apiKeyHeader) {
-        headers[apiKeyHeader.name] = apiKeyHeader.value;
-      } else if (authType === 'custom' && apiKeyHeader) {
+      if (authType === 'custom' && apiKeyHeader) {
         headers[apiKeyHeader.name] = apiKeyHeader.value;
       } else if (authType === 'basic' && authHeader) {
         headers['Authorization'] = authHeader;
@@ -174,15 +167,16 @@ export const sapClient = {
 
       // Build OData-compatible query string (don't encode $ in parameter names)
       const queryString = buildODataQueryString(requestOptions.params);
-      const fullPath = queryString
-        ? `${normalizePath(requestOptions.path)}?${queryString}`
-        : normalizePath(requestOptions.path);
 
-      console.log('SAP request URL:', `${baseUrl}/${fullPath}`);
+      const fullPath = queryString
+        ? `${normalizedPath}?${queryString}`
+        : normalizedPath;
+
+      console.log('SAP request URL:', `${normalizedBaseUrl}/${fullPath}`);
 
       const sapStart = Date.now();
       const response = await ky(fullPath, {
-        prefixUrl: baseUrl,
+        prefixUrl: normalizedBaseUrl,
         method: requestOptions.method,
         headers,
         json: requestOptions.body,
@@ -240,15 +234,15 @@ export const sapClient = {
           }
         }
 
-        // Build OData-compatible query string (don't encode $ in parameter names)
+        // Reuse the normalized URL parts from earlier in this function
         const retryQueryString = buildODataQueryString(requestOptions.params);
         const retryFullPath = retryQueryString
-          ? `${normalizePath(requestOptions.path)}?${retryQueryString}`
-          : normalizePath(requestOptions.path);
+          ? `${normalizedPath}?${retryQueryString}`
+          : normalizedPath;
 
         const retrySapStart = Date.now();
         const response = await ky(retryFullPath, {
-          prefixUrl: baseUrl,
+          prefixUrl: normalizedBaseUrl,
           method: requestOptions.method,
           headers: retryHeaders,
           json: requestOptions.body
@@ -318,14 +312,15 @@ export const sapClient = {
           'Authorization': `Bearer ${newAccessToken}`,
         };
 
-        const retryQueryString = buildODataQueryString(requestOptions.params);
-        const retryFullPath = retryQueryString
-          ? `${normalizePath(requestOptions.path)}?${retryQueryString}`
-          : normalizePath(requestOptions.path);
+        // Reuse the normalized URL parts from earlier in this function
+        const oauthRetryQueryString = buildODataQueryString(requestOptions.params);
+        const oauthRetryFullPath = oauthRetryQueryString
+          ? `${normalizedPath}?${oauthRetryQueryString}`
+          : normalizedPath;
 
         const retrySapStart = Date.now();
-        const response = await ky(retryFullPath, {
-          prefixUrl: baseUrl,
+        const response = await ky(oauthRetryFullPath, {
+          prefixUrl: normalizedBaseUrl,
           method: requestOptions.method,
           headers: retryHeaders,
           json: requestOptions.body

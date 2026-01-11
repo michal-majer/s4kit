@@ -87,18 +87,6 @@ export const sapClient = {
 
     if (!auth || authType === 'none') {
       // No authentication
-    } else if (authType === 'api_key') {
-      // API Key authentication
-      const credentials = auth.credentials as any;
-      const authConfig = auth.config as any;
-      
-      if (credentials?.apiKey) {
-        const apiKey = encryption.decrypt(credentials.apiKey);
-        const headerName = authConfig?.headerName || 'X-API-Key';
-        apiKeyHeader = { name: headerName, value: apiKey };
-      } else {
-        throw new Error('API Key not found in auth credentials');
-      }
     } else if (authType === 'basic') {
       // Basic authentication
       const username = auth.username ? encryption.decrypt(auth.username) : '';
@@ -159,9 +147,7 @@ export const sapClient = {
       };
       
       // Add authentication headers based on auth type
-      if (authType === 'api_key' && apiKeyHeader) {
-        headers[apiKeyHeader.name] = apiKeyHeader.value;
-      } else if (authType === 'custom' && apiKeyHeader) {
+      if (authType === 'custom' && apiKeyHeader) {
         headers[apiKeyHeader.name] = apiKeyHeader.value;
       } else if (authType === 'basic' && authHeader) {
         headers['Authorization'] = authHeader;

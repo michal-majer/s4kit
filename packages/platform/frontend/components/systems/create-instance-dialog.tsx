@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 
 interface CreateInstanceDialogProps {
   systemId: string;
+  systemName: string;
   existingEnvironments: InstanceEnvironment[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,6 +42,7 @@ const environments: { value: InstanceEnvironment; label: string }[] = [
 
 export function CreateInstanceDialog({
   systemId,
+  systemName,
   existingEnvironments,
   open,
   onOpenChange,
@@ -56,6 +58,11 @@ export function CreateInstanceDialog({
   const availableEnvironments = environments.filter(
     (env) => !existingEnvironments.includes(env.value)
   );
+
+  // Get the label for the selected environment
+  const selectedEnvironmentLabel = environments.find(
+    (env) => env.value === formData.environment
+  )?.label;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +144,10 @@ export function CreateInstanceDialog({
               value={formData.authConfigId}
               onChange={(authConfigId) => setFormData({ ...formData, authConfigId })}
               description="Select or create an authentication configuration for this instance"
+              suggestedNameContext={{
+                systemName,
+                instanceName: selectedEnvironmentLabel,
+              }}
             />
           </div>
           <DialogFooter>

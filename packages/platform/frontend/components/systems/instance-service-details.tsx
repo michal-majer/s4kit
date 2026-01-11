@@ -35,8 +35,9 @@ import {
   Play,
 } from 'lucide-react';
 import Link from 'next/link';
-import { InstanceServiceConfigDialog } from './instance-service-config-dialog';
+import { EditServiceDialog } from './edit-service-dialog';
 import { ApiTestTab } from './api-test-tab';
+import { formatVerificationError } from '@/lib/error-utils';
 
 interface InstanceServiceDetailsProps {
   instanceService: InstanceService;
@@ -58,6 +59,7 @@ export function InstanceServiceDetails({
   const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('endpoint');
   const [testEntity, setTestEntity] = useState<string | null>(null);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   const handleTestEntity = (entity: string) => {
     setTestEntity(entity);
@@ -71,7 +73,8 @@ export function InstanceServiceDetails({
       toast.success(`Refreshed ${result.refreshedCount || result.entities?.length || 0} entities`);
       router.refresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to refresh entities';
+      const rawMessage = error instanceof Error ? error.message : 'Failed to refresh entities';
+      const { message } = formatVerificationError(rawMessage);
       toast.error(message);
     } finally {
       setRefreshing(false);
@@ -130,8 +133,8 @@ export function InstanceServiceDetails({
         return 'Basic Auth';
       case 'oauth2':
         return 'OAuth 2.0';
-      case 'api_key':
-        return 'API Key';
+      case 'custom':
+        return 'Custom Header';
       case 'none':
         return 'Public';
       default:
@@ -259,9 +262,22 @@ export function InstanceServiceDetails({
               </div>
             </div>
             {instanceService.verificationStatus === 'failed' && instanceService.verificationError ? (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-2 break-all">
-                {instanceService.verificationError}
-              </p>
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {formatVerificationError(instanceService.verificationError).message}
+                </p>
+                <button
+                  onClick={() => setShowErrorDetails(!showErrorDetails)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  {showErrorDetails ? 'Hide details' : 'Show details'}
+                </button>
+                {showErrorDetails && (
+                  <pre className="text-xs text-muted-foreground bg-muted p-2 rounded mt-1 overflow-x-auto max-w-full break-all whitespace-pre-wrap">
+                    {instanceService.verificationError}
+                  </pre>
+                )}
+              </div>
             ) : instanceService.lastVerifiedAt ? (
               <p className="text-xs text-muted-foreground mt-2">
                 Last checked {new Date(instanceService.lastVerifiedAt).toLocaleDateString()}
@@ -447,17 +463,17 @@ export function InstanceServiceDetails({
             </CardHeader>
             <CardContent>
               {resolvedEntities.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {resolvedEntities.map((entity, index) => {
                     const entityUrl = `${fullEndpoint}/${entity}?$format=json`;
                     return (
                       <div
                         key={index}
-                        className="group flex items-center justify-between gap-1 p-2 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
+                        className="group flex items-center gap-1 p-2 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2">
                           <Database className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <code className="text-sm font-mono truncate" title={entity}>
+                          <code className="text-sm font-mono">
                             {entity}
                           </code>
                         </div>
@@ -540,9 +556,9 @@ export function InstanceServiceDetails({
                       {instanceService.authConfigName || instance.authConfigName || 'OAuth 2.0 Client Credentials'}
                     </p>
                   )}
-                  {effectiveAuthType === 'api_key' && (
+                  {effectiveAuthType === 'custom' && (
                     <p className="text-sm text-muted-foreground">
-                      {instanceService.authConfigName || instance.authConfigName || 'API Key Header'}
+                      {instanceService.authConfigName || instance.authConfigName || 'Custom Header'}
                     </p>
                   )}
                 </div>
@@ -552,8 +568,8 @@ export function InstanceServiceDetails({
         </TabsContent>
       </Tabs>
 
-      {/* Config Dialog */}
-      <InstanceServiceConfigDialog
+      {/* Edit Service Dialog */}
+      <EditServiceDialog
         instanceService={instanceService}
         systemService={systemService}
         open={showConfigDialog}

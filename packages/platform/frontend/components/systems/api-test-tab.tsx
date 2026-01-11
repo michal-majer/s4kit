@@ -224,7 +224,7 @@ export function ApiTestTab({ instanceServiceId, entities, fullEndpoint, initialE
 
           {/* Query Parameters */}
           <Collapsible open={paramsOpen} onOpenChange={setParamsOpen}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 cursor-pointer">
               <span className="flex items-center gap-2">
                 {paramsOpen ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />

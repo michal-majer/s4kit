@@ -26,8 +26,9 @@ import Link from 'next/link';
 import { CreateInstanceDialog } from './create-instance-dialog';
 import { EditInstanceDialog } from './edit-instance-dialog';
 import { CreateServiceDialog } from './create-service-dialog';
+import { EditServiceDialog } from './edit-service-dialog';
 import { ServiceVerificationStatus } from './service-verification-status';
-import { InstanceServiceConfigDialog } from './instance-service-config-dialog';
+import { getErrorMessage } from '@/lib/error-utils';
 
 const systemTypeLabels: Record<SystemType, string> = {
   s4_public: 'SAP S/4HANA Cloud Public Edition',
@@ -57,9 +58,9 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
   const [showCreateInstance, setShowCreateInstance] = useState(false);
   const [showCreateService, setShowCreateService] = useState(false);
   const [verifyingInstanceId, setVerifyingInstanceId] = useState<string | null>(null);
-  const [configuringService, setConfiguringService] = useState<{
-    instanceService: InstanceService;
+  const [editingService, setEditingService] = useState<{
     systemService: SystemService;
+    instanceService: InstanceService;
   } | null>(null);
   const [serviceSearch, setServiceSearch] = useState('');
   const [deletingInstance, setDeletingInstance] = useState<Instance | null>(null);
@@ -229,7 +230,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       ));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to refresh service';
-      toast.error(errorMessage);
+      toast.error(getErrorMessage(errorMessage));
       // Update state to reflect failed verification
       setInstanceServices(prev => prev.map(is =>
         is.id === instanceServiceId ? { ...is, verificationStatus: 'failed', verificationError: errorMessage, lastVerifiedAt: new Date().toISOString() } : is
@@ -260,7 +261,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to verify services';
-      toast.error(errorMessage);
+      toast.error(getErrorMessage(errorMessage));
     } finally {
       setRefreshingAllForInstanceId(null);
     }
@@ -269,10 +270,28 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
   const handleDeleteService = async () => {
     if (!deletingService) return;
     setDeletingServiceLoading(true);
+
+    // Get the systemServiceId before deleting
+    const deletedInstanceService = instanceServices.find(is => is.id === deletingService);
+    const systemServiceId = deletedInstanceService?.systemServiceId;
+
     try {
       await api.instanceServices.delete(deletingService);
       toast.success('Service removed');
-      setInstanceServices(prev => prev.filter(is => is.id !== deletingService));
+
+      // Update local instanceServices state
+      const remainingInstanceServices = instanceServices.filter(is => is.id !== deletingService);
+      setInstanceServices(remainingInstanceServices);
+
+      // Check if this was the last link to the system service
+      // If so, remove it from systemServices state as well (backend already deleted it)
+      if (systemServiceId) {
+        const hasOtherLinks = remainingInstanceServices.some(is => is.systemServiceId === systemServiceId);
+        if (!hasOtherLinks) {
+          setSystemServices(prev => prev.filter(ss => ss.id !== systemServiceId));
+        }
+      }
+
       setDeletingService(null);
     } catch (error) {
       // Handle 409 conflict (service is used by API keys)
@@ -399,7 +418,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                               </div>
                               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                 <Key className="h-3.5 w-3.5" />
-                                <span className="capitalize">{instance.authType === 'api_key' ? 'API Key' : instance.authType}</span>
+                                <span className="capitalize">{instance.authType === 'custom' ? 'Custom Header' : instance.authType}</span>
                               </div>
                             </div>
                           </div>
@@ -528,15 +547,22 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                 {linkedServices
                                   .filter((is) => {
                                     if (!serviceSearch) return true;
-                                    const service = systemServices.find(ss => ss.id === is.systemServiceId);
+                                    // Use API-provided systemService data, fallback to local lookup
+                                    const serviceName = is.systemService?.name || systemServices.find(ss => ss.id === is.systemServiceId)?.name;
+                                    const serviceAlias = is.systemService?.alias || systemServices.find(ss => ss.id === is.systemServiceId)?.alias;
                                     const searchLower = serviceSearch.toLowerCase();
                                     return (
-                                      service?.name?.toLowerCase().includes(searchLower) ||
-                                      service?.alias?.toLowerCase().includes(searchLower)
+                                      serviceName?.toLowerCase().includes(searchLower) ||
+                                      serviceAlias?.toLowerCase().includes(searchLower)
                                     );
                                   })
                                   .map((is) => {
-                                  const service = systemServices.find(ss => ss.id === is.systemServiceId);
+                                  // Use API-provided systemService data, fallback to local lookup for full service data
+                                  const fullService = systemServices.find(ss => ss.id === is.systemServiceId);
+                                  // Prefer API data for display (always fresh), use fullService for editing
+                                  const serviceName = is.systemService?.name || fullService?.name;
+                                  const serviceAlias = is.systemService?.alias || fullService?.alias;
+                                  const serviceOdataVersion = is.systemService?.odataVersion || fullService?.odataVersion;
                                   return (
                                     <TableRow
                                       key={is.id}
@@ -544,12 +570,12 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                       onClick={() => router.push(`/systems/${system.id}/instance-services/${is.id}`)}
                                     >
                                       <TableCell className="py-1.5">
-                                        <div className="font-medium text-sm">{service?.name || 'Unknown Service'}</div>
+                                        <div className="font-medium text-sm">{serviceName || 'Unknown Service'}</div>
                                         <div className="flex items-center gap-1.5">
-                                          <code className="text-xs text-muted-foreground font-mono">{service?.alias || '-'}</code>
-                                          {service?.odataVersion && (
+                                          <code className="text-xs text-muted-foreground font-mono">{serviceAlias || '-'}</code>
+                                          {serviceOdataVersion && (
                                             <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
-                                              {service.odataVersion.toUpperCase()}
+                                              {serviceOdataVersion.toUpperCase()}
                                             </Badge>
                                           )}
                                         </div>
@@ -573,13 +599,13 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
                                             className="h-7 w-7"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              if (service) {
-                                                setConfiguringService({ instanceService: is, systemService: service });
+                                              if (fullService) {
+                                                setEditingService({ systemService: fullService, instanceService: is });
                                               }
                                             }}
-                                            title="Configure service"
+                                            title="Edit service"
                                           >
-                                            <Settings className="h-3.5 w-3.5" />
+                                            <Pencil className="h-3.5 w-3.5" />
                                           </Button>
                                           <Button
                                             variant="ghost"
@@ -628,6 +654,7 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
       {showCreateInstance && (
         <CreateInstanceDialog
           systemId={system.id}
+          systemName={system.name}
           existingEnvironments={instances.map(i => i.environment)}
           open={showCreateInstance}
           onOpenChange={setShowCreateInstance}
@@ -660,12 +687,21 @@ export function SystemDetails({ system, instances: initialInstances, systemServi
         />
       )}
 
-      {configuringService && (
-        <InstanceServiceConfigDialog
-          instanceService={configuringService.instanceService}
-          systemService={configuringService.systemService}
-          open={!!configuringService}
-          onOpenChange={(open) => !open && setConfiguringService(null)}
+      {editingService && (
+        <EditServiceDialog
+          systemService={editingService.systemService}
+          instanceService={editingService.instanceService}
+          open={!!editingService}
+          onOpenChange={(open: boolean) => {
+            if (!open) {
+              setEditingService(null);
+            }
+          }}
+          onUpdated={() => {
+            // Refresh system services and instance services to get updated data
+            api.systemServices.list(system.id).then(setSystemServices).catch(() => {});
+            api.instanceServices.list().then(setInstanceServices).catch(() => {});
+          }}
         />
       )}
 

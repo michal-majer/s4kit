@@ -3,7 +3,7 @@ import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, pgEnum, uni
 // Enums
 export const systemTypeEnum = pgEnum('system_type', ['s4_public', 's4_private', 's4_onprem', 'btp', 'other']);
 export const instanceEnvironmentEnum = pgEnum('instance_environment', ['sandbox', 'dev', 'quality', 'preprod', 'production']);
-export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'api_key', 'custom']);
+export const authTypeEnum = pgEnum('auth_type', ['none', 'basic', 'oauth2', 'custom']);
 export const logLevelEnum = pgEnum('log_level', ['minimal', 'standard', 'extended']);
 export const odataVersionEnum = pgEnum('odata_version', ['v2', 'v4']);
 export const verificationStatusEnum = pgEnum('verification_status', ['pending', 'verified', 'failed']);

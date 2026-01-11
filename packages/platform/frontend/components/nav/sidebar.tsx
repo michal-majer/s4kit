@@ -267,9 +267,9 @@ function SidebarContent({ user, mounted, platformInfo, organizationName, onNavCl
       <div className="border-t border-sidebar-border/50 p-3">
         {/* Organization Badge */}
         <div className="mb-2 px-2">
-          <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="text-[11px] font-semibold text-muted-foreground truncate">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-accent" />
+            <span className="text-xs font-semibold text-foreground uppercase tracking-wide truncate">
               {organizationName}
             </span>
           </div>
@@ -278,7 +278,7 @@ function SidebarContent({ user, mounted, platformInfo, organizationName, onNavCl
         {mounted ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="group flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left transition-all duration-300 hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+              <button className="group flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left transition-all duration-300 hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring cursor-pointer">
                 <Avatar className="h-8 w-8 ring-2 ring-sidebar-border/50 transition-all duration-300 group-hover:ring-accent/50">
                   <AvatarImage src={user.image || undefined} alt={user.name} />
                   <AvatarFallback className="bg-gradient-to-br from-primary/80 to-primary text-[10px] font-bold text-primary-foreground">

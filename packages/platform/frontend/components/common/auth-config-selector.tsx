@@ -13,18 +13,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { api, AuthConfiguration, AuthType } from '@/lib/api';
 import { toast } from 'sonner';
 import { Plus, Key, Upload, ChevronDown, ChevronUp, ShieldCheck, KeyRound, Globe, Settings2, Pencil } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { EditAuthConfigDialog } from './edit-auth-config-dialog';
 
 interface AuthConfigSelectorProps {
   value?: string | null;
@@ -33,6 +31,30 @@ interface AuthConfigSelectorProps {
   allowNone?: boolean;
   label?: string;
   description?: string;
+  suggestedNameContext?: {
+    systemName?: string;
+    instanceName?: string;
+  };
+}
+
+const authTypeShortNames: Record<AuthType, string> = {
+  none: 'NoAuth',
+  basic: 'Basic',
+  oauth2: 'OAuth',
+  custom: 'Custom',
+};
+
+function generateSuggestedName(
+  systemName?: string,
+  instanceName?: string,
+  authType?: AuthType
+): string {
+  const parts = [
+    systemName,
+    instanceName,
+    authType ? authTypeShortNames[authType] : undefined,
+  ].filter(Boolean);
+  return parts.join('-');
 }
 
 /**
@@ -165,7 +187,6 @@ const authTypeLabels: Record<AuthType, string> = {
   none: 'No Authentication',
   basic: 'Basic Auth',
   oauth2: 'OAuth 2.0',
-  api_key: 'API Key',
   custom: 'Custom Header',
 };
 
@@ -173,8 +194,7 @@ const authTypeIcons: Record<AuthType, React.ReactNode> = {
   none: <Globe className="h-4 w-4" />,
   basic: <KeyRound className="h-4 w-4" />,
   oauth2: <ShieldCheck className="h-4 w-4" />,
-  api_key: <Key className="h-4 w-4" />,
-  custom: <Settings2 className="h-4 w-4" />,
+  custom: <Key className="h-4 w-4" />,
 };
 
 export function AuthConfigSelector({
@@ -184,6 +204,7 @@ export function AuthConfigSelector({
   allowNone = true,
   label = 'Authentication',
   description,
+  suggestedNameContext,
 }: AuthConfigSelectorProps) {
   const [configs, setConfigs] = useState<AuthConfiguration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,7 +213,6 @@ export function AuthConfigSelector({
 
   // Load auth configurations
   useEffect(() => {
-    setLoading(true);
     api.authConfigurations.list()
       .then(setConfigs)
       .catch(() => toast.error('Failed to load auth configurations'))
@@ -298,7 +318,7 @@ export function AuthConfigSelector({
         </div>
       )}
 
-      <CreateAuthConfigDialog
+      <CreateAuthConfigSheet
         open={createDialogOpen}
         onOpenChange={handleCreateDialogClose}
         onCreated={(newConfig) => {
@@ -306,10 +326,11 @@ export function AuthConfigSelector({
           onChange(newConfig.id);
           setCreateDialogOpen(false);
         }}
+        suggestedNameContext={suggestedNameContext}
       />
 
       {selectedConfig && (
-        <EditAuthConfigDialog
+        <EditAuthConfigSheet
           config={selectedConfig}
           open={editDialogOpen}
           onOpenChange={(open) => {
@@ -334,12 +355,18 @@ interface CreateAuthConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated?: (config: AuthConfiguration) => void;
+  suggestedNameContext?: {
+    systemName?: string;
+    instanceName?: string;
+  };
 }
 
-function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthConfigDialogProps) {
+// Sheet version for use when triggered from within another modal
+function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameContext }: CreateAuthConfigDialogProps) {
   const [loading, setLoading] = useState(false);
   const [showImportSection, setShowImportSection] = useState(false);
   const [bindingJson, setBindingJson] = useState('');
+  const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -350,8 +377,6 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
     oauth2ClientSecret: '',
     oauth2TokenUrl: '',
     oauth2Scope: '',
-    apiKey: '',
-    apiKeyHeaderName: 'X-API-Key',
     customHeaderName: '',
     customHeaderValue: '',
   });
@@ -367,14 +392,26 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
       oauth2ClientSecret: '',
       oauth2TokenUrl: '',
       oauth2Scope: '',
-      apiKey: '',
-      apiKeyHeaderName: 'X-API-Key',
       customHeaderName: '',
       customHeaderValue: '',
     });
     setBindingJson('');
     setShowImportSection(false);
+    setNameManuallyEdited(false);
   };
+
+  useEffect(() => {
+    if (open && suggestedNameContext && !nameManuallyEdited) {
+      const suggested = generateSuggestedName(
+        suggestedNameContext.systemName,
+        suggestedNameContext.instanceName,
+        formData.authType
+      );
+      if (suggested) {
+        setFormData((prev) => ({ ...prev, name: suggested }));
+      }
+    }
+  }, [open, suggestedNameContext, formData.authType, nameManuallyEdited]);
 
   const handleParseBinding = () => {
     const parsed = parseServiceBinding(bindingJson);
@@ -415,9 +452,6 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
         data.oauth2ClientSecret = formData.oauth2ClientSecret;
         data.oauth2TokenUrl = formData.oauth2TokenUrl;
         data.oauth2Scope = formData.oauth2Scope || undefined;
-      } else if (formData.authType === 'api_key') {
-        data.apiKey = formData.apiKey;
-        data.apiKeyHeaderName = formData.apiKeyHeaderName;
       } else if (formData.authType === 'custom') {
         data.customHeaderName = formData.customHeaderName;
         data.customHeaderValue = formData.customHeaderValue;
@@ -439,47 +473,37 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
+    <Sheet open={open} onOpenChange={(isOpen) => {
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Create Auth Configuration</DialogTitle>
-            <DialogDescription>
-              Create a reusable authentication configuration that can be shared across instances and services.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="auth-config-name">
+      <SheetContent className="flex flex-col">
+        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+          <SheetHeader>
+            <SheetTitle>Create Auth Configuration</SheetTitle>
+            <SheetDescription>
+              Create a reusable authentication configuration.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-4 px-6 py-4 flex-1 overflow-y-auto">
+            <div className="space-y-1.5">
+              <Label htmlFor="sheet-auth-config-name">
                 Name <span className="text-destructive">*</span>
               </Label>
               <Input
-                id="auth-config-name"
+                id="sheet-auth-config-name"
                 placeholder="e.g., Production OAuth, Dev Basic Auth"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  setNameManuallyEdited(true);
+                }}
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                A descriptive name to identify this configuration
-              </p>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="auth-config-description">Description</Label>
-              <Input
-                id="auth-config-description"
-                placeholder="Optional description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="auth-config-type">Authentication Type</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="sheet-auth-config-type">Authentication Type</Label>
               <Select
                 value={formData.authType}
                 onValueChange={(value) => setFormData({ ...formData, authType: value as AuthType })}
@@ -500,10 +524,347 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
                       OAuth 2.0
                     </span>
                   </SelectItem>
-                  <SelectItem value="api_key">
+                  <SelectItem value="custom">
                     <span className="flex items-center gap-2">
-                      <Key className="h-4 w-4" />
-                      API Key
+                      <Settings2 className="h-4 w-4" />
+                      Custom Header
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="none">
+                    <span className="flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      No Authentication
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.authType === 'basic' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-auth-username">
+                    Username <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-auth-username"
+                    autoComplete="off"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-auth-password">
+                    Password <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-auth-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {formData.authType === 'oauth2' && (
+              <>
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-between"
+                    onClick={() => setShowImportSection(!showImportSection)}
+                  >
+                    <span className="flex items-center">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Import from Service Binding
+                    </span>
+                    {showImportSection ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {showImportSection && (
+                    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                      <Textarea
+                        placeholder="Paste VCAP_SERVICES or service binding JSON here..."
+                        value={bindingJson}
+                        onChange={(e) => setBindingJson(e.target.value)}
+                        className="h-20 font-mono text-xs resize-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleParseBinding}
+                          disabled={!bindingJson.trim()}
+                          className="flex-1"
+                        >
+                          Parse & Fill
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setBindingJson('');
+                            setShowImportSection(false);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-oauth-token-url">
+                    Token URL <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-oauth-token-url"
+                    placeholder="https://auth.example.com/oauth/token"
+                    value={formData.oauth2TokenUrl}
+                    onChange={(e) => setFormData({ ...formData, oauth2TokenUrl: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-oauth-client-id">
+                    Client ID <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-oauth-client-id"
+                    value={formData.oauth2ClientId}
+                    onChange={(e) => setFormData({ ...formData, oauth2ClientId: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-oauth-client-secret">
+                    Client Secret <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-oauth-client-secret"
+                    type="password"
+                    autoComplete="new-password"
+                    value={formData.oauth2ClientSecret}
+                    onChange={(e) => setFormData({ ...formData, oauth2ClientSecret: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-oauth-scope">Scope (optional)</Label>
+                  <Input
+                    id="sheet-oauth-scope"
+                    value={formData.oauth2Scope}
+                    onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+
+            {formData.authType === 'custom' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-custom-header-name">
+                    Header Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-custom-header-name"
+                    placeholder="Authorization"
+                    value={formData.customHeaderName}
+                    onChange={(e) => setFormData({ ...formData, customHeaderName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sheet-custom-header-value">
+                    Header Value <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sheet-custom-header-value"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Bearer token or custom value"
+                    value={formData.customHeaderValue}
+                    onChange={(e) => setFormData({ ...formData, customHeaderValue: e.target.value })}
+                    required
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <SheetFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading || !formData.name}>
+              {loading ? 'Creating...' : 'Create'}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// Edit Auth Config Sheet - for editing within modals
+interface EditAuthConfigSheetProps {
+  config: AuthConfiguration;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onUpdated?: (config: AuthConfiguration) => void;
+}
+
+function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuthConfigSheetProps) {
+  const [loading, setLoading] = useState(false);
+  const [showImportSection, setShowImportSection] = useState(false);
+  const [bindingJson, setBindingJson] = useState('');
+  const [formData, setFormData] = useState({
+    name: config.name,
+    description: config.description || '',
+    authType: config.authType,
+    oauth2TokenUrl: config.authConfig?.tokenUrl || '',
+    oauth2ClientId: config.authConfig?.clientId || '',
+    oauth2Scope: config.authConfig?.scope || '',
+    customHeaderName: config.authConfig?.headerName || '',
+    username: '',
+    password: '',
+    oauth2ClientSecret: '',
+    customHeaderValue: '',
+  });
+
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        name: config.name,
+        description: config.description || '',
+        authType: config.authType,
+        oauth2TokenUrl: config.authConfig?.tokenUrl || '',
+        oauth2ClientId: config.authConfig?.clientId || '',
+        oauth2Scope: config.authConfig?.scope || '',
+        customHeaderName: config.authConfig?.headerName || '',
+        username: '',
+        password: '',
+        oauth2ClientSecret: '',
+        customHeaderValue: '',
+      });
+      setBindingJson('');
+      setShowImportSection(false);
+    }
+  }, [open, config]);
+
+  const handleParseBinding = () => {
+    const parsed = parseServiceBinding(bindingJson);
+    if (parsed) {
+      setFormData((prev) => ({
+        ...prev,
+        authType: 'oauth2',
+        oauth2TokenUrl: parsed.tokenUrl,
+        oauth2ClientId: parsed.clientId,
+        oauth2ClientSecret: parsed.clientSecret,
+        oauth2Scope: parsed.scope || '',
+      }));
+      setBindingJson('');
+      setShowImportSection(false);
+      toast.success('Service binding parsed successfully');
+    } else {
+      toast.error('Invalid service binding format');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name) return;
+
+    setLoading(true);
+    try {
+      const data: Parameters<typeof api.authConfigurations.update>[1] = {
+        name: formData.name,
+        description: formData.description || undefined,
+        authType: formData.authType,
+      };
+
+      if (formData.authType === 'basic') {
+        if (formData.username) data.username = formData.username;
+        if (formData.password) data.password = formData.password;
+      } else if (formData.authType === 'oauth2') {
+        data.oauth2TokenUrl = formData.oauth2TokenUrl;
+        data.oauth2ClientId = formData.oauth2ClientId;
+        data.oauth2Scope = formData.oauth2Scope || undefined;
+        if (formData.oauth2ClientSecret) {
+          data.oauth2ClientSecret = formData.oauth2ClientSecret;
+        }
+      } else if (formData.authType === 'custom') {
+        data.customHeaderName = formData.customHeaderName;
+        if (formData.customHeaderValue) data.customHeaderValue = formData.customHeaderValue;
+      }
+
+      const updatedConfig = await api.authConfigurations.update(config.id, data);
+      toast.success('Auth configuration updated');
+      onOpenChange(false);
+      onUpdated?.(updatedConfig);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('already exists')) {
+        toast.error('An auth configuration with this name already exists');
+      } else {
+        toast.error('Failed to update auth configuration');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="flex flex-col">
+        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+          <SheetHeader>
+            <SheetTitle>Edit Auth Configuration</SheetTitle>
+            <SheetDescription>
+              Update authentication settings. Leave secrets empty to keep existing values.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-4 px-6 py-4 flex-1 overflow-y-auto">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-sheet-name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="edit-sheet-name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-sheet-type">Authentication Type</Label>
+              <Select
+                value={formData.authType}
+                onValueChange={(value) => setFormData({ ...formData, authType: value as AuthType })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="basic">
+                    <span className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4" />
+                      Basic Auth
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="oauth2">
+                    <span className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4" />
+                      OAuth 2.0
                     </span>
                   </SelectItem>
                   <SelectItem value="custom">
@@ -524,29 +885,25 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
 
             {formData.authType === 'basic' && (
               <>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-username">
-                    Username <span className="text-destructive">*</span>
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-username">Username</Label>
                   <Input
-                    id="auth-username"
+                    id="edit-sheet-username"
                     autoComplete="off"
+                    placeholder={config.hasCredentials ? 'Leave empty to keep existing' : ''}
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    required
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-password">
-                    Password <span className="text-destructive">*</span>
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-password">Password</Label>
                   <Input
-                    id="auth-password"
+                    id="edit-sheet-password"
                     type="password"
                     autoComplete="new-password"
+                    placeholder={config.hasCredentials ? 'Leave empty to keep existing' : ''}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
                   />
                 </div>
               </>
@@ -558,6 +915,7 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     className="w-full justify-between"
                     onClick={() => setShowImportSection(!showImportSection)}
                   >
@@ -565,93 +923,65 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
                       <Upload className="mr-2 h-4 w-4" />
                       Import from Service Binding
                     </span>
-                    {showImportSection ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+                    {showImportSection ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
                   {showImportSection && (
                     <div className="space-y-2 rounded-md border bg-muted/30 p-3">
                       <Textarea
-                        placeholder="Paste VCAP_SERVICES or service binding JSON here..."
+                        placeholder="Paste VCAP_SERVICES or service binding JSON..."
                         value={bindingJson}
                         onChange={(e) => setBindingJson(e.target.value)}
-                        className="h-20 font-mono text-xs resize-none overflow-y-auto overflow-x-hidden break-all whitespace-pre-wrap"
+                        className="h-20 font-mono text-xs resize-none"
                       />
                       <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={handleParseBinding}
-                          disabled={!bindingJson.trim()}
-                          className="flex-1"
-                        >
-                          Parse & Fill Fields
+                        <Button type="button" size="sm" onClick={handleParseBinding} disabled={!bindingJson.trim()} className="flex-1">
+                          Parse & Fill
                         </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setBindingJson('');
-                            setShowImportSection(false);
-                          }}
-                        >
+                        <Button type="button" size="sm" variant="ghost" onClick={() => { setBindingJson(''); setShowImportSection(false); }}>
                           Cancel
                         </Button>
                       </div>
                     </div>
                   )}
                 </div>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or enter manually</span>
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-oauth-token-url">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-token-url">
                     Token URL <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="auth-oauth-token-url"
+                    id="edit-sheet-token-url"
                     placeholder="https://auth.example.com/oauth/token"
                     value={formData.oauth2TokenUrl}
                     onChange={(e) => setFormData({ ...formData, oauth2TokenUrl: e.target.value })}
-                    required
+                    required={formData.authType === 'oauth2'}
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-oauth-client-id">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-client-id">
                     Client ID <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="auth-oauth-client-id"
+                    id="edit-sheet-client-id"
                     value={formData.oauth2ClientId}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientId: e.target.value })}
-                    required
+                    required={formData.authType === 'oauth2'}
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-oauth-client-secret">
-                    Client Secret <span className="text-destructive">*</span>
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-client-secret">Client Secret</Label>
                   <Input
-                    id="auth-oauth-client-secret"
+                    id="edit-sheet-client-secret"
                     type="password"
                     autoComplete="new-password"
+                    placeholder={config.hasCredentials && config.authType === 'oauth2' ? 'Leave empty to keep existing' : ''}
                     value={formData.oauth2ClientSecret}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientSecret: e.target.value })}
-                    required
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-oauth-scope">Scope (optional)</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-scope">Scope (optional)</Label>
                   <Input
-                    id="auth-oauth-scope"
+                    id="edit-sheet-scope"
                     value={formData.oauth2Scope}
                     onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
                   />
@@ -659,77 +989,41 @@ function CreateAuthConfigDialog({ open, onOpenChange, onCreated }: CreateAuthCon
               </>
             )}
 
-            {formData.authType === 'api_key' && (
-              <>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-api-key-header">Header Name</Label>
-                  <Input
-                    id="auth-api-key-header"
-                    placeholder="X-API-Key"
-                    value={formData.apiKeyHeaderName}
-                    onChange={(e) => setFormData({ ...formData, apiKeyHeaderName: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    The HTTP header name for the API key (default: X-API-Key)
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-api-key">
-                    API Key <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="auth-api-key"
-                    type="password"
-                    autoComplete="new-password"
-                    value={formData.apiKey}
-                    onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                    required
-                  />
-                </div>
-              </>
-            )}
-
             {formData.authType === 'custom' && (
               <>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-custom-header-name">
-                    Header Name <span className="text-destructive">*</span>
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-header-name">Header Name</Label>
                   <Input
-                    id="auth-custom-header-name"
+                    id="edit-sheet-header-name"
                     placeholder="Authorization"
                     value={formData.customHeaderName}
                     onChange={(e) => setFormData({ ...formData, customHeaderName: e.target.value })}
-                    required
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-custom-header-value">
-                    Header Value <span className="text-destructive">*</span>
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-sheet-header-value">Header Value</Label>
                   <Input
-                    id="auth-custom-header-value"
+                    id="edit-sheet-header-value"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="Bearer token or custom value"
+                    placeholder={config.hasCredentials && config.authType === 'custom' ? 'Leave empty to keep existing' : ''}
                     value={formData.customHeaderValue}
                     onChange={(e) => setFormData({ ...formData, customHeaderValue: e.target.value })}
-                    required
                   />
                 </div>
               </>
             )}
           </div>
-          <DialogFooter>
+          <SheetFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !formData.name}>
-              {loading ? 'Creating...' : 'Create Configuration'}
+              {loading ? 'Saving...' : 'Save'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

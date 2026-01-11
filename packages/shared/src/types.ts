@@ -64,7 +64,7 @@ export type ProxyVariables = {
 
 // Auth configuration resolved from instance/service/instanceService
 export type ResolvedAuth = {
-  type: 'none' | 'basic' | 'oauth2' | 'api_key' | 'custom';
+  type: 'none' | 'basic' | 'oauth2' | 'custom';
   username?: string | null;
   password?: string | null;
   config?: unknown;

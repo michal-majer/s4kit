@@ -88,7 +88,7 @@ export function SettingsNav() {
               <p className="text-sm font-semibold">{item.label}</p>
               <p
                 className={cn(
-                  'text-xs truncate transition-colors duration-200',
+                  'text-xs transition-colors duration-200',
                   isActive
                     ? 'text-primary-foreground/70'
                     : 'text-muted-foreground'

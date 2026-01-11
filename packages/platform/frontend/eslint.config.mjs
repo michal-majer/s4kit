@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cloud Foundry deployment helper (generated CommonJS file)
+    ".cf-deploy/**",
   ]),
 ]);
 

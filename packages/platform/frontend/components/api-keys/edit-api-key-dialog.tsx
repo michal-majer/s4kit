@@ -386,7 +386,7 @@ function EditAccessGrantCard({
       </div>
 
       {/* Default permissions for all entities */}
-      <div className="bg-muted/50 rounded-md p-3 mb-3">
+      <div className="bg-muted/30 rounded-md p-3 mb-3 border border-border/40">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <div className="text-sm font-medium">Default Permissions</div>

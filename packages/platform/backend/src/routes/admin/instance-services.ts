@@ -3,7 +3,7 @@ import { db, systems, instanceServices, systemServices, instances, apiKeyAccess,
 import { metadataParser } from '@s4kit/shared/services';
 import { sapClient, type ResolvedAuthConfig } from '../../services/sap-client';
 import { z } from 'zod';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import { requirePermission, type SessionVariables } from '../../middleware/session-auth';
 
 const app = new Hono<{ Variables: SessionVariables }>();
@@ -170,11 +170,25 @@ const instanceServiceSchema = z.object({
 
 // List instance services (optionally by instanceId or systemServiceId)
 app.get('/', async (c) => {
+  const organizationId = c.get('organizationId')!;
   const instanceId = c.req.query('instanceId');
   const systemServiceId = c.req.query('systemServiceId');
 
-  // Build where clause based on provided filters
-  const whereConditions = [];
+  // Get all instance IDs belonging to this organization's systems
+  const orgInstances = await db.select({ id: instances.id })
+    .from(instances)
+    .innerJoin(systems, eq(instances.systemId, systems.id))
+    .where(eq(systems.organizationId, organizationId));
+
+  const orgInstanceIds = orgInstances.map(i => i.id);
+
+  // If no instances exist for this org, return empty array
+  if (orgInstanceIds.length === 0) {
+    return c.json([]);
+  }
+
+  // Build where clause based on provided filters (always include org filter)
+  const whereConditions = [inArray(instanceServices.instanceId, orgInstanceIds)];
   if (instanceId) {
     whereConditions.push(eq(instanceServices.instanceId, instanceId));
   }
@@ -183,7 +197,7 @@ app.get('/', async (c) => {
   }
 
   const services = await db.query.instanceServices.findMany({
-    where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+    where: and(...whereConditions),
   });
 
   // Fetch related data
@@ -381,6 +395,15 @@ app.patch('/:id', requirePermission('service:update'), async (c) => {
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
+  // First get the instance service to know its systemServiceId
+  const instanceService = await db.query.instanceServices.findFirst({
+    where: eq(instanceServices.id, id),
+  });
+
+  if (!instanceService) {
+    return c.json({ error: 'Instance service not found' }, 404);
+  }
+
   // Check if instance service is used by any API keys
   const usageResult = await db.select({ count: count() })
     .from(apiKeyAccess)
@@ -401,6 +424,19 @@ app.delete('/:id', async (c) => {
 
   if (!deleted) {
     return c.json({ error: 'Instance service not found' }, 404);
+  }
+
+  // Check if this was the last link to the system service
+  // If so, delete the system service as well (cascade cleanup)
+  const remainingLinks = await db.select({ count: count() })
+    .from(instanceServices)
+    .where(eq(instanceServices.systemServiceId, instanceService.systemServiceId));
+
+  const remainingCount = remainingLinks[0]?.count ?? 0;
+  if (remainingCount === 0) {
+    // No more instances linked to this system service, delete it
+    await db.delete(systemServices)
+      .where(eq(systemServices.id, instanceService.systemServiceId));
   }
 
   return c.json({ success: true });
