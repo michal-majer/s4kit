@@ -4,6 +4,9 @@ import { sql } from '@s4kit/shared/db';
 
 const app = new Hono();
 
+// Health check secret for detailed endpoint access (optional)
+const HEALTH_CHECK_SECRET = process.env.HEALTH_CHECK_SECRET;
+
 // Liveness probe - service is running
 app.get('/live', (c) => {
   return c.json({ status: 'ok' });
@@ -32,7 +35,23 @@ app.get('/ready', async (c) => {
 });
 
 // Detailed health for monitoring
+// If HEALTH_CHECK_SECRET is set, requires X-Health-Secret header
 app.get('/', async (c) => {
+  // If secret is configured, require it for detailed health info
+  if (HEALTH_CHECK_SECRET) {
+    const providedSecret = c.req.header('X-Health-Secret');
+    if (providedSecret !== HEALTH_CHECK_SECRET) {
+      // Return minimal health status without system details
+      try {
+        await db.execute(sql`SELECT 1`);
+        await redis.ping();
+        return c.json({ status: 'healthy' });
+      } catch {
+        return c.json({ status: 'unhealthy' }, 503);
+      }
+    }
+  }
+
   const checks: Record<string, any> = {};
 
   // Database check

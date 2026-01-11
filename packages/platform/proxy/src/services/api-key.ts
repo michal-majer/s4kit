@@ -4,8 +4,8 @@ import { timingSafeEqual } from 'crypto';
 import { parseApiKey, hashApiKey } from '@s4kit/shared/services';
 import type { ApiKey } from '../types.ts';
 
-// Cache TTL in seconds
-const API_KEY_CACHE_TTL = 60; // 1 minute
+// Cache TTL in seconds - kept short to minimize window for revoked keys
+const API_KEY_CACHE_TTL = 10; // 10 seconds
 
 export interface ApiKeyValidationResult {
   valid: boolean;

@@ -256,7 +256,7 @@ export const requirePermission = (permission: string) => {
     const userRole = c.get('userRole');
 
     if (!hasPermission(userRole, permission)) {
-      return c.json({ error: `Forbidden - Missing permission: ${permission}` }, 403);
+      return c.json({ error: 'Forbidden - Insufficient permissions' }, 403);
     }
 
     return next();

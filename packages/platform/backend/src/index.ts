@@ -1,12 +1,39 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { sql } from 'drizzle-orm'
+
+// Validate required environment variables at startup
+function validateEnv() {
+  const required = ['DATABASE_URL', 'ENCRYPTION_KEY'];
+  const missing = required.filter(key => !process.env[key]);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  // Validate ENCRYPTION_KEY format (64 hex chars or 44 base64 chars)
+  const key = process.env.ENCRYPTION_KEY!;
+  const isValidHex = /^[0-9a-fA-F]{64}$/.test(key);
+  const isValidBase64 = /^[A-Za-z0-9+/]{43}=$/.test(key);
+
+  if (!isValidHex && !isValidBase64) {
+    throw new Error('ENCRYPTION_KEY must be 64 hex characters or 44 base64 characters');
+  }
+
+  if (process.env.NODE_ENV === 'production' && !process.env.BETTER_AUTH_SECRET) {
+    throw new Error('BETTER_AUTH_SECRET is required in production');
+  }
+}
+
+validateEnv();
+
 import { db } from './db'
 import { redis } from './cache/redis'
 import { auth } from './auth'
 import { config } from './config/mode'
 import { sessionMiddleware, adminAuthMiddleware } from './middleware/session-auth'
 import { cacheHeaders } from './middleware/cache-headers'
+import { securityHeaders } from './middleware/security-headers'
 import systemsRoute from './routes/admin/systems'
 import instancesRoute from './routes/admin/instances'
 import systemServicesRoute from './routes/admin/system-services'
@@ -25,7 +52,22 @@ import resendVerificationRoute from './routes/public/resend-verification'
 
 const app = new Hono()
 
+// Apply security headers to all responses
+app.use('*', securityHeaders)
+
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
+
+// Validate CORS origin in production
+if (process.env.NODE_ENV === 'production') {
+  try {
+    const url = new URL(frontendUrl);
+    if (url.protocol !== 'https:') {
+      console.warn(`[Security] FRONTEND_URL should use HTTPS in production: ${frontendUrl}`);
+    }
+  } catch {
+    throw new Error(`Invalid FRONTEND_URL: ${frontendUrl}`);
+  }
+}
 
 // CORS for auth routes (requires credentials)
 app.use('/api/auth/*', cors({

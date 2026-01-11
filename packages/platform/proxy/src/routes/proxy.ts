@@ -20,6 +20,9 @@ import type { Variables, SecureLogData } from '../types.ts';
 
 const app = new Hono<{ Variables: Variables }>();
 
+// Maximum response size in bytes (10MB default)
+const MAX_RESPONSE_SIZE = parseInt(process.env.MAX_RESPONSE_SIZE || '10485760', 10);
+
 app.use('*', authMiddleware);
 app.use('*', rateLimitMiddleware);
 app.use('*', loggingMiddleware);
@@ -223,6 +226,24 @@ app.all('/*', async (c) => {
     logData.sapResponseTime = sapResponseTime;
     logData.responseSize = calculateSize(responseData);
     logData.recordCount = countRecords(responseData);
+
+    // Check response size limit
+    if (logData.responseSize && logData.responseSize > MAX_RESPONSE_SIZE) {
+      logData.errorCode = 'RESPONSE_TOO_LARGE';
+      logData.errorCategory = 'validation';
+      logData.errorMessage = `Response size ${logData.responseSize} bytes exceeds limit of ${MAX_RESPONSE_SIZE} bytes`;
+      c.set('logData', logData);
+
+      return c.json({
+        error: {
+          code: 'RESPONSE_TOO_LARGE',
+          message: `Response exceeds maximum size limit. Consider using pagination with $top and $skip.`,
+          limit: MAX_RESPONSE_SIZE,
+          actual: logData.responseSize,
+          requestId,
+        }
+      }, 413);
+    }
 
     // Set log data in context
     c.set('logData', logData);

@@ -2,16 +2,30 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createDbClient, sql } from '@s4kit/shared/db';
 import { redis } from './cache/redis.ts';
+import { securityHeaders } from './middleware/security-headers.ts';
 import proxyRoute from './routes/proxy.ts';
 import healthRoute from './routes/health.ts';
 import typesRoute from './routes/types.ts';
 import batchRoute from './routes/batch.ts';
 
-// Initialize shared clients
+// Validate required environment variables at startup
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error('DATABASE_URL environment variable is required');
 }
+
+const encryptionKey = process.env.ENCRYPTION_KEY;
+if (!encryptionKey) {
+  throw new Error('ENCRYPTION_KEY environment variable is required');
+}
+
+const isValidHex = /^[0-9a-fA-F]{64}$/.test(encryptionKey);
+const isValidBase64 = /^[A-Za-z0-9+/]{43}=$/.test(encryptionKey);
+if (!isValidHex && !isValidBase64) {
+  throw new Error('ENCRYPTION_KEY must be 64 hex characters or 44 base64 characters');
+}
+
+// Initialize shared clients
 
 export const { db, close: closeDb } = createDbClient({
   connectionString: databaseUrl,
@@ -23,6 +37,9 @@ export const { db, close: closeDb } = createDbClient({
 export { redis };
 
 const app = new Hono();
+
+// Apply security headers to all responses
+app.use('*', securityHeaders);
 
 // CORS for proxy routes (API key auth, no credentials needed)
 app.use('/api/proxy/*', cors({
