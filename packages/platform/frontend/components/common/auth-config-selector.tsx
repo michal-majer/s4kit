@@ -13,13 +13,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { api, AuthConfiguration, AuthType } from '@/lib/api';
 import { toast } from 'sonner';
 import { Plus, Key, Upload, ChevronDown, ChevronUp, ShieldCheck, KeyRound, Globe, Settings2, Pencil } from 'lucide-react';
@@ -35,6 +35,14 @@ interface AuthConfigSelectorProps {
     systemName?: string;
     instanceName?: string;
   };
+  /** Called when user wants to create a new auth config - parent should show create form */
+  onRequestCreateAuth?: () => void;
+  /** Called when user wants to edit selected auth config - parent should show edit form */
+  onRequestEditAuth?: (config: AuthConfiguration) => void;
+  /** If true, hides the create/edit buttons (useful when parent handles the UI) */
+  hideActions?: boolean;
+  /** ID of a newly created config - triggers a refresh to include it in the list */
+  newConfigId?: string | null;
 }
 
 const authTypeShortNames: Record<AuthType, string> = {
@@ -205,9 +213,14 @@ export function AuthConfigSelector({
   label = 'Authentication',
   description,
   suggestedNameContext,
+  onRequestCreateAuth,
+  onRequestEditAuth,
+  hideActions = false,
+  newConfigId,
 }: AuthConfigSelectorProps) {
   const [configs, setConfigs] = useState<AuthConfiguration[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only used when onRequestCreateAuth/onRequestEditAuth are not provided (standalone mode)
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
@@ -219,17 +232,41 @@ export function AuthConfigSelector({
       .finally(() => setLoading(false));
   }, []);
 
-  // Re-fetch when create dialog closes (to get new config)
-  const handleCreateDialogClose = (open: boolean) => {
-    if (!open) {
-      api.authConfigurations.list().then(setConfigs);
+  // Refresh configs when a new config is created externally
+  useEffect(() => {
+    if (newConfigId) {
+      api.authConfigurations.list()
+        .then(setConfigs)
+        .catch(() => {});
     }
-    setCreateDialogOpen(open);
+  }, [newConfigId]);
+
+  // Expose refresh function for parent components
+  const refreshConfigs = () => {
+    return api.authConfigurations.list().then(setConfigs);
   };
 
   const selectedConfig = useMemo(() => {
     return configs.find((c) => c.id === value);
   }, [configs, value]);
+
+  const handleCreateClick = () => {
+    if (onRequestCreateAuth) {
+      onRequestCreateAuth();
+    } else {
+      setCreateDialogOpen(true);
+    }
+  };
+
+  const handleEditClick = () => {
+    if (selectedConfig) {
+      if (onRequestEditAuth) {
+        onRequestEditAuth(selectedConfig);
+      } else {
+        setEditDialogOpen(true);
+      }
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -283,27 +320,31 @@ export function AuthConfigSelector({
             ))}
           </SelectContent>
         </Select>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={() => setCreateDialogOpen(true)}
-          disabled={disabled}
-          title="Create new auth configuration"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-        {selectedConfig && (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={() => setEditDialogOpen(true)}
-            disabled={disabled}
-            title="Edit selected auth configuration"
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+        {!hideActions && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={handleCreateClick}
+              disabled={disabled}
+              title="Create new auth configuration"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            {selectedConfig && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleEditClick}
+                disabled={disabled}
+                title="Edit selected auth configuration"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+          </>
         )}
       </div>
       {description && (
@@ -318,27 +359,29 @@ export function AuthConfigSelector({
         </div>
       )}
 
-      <CreateAuthConfigSheet
-        open={createDialogOpen}
-        onOpenChange={handleCreateDialogClose}
-        onCreated={(newConfig) => {
-          setConfigs((prev) => [newConfig, ...prev]);
-          setCreateDialogOpen(false);
-          // Use setTimeout to ensure state updates are flushed before notifying parent
-          setTimeout(() => onChange(newConfig.id), 0);
-        }}
-        suggestedNameContext={suggestedNameContext}
-      />
+      {/* Standalone dialogs - only used when parent doesn't provide callbacks */}
+      {!onRequestCreateAuth && (
+        <CreateAuthConfigDialog
+          open={createDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) refreshConfigs();
+            setCreateDialogOpen(open);
+          }}
+          onCreated={(newConfig) => {
+            setConfigs((prev) => [newConfig, ...prev]);
+            setCreateDialogOpen(false);
+            onChange(newConfig.id);
+          }}
+          suggestedNameContext={suggestedNameContext}
+        />
+      )}
 
-      {selectedConfig && (
-        <EditAuthConfigSheet
+      {!onRequestEditAuth && selectedConfig && (
+        <EditAuthConfigDialog
           config={selectedConfig}
           open={editDialogOpen}
           onOpenChange={(open) => {
-            if (!open) {
-              // Refresh configs when dialog closes
-              api.authConfigurations.list().then(setConfigs);
-            }
+            if (!open) refreshConfigs();
             setEditDialogOpen(open);
           }}
           onUpdated={(updatedConfig) => {
@@ -362,8 +405,7 @@ interface CreateAuthConfigDialogProps {
   };
 }
 
-// Sheet version for use when triggered from within another modal
-function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameContext }: CreateAuthConfigDialogProps) {
+function CreateAuthConfigDialog({ open, onOpenChange, onCreated, suggestedNameContext }: CreateAuthConfigDialogProps) {
   const [loading, setLoading] = useState(false);
   const [showImportSection, setShowImportSection] = useState(false);
   const [bindingJson, setBindingJson] = useState('');
@@ -467,8 +509,15 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
       resetForm();
       onCreated?.(newConfig);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('already exists')) {
-        toast.error('An auth configuration with this name already exists');
+      console.error('Failed to create auth configuration:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('already exists')) {
+          toast.error('An auth configuration with this name already exists');
+        } else if (error.message.includes('Required authentication fields')) {
+          toast.error('Please fill in all required authentication fields');
+        } else {
+          toast.error('Failed to create auth configuration');
+        }
       } else {
         toast.error('Failed to create auth configuration');
       }
@@ -478,19 +527,19 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
   };
 
   return (
-    <Sheet open={open} onOpenChange={(isOpen) => {
+    <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <SheetContent className="flex flex-col" onPointerDownOutside={(e) => e.stopPropagation()} onInteractOutside={(e) => e.stopPropagation()}>
-        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
-          <SheetHeader>
-            <SheetTitle>Create Auth Configuration</SheetTitle>
-            <SheetDescription>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Create Auth Configuration</DialogTitle>
+            <DialogDescription>
               Create a reusable authentication configuration.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-col gap-4 px-6 py-4 flex-1 overflow-y-auto">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4 flex-1 overflow-y-auto">
             <div className="space-y-1.5">
               <Label htmlFor="sheet-auth-config-name">
                 Name <span className="text-destructive">*</span>
@@ -712,29 +761,29 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
               </>
             )}
           </div>
-          <SheetFooter>
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !formData.name}>
               {loading ? 'Creating...' : 'Create'}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-// Edit Auth Config Sheet - for editing within modals
-interface EditAuthConfigSheetProps {
+// Edit Auth Config Dialog - for editing within modals
+interface EditAuthConfigDialogProps {
   config: AuthConfiguration;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdated?: (config: AuthConfiguration) => void;
 }
 
-function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuthConfigSheetProps) {
+function EditAuthConfigDialog({ config, open, onOpenChange, onUpdated }: EditAuthConfigDialogProps) {
   const [loading, setLoading] = useState(false);
   const [showImportSection, setShowImportSection] = useState(false);
   const [bindingJson, setBindingJson] = useState('');
@@ -787,7 +836,6 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
       }));
       setBindingJson('');
       setShowImportSection(false);
-      // Show inline success message instead of toast to avoid button overlap
       setParseSuccess(true);
       setTimeout(() => setParseSuccess(false), 3000);
     } else {
@@ -838,22 +886,22 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex flex-col" onPointerDownOutside={(e) => e.stopPropagation()} onInteractOutside={(e) => e.stopPropagation()}>
-        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
-          <SheetHeader>
-            <SheetTitle>Edit Auth Configuration</SheetTitle>
-            <SheetDescription>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Edit Auth Configuration</DialogTitle>
+            <DialogDescription>
               Update authentication settings. Leave secrets empty to keep existing values.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-col gap-4 px-6 py-4 flex-1 overflow-y-auto">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4 flex-1 overflow-y-auto">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-sheet-name">
+              <Label htmlFor="edit-dialog-name">
                 Name <span className="text-destructive">*</span>
               </Label>
               <Input
-                id="edit-sheet-name"
+                id="edit-dialog-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
@@ -861,7 +909,7 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="edit-sheet-type">Authentication Type</Label>
+              <Label htmlFor="edit-dialog-type">Authentication Type</Label>
               <Select
                 value={formData.authType}
                 onValueChange={(value) => setFormData({ ...formData, authType: value as AuthType })}
@@ -901,9 +949,9 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
             {formData.authType === 'basic' && (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-username">Username</Label>
+                  <Label htmlFor="edit-dialog-username">Username</Label>
                   <Input
-                    id="edit-sheet-username"
+                    id="edit-dialog-username"
                     autoComplete="off"
                     placeholder={config.hasCredentials ? 'Leave empty to keep existing' : ''}
                     value={formData.username}
@@ -911,9 +959,9 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-password">Password</Label>
+                  <Label htmlFor="edit-dialog-password">Password</Label>
                   <Input
-                    id="edit-sheet-password"
+                    id="edit-dialog-password"
                     type="password"
                     autoComplete="new-password"
                     placeholder={config.hasCredentials ? 'Leave empty to keep existing' : ''}
@@ -966,11 +1014,11 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-token-url">
+                  <Label htmlFor="edit-dialog-token-url">
                     Token URL <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="edit-sheet-token-url"
+                    id="edit-dialog-token-url"
                     placeholder="https://auth.example.com/oauth/token"
                     value={formData.oauth2TokenUrl}
                     onChange={(e) => setFormData({ ...formData, oauth2TokenUrl: e.target.value })}
@@ -978,20 +1026,20 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-client-id">
+                  <Label htmlFor="edit-dialog-client-id">
                     Client ID <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="edit-sheet-client-id"
+                    id="edit-dialog-client-id"
                     value={formData.oauth2ClientId}
                     onChange={(e) => setFormData({ ...formData, oauth2ClientId: e.target.value })}
                     required={formData.authType === 'oauth2'}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-client-secret">Client Secret</Label>
+                  <Label htmlFor="edit-dialog-client-secret">Client Secret</Label>
                   <Input
-                    id="edit-sheet-client-secret"
+                    id="edit-dialog-client-secret"
                     type="password"
                     autoComplete="new-password"
                     placeholder={config.hasCredentials && config.authType === 'oauth2' ? 'Leave empty to keep existing' : ''}
@@ -1000,9 +1048,9 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-scope">Scope (optional)</Label>
+                  <Label htmlFor="edit-dialog-scope">Scope (optional)</Label>
                   <Input
-                    id="edit-sheet-scope"
+                    id="edit-dialog-scope"
                     value={formData.oauth2Scope}
                     onChange={(e) => setFormData({ ...formData, oauth2Scope: e.target.value })}
                   />
@@ -1013,18 +1061,18 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
             {formData.authType === 'custom' && (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-header-name">Header Name</Label>
+                  <Label htmlFor="edit-dialog-header-name">Header Name</Label>
                   <Input
-                    id="edit-sheet-header-name"
+                    id="edit-dialog-header-name"
                     placeholder="Authorization"
                     value={formData.customHeaderName}
                     onChange={(e) => setFormData({ ...formData, customHeaderName: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-sheet-header-value">Header Value</Label>
+                  <Label htmlFor="edit-dialog-header-value">Header Value</Label>
                   <Input
-                    id="edit-sheet-header-value"
+                    id="edit-dialog-header-value"
                     type="password"
                     autoComplete="new-password"
                     placeholder={config.hasCredentials && config.authType === 'custom' ? 'Leave empty to keep existing' : ''}
@@ -1035,16 +1083,16 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
               </>
             )}
           </div>
-          <SheetFooter>
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !formData.name}>
               {loading ? 'Saving...' : 'Save'}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

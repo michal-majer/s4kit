@@ -231,6 +231,18 @@ app.post('/', requirePermission('system:create'), async (c) => {
 
   const authData = buildAuthData(result.data);
 
+  // Check if config with same name already exists (to avoid relying on DB constraint catch)
+  const existing = await db.query.authConfigurations.findFirst({
+    where: and(
+      eq(authConfigurations.organizationId, organizationId),
+      eq(authConfigurations.name, result.data.name)
+    ),
+  });
+
+  if (existing) {
+    return c.json({ error: 'An auth configuration with this name already exists' }, 409);
+  }
+
   try {
     const [newConfig] = await db.insert(authConfigurations).values({
       ...authData,
@@ -243,10 +255,14 @@ app.post('/', requirePermission('system:create'), async (c) => {
 
     return c.json(toSafeAuthConfig(newConfig), 201);
   } catch (error: any) {
-    // Handle unique constraint violation
-    if (error.code === '23505') {
+    // Handle unique constraint violation as fallback
+    const errorCode = String(error?.code || '');
+    const errorMessage = String(error?.message || '');
+
+    if (errorCode === '23505' || errorMessage.includes('duplicate')) {
       return c.json({ error: 'An auth configuration with this name already exists' }, 409);
     }
+    console.error('Failed to create auth configuration:', error);
     throw error;
   }
 });
