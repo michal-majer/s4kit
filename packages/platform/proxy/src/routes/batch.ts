@@ -226,17 +226,6 @@ async function buildAuthHeaders(
     return { headers, csrfToken: csrfToken || undefined };
   }
 
-  if (auth.type === 'api_key') {
-    const credentials = auth.credentials as any;
-    const authConfig = auth.config as any;
-    if (credentials?.apiKey) {
-      const apiKey = encryption.decrypt(credentials.apiKey);
-      const headerName = authConfig?.headerName || 'X-API-Key';
-      headers[headerName] = apiKey;
-    }
-    return { headers };
-  }
-
   if (auth.type === 'custom') {
     const authConfig = auth.config as any;
     const credentials = auth.credentials as any;
@@ -322,9 +311,6 @@ async function executeAtomicBatch(
   const cleanServicePath = servicePath.replace(/^\/+|\/+$/g, '');
   const batchUrl = `${baseUrl.replace(/\/+$/, '')}/${cleanServicePath}/$batch`;
 
-  console.log(`Atomic batch: sending ${operations.length} operations to ${batchUrl}`);
-  console.log(`Batch request body:\n${body.substring(0, 500)}...`);
-
   try {
     // Send the batch request to SAP
     const response = await ky.post(batchUrl, {
@@ -340,23 +326,12 @@ async function executeAtomicBatch(
     const responseContentType = response.headers.get('content-type') || '';
     const responseBody = await response.text();
 
-    console.log(`Batch response status: ${response.status}`);
-    console.log(`Batch response content-type: ${responseContentType}`);
-    console.log(`Batch response body (full):\n${responseBody}`);
-
     // Parse the multipart response
     const parsed = parseBatchResponse(responseBody, responseContentType);
 
-    console.log(`Parsed ${parsed.responses.length} responses, hasErrors: ${parsed.hasErrors}`);
-    parsed.responses.forEach((r, i) => {
-      console.log(`  Response ${i}: status=${r.status}, contentId=${r.contentId}, body=${JSON.stringify(r.body)?.substring(0, 200)}`);
-    });
-
     // Map responses to our result format
-    const results: BatchResult[] = parsed.responses.map((resp, index) => {
+    const results: BatchResult[] = parsed.responses.map((resp) => {
       const isSuccess = resp.status >= 200 && resp.status < 300;
-      console.log(`Mapping response ${index}: status=${resp.status}, success=${isSuccess}`);
-      console.log(`  resp.body type: ${typeof resp.body}, value: ${JSON.stringify(resp.body)?.substring(0, 300)}`);
 
       if (isSuccess) {
         // Extract entity data from response body
@@ -364,26 +339,18 @@ async function executeAtomicBatch(
         if (resp.body && typeof resp.body === 'object') {
           // OData v4: might be wrapped in { value: [...] } or { d: {...} }
           const bodyObj = resp.body as Record<string, unknown>;
-          console.log(`  bodyObj keys: ${Object.keys(bodyObj).join(', ')}`);
           if ('d' in bodyObj) {
             data = bodyObj.d;
-            console.log(`  Extracted from 'd' wrapper`);
           } else if ('value' in bodyObj && Array.isArray(bodyObj.value)) {
             data = bodyObj.value[0]; // Single entity from collection
-            console.log(`  Extracted from 'value' array`);
           } else {
             data = bodyObj;
-            console.log(`  Using bodyObj directly`);
           }
         } else if (resp.body) {
           // Body exists but isn't an object - use as-is
           data = resp.body;
-          console.log(`  Using non-object body directly`);
-        } else {
-          console.log(`  No body found!`);
         }
 
-        console.log(`  Extracted data: ${JSON.stringify(data)?.substring(0, 200)}`);
         return {
           success: true,
           status: resp.status,
@@ -411,11 +378,6 @@ async function executeAtomicBatch(
       }
     });
 
-    console.log(`Mapped ${results.length} results:`);
-    results.forEach((r, i) => {
-      console.log(`  Result ${i}: success=${r.success}, status=${r.status}, data=${JSON.stringify(r.data)?.substring(0, 100)}`);
-    });
-
     // If changeset failed, all operations should be marked as failed
     // SAP returns a single error response for the entire changeset
     if (parsed.hasErrors && results.length < operations.length) {
@@ -423,7 +385,6 @@ async function executeAtomicBatch(
       const errorResult = results.find(r => !r.success);
       const errorInfo = errorResult?.error || { code: 'CHANGESET_FAILED', message: 'Transaction failed' };
 
-      console.log('Changeset failed, marking all operations as failed');
       return operations.map(() => ({
         success: false,
         status: errorResult?.status || 500,
@@ -431,7 +392,6 @@ async function executeAtomicBatch(
       }));
     }
 
-    console.log('Returning results from atomic batch');
     return results;
   } catch (error: unknown) {
     console.error('Batch request failed:', error);
@@ -670,8 +630,6 @@ app.post('/', async (c) => {
   const servicePath = accessGrant.instanceService.servicePathOverride || accessGrant.systemService.servicePath;
   const stripMetadata = c.req.header('X-S4Kit-Strip-Metadata') !== 'false';
 
-  console.log(`Batch request: ${batchRequest.operations.length} operations, atomic: ${batchRequest.atomic}`);
-
   // 8. Execute operations
   let results: BatchResult[];
 
@@ -679,8 +637,6 @@ app.post('/', async (c) => {
     // ATOMIC: Use OData $batch with changeset
     // SAP processes all operations in a single transaction
     // If ANY operation fails, SAP rolls back ALL changes
-    console.log('Executing atomic batch via OData $batch changeset...');
-
     results = await executeAtomicBatch(
       batchRequest.operations,
       servicePath,
@@ -690,8 +646,6 @@ app.post('/', async (c) => {
   } else {
     // NON-ATOMIC: Execute sequentially
     // Each operation is independent - failures don't affect others
-    console.log('Executing non-atomic batch sequentially...');
-
     results = await executeSequentialBatch(
       batchRequest.operations,
       servicePath,
@@ -705,9 +659,6 @@ app.post('/', async (c) => {
   logData.responseSize = calculateSize(results);
   logData.recordCount = batchRequest.operations.length;
   c.set('logData', logData);
-
-  const successCount = results.filter(r => r.success).length;
-  console.log(`Batch complete: ${successCount}/${results.length} succeeded`);
 
   return c.json(results);
 });
