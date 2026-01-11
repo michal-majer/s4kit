@@ -18,12 +18,12 @@ CLI (cli.ts)
 
 ### Key Design Patterns
 
-**Dynamic Proxy Pattern**: Entity handlers are created dynamically at runtime using JavaScript Proxy. This allows `client.sap.AnyEntity.list()` to work without pre-defining entity types.
+**Dynamic Proxy Pattern**: Entity handlers are created dynamically at runtime using JavaScript Proxy. This allows `client.AnyEntity.list()` to work without pre-defining entity types.
 
 ```typescript
 // proxy.ts creates handlers dynamically
-client.sap.A_BusinessPartner.list()  // Works without defining A_BusinessPartner
-client.sap.SalesOrder.get('12345')   // Any entity name works
+client.A_BusinessPartner.list()  // Works without defining A_BusinessPartner
+client.SalesOrder.get('12345')   // Any entity name works
 ```
 
 **Connection/Service Headers**: The SDK uses custom headers to route requests:
@@ -124,31 +124,31 @@ const client = new S4Kit({
 });
 
 // List entities with filtering
-const partners = await client.sap.A_BusinessPartner.list({
+const partners = await client.A_BusinessPartner.list({
   select: ['BusinessPartner', 'BusinessPartnerName'],
   filter: "BusinessPartnerCategory eq '1'",
   top: 10
 });
 
 // Get single entity
-const partner = await client.sap.A_BusinessPartner.get('12345');
+const partner = await client.A_BusinessPartner.get('12345');
 
 // Create entity
-const newPartner = await client.sap.A_BusinessPartner.create({
+const newPartner = await client.A_BusinessPartner.create({
   BusinessPartnerCategory: '1',
   BusinessPartnerName: 'New Company'
 });
 
 // Update entity
-await client.sap.A_BusinessPartner.update('12345', {
+await client.A_BusinessPartner.update('12345', {
   BusinessPartnerName: 'Updated Name'
 });
 
 // Delete entity
-await client.sap.A_BusinessPartner.delete('12345');
+await client.A_BusinessPartner.delete('12345');
 
 // Override connection per request
-await client.sap.A_SalesOrder.list({
+await client.A_SalesOrder.list({
   connection: 'erp-dev',  // Use different instance
   top: 5
 });
@@ -164,7 +164,7 @@ import { describe, test, expect } from 'bun:test';
 describe('S4Kit', () => {
   test('should list entities', async () => {
     const client = new S4Kit({ apiKey: 'test', baseUrl: '...' });
-    const results = await client.sap.Products.list({ top: 5 });
+    const results = await client.Products.list({ top: 5 });
     expect(results.length).toBeLessThanOrEqual(5);
   });
 });

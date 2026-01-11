@@ -38,8 +38,8 @@ async function main() {
     // Clean up - delete the created books
     if (results[0]?.ID && results[1]?.ID) {
       console.log('\nCleaning up created books...');
-      await client.sap.Books.delete(results[0].ID);
-      await client.sap.Books.delete(results[1].ID);
+      await client.Books.delete(results[0].ID);
+      await client.Books.delete(results[1].ID);
       console.log('Cleanup complete');
     } else {
       console.log('\nCould not clean up - results are undefined');

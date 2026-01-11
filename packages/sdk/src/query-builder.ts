@@ -583,7 +583,7 @@ import type { ListResponse, EntityHandler, FluentQuery } from './types';
  *
  * @example
  * ```ts
- * const products = await query(client.sap.Products)
+ * const products = await query(client.Products)
  *   .select('Name', 'Price')
  *   .where('Price', 'gt', 100)
  *   .orderBy('Name', 'asc')

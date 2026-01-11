@@ -140,7 +140,7 @@ Common code in `packages/shared`:
 ### 3. Dynamic Proxy Pattern (SDK)
 The SDK uses JavaScript Proxy to dynamically create entity handlers:
 ```typescript
-client.sap.A_BusinessPartner.list()  // Dynamically resolved at runtime
+client.A_BusinessPartner.list()  // Dynamically resolved at runtime
 ```
 
 ### 4. Multi-level Auth Inheritance

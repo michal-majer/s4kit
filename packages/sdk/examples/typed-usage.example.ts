@@ -27,7 +27,7 @@ async function example() {
 
   // ✅ Type-safe list query with autocomplete for select fields
   // Now with Generic QueryOptions - no need for `as SelectFields<T>`!
-  const entities: A_BusinessPartnerType[] = await client.sap.A_BusinessPartnerType.list({
+  const entities: A_BusinessPartnerType[] = await client.A_BusinessPartnerType.list({
     select: [
       'BusinessPartner',
       'BusinessPartnerFullName',
@@ -47,7 +47,7 @@ async function example() {
   // });
 
   // ✅ Type-safe get by ID
-  const entity: A_BusinessPartnerType = await client.sap.A_BusinessPartnerType.get('BP001');
+  const entity: A_BusinessPartnerType = await client.A_BusinessPartnerType.get('BP001');
   console.log('Retrieved entity:', entity.BusinessPartnerFullName);
 
   // ✅ Type-safe create (POST)
@@ -63,7 +63,7 @@ async function example() {
     // All other fields are optional
   };
   
-  const created: A_BusinessPartnerType = await client.sap.A_BusinessPartnerType.create(newEntity);
+  const created: A_BusinessPartnerType = await client.A_BusinessPartnerType.create(newEntity);
   console.log('Created entity:', created.BusinessPartner, created.BusinessPartnerFullName);
 
   // ✅ Type-safe update (PATCH)
@@ -73,7 +73,7 @@ async function example() {
     // Only include fields you want to update
   };
   
-  const updated: A_BusinessPartnerType = await client.sap.A_BusinessPartnerType.update(
+  const updated: A_BusinessPartnerType = await client.A_BusinessPartnerType.update(
     created.BusinessPartner, 
     updates
   );

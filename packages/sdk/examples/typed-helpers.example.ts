@@ -26,7 +26,7 @@ async function exampleWithHelpers() {
 
   // ✅ List with automatic type inference
   const entities = await typedList<A_BusinessPartnerType>(
-    client.sap.A_BusinessPartnerType,
+    client.A_BusinessPartnerType,
     {
       select: [
         'BusinessPartner',
@@ -42,7 +42,7 @@ async function exampleWithHelpers() {
 
   // ✅ Get with automatic type inference
   const entity = await typedGet<A_BusinessPartnerType>(
-    client.sap.A_BusinessPartnerType,
+    client.A_BusinessPartnerType,
     'BP001',
     {
       select: ['BusinessPartner', 'BusinessPartnerFullName'],
@@ -53,7 +53,7 @@ async function exampleWithHelpers() {
 
   // ✅ Create with automatic type inference
   const created = await typedCreate<A_BusinessPartnerType>(
-    client.sap.A_BusinessPartnerType,
+    client.A_BusinessPartnerType,
     {
       BusinessPartnerFullName: 'New Company',
       BusinessPartnerName: 'New Corp',
@@ -65,7 +65,7 @@ async function exampleWithHelpers() {
 
   // ✅ Update with automatic type inference
   const updated = await typedUpdate<A_BusinessPartnerType>(
-    client.sap.A_BusinessPartnerType,
+    client.A_BusinessPartnerType,
     created.BusinessPartner,
     {
       BusinessPartnerFullName: 'Updated Company Name',
@@ -79,7 +79,7 @@ async function exampleWithHelpers() {
   // ============================================
 
   // ✅ Create a typed wrapper for cleaner code
-  const bp = useEntity<A_BusinessPartnerType>(client.sap.A_BusinessPartnerType);
+  const bp = useEntity<A_BusinessPartnerType>(client.A_BusinessPartnerType);
 
   // All methods are fully typed with autocomplete
   const allEntities = await bp.list({

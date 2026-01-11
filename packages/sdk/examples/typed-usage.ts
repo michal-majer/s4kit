@@ -113,7 +113,7 @@ async function typedExamples() {
   // EXAMPLE 1: Type-safe list with select
   // -----------------------------------------------------------------
   // TypeScript will autocomplete field names!
-  const products = await client.sap.Products.list<Product>({
+  const products = await client.Products.list<Product>({
     select: ['ProductID', 'ProductName', 'UnitPrice', 'UnitsInStock'],
     //        ^ autocomplete works here!
     top: 10,
@@ -135,7 +135,7 @@ async function typedExamples() {
     .and('UnitsInStock', 'gt', 0)
     .build();
 
-  const expensiveProducts = await client.sap.Products.list<Product>({
+  const expensiveProducts = await client.Products.list<Product>({
     filter,
     select: ['ProductName', 'UnitPrice'],
   });
@@ -143,7 +143,7 @@ async function typedExamples() {
   // -----------------------------------------------------------------
   // EXAMPLE 3: Type-safe get by ID
   // -----------------------------------------------------------------
-  const product = await client.sap.Products.get<Product>(1);
+  const product = await client.Products.get<Product>(1);
 
   if (product) {
     // Full type safety - TypeScript knows all available fields
@@ -157,7 +157,7 @@ async function typedExamples() {
   // EXAMPLE 4: Type-safe create (if you have write access)
   // -----------------------------------------------------------------
   /*
-  const newProduct = await client.sap.Products.create<Product>({
+  const newProduct = await client.Products.create<Product>({
     ProductName: 'New Widget',      // Required
     UnitPrice: 29.99,               // Optional
     UnitsInStock: 100,              // Optional
@@ -170,7 +170,7 @@ async function typedExamples() {
   // EXAMPLE 5: Type-safe update
   // -----------------------------------------------------------------
   /*
-  await client.sap.Products.update<Product>(1, {
+  await client.Products.update<Product>(1, {
     UnitPrice: 34.99,
     UnitsInStock: 150,
     // Only update what you need - all fields are optional
@@ -181,7 +181,7 @@ async function typedExamples() {
   // EXAMPLE 6: Working with SAP S/4HANA entities
   // -----------------------------------------------------------------
   /*
-  const partners = await client.sap.A_BusinessPartner.list<A_BusinessPartner>({
+  const partners = await client.A_BusinessPartner.list<A_BusinessPartner>({
     select: ['BusinessPartner', 'BusinessPartnerFullName', 'BusinessPartnerCategory'],
     filter: "BusinessPartnerCategory eq '1'",
     top: 10,
@@ -199,7 +199,7 @@ async function typedExamples() {
     Products?: Product[];
   }
 
-  const categoryWithProducts = await client.sap.Categories.get<CategoryWithProducts>(1, {
+  const categoryWithProducts = await client.Categories.get<CategoryWithProducts>(1, {
     expand: ['Products'],
   });
 
@@ -223,7 +223,7 @@ const productFields: SelectFields<Product> = ['ProductID', 'ProductName', 'UnitP
 //                                             ^ TypeScript ensures these are valid Product fields
 
 async function withSelectHelper() {
-  const products = await client.sap.Products.list<Product>({
+  const products = await client.Products.list<Product>({
     select: productFields,
   });
 }

@@ -266,7 +266,7 @@ const RESERVED_METHODS = new Set([
 
 /**
  * Create S4Kit client with dynamic entity access
- * Allows: client.Products.list() instead of client.sap.Products.list()
+ * Allows: client.Products.list() instead of client.Products.list()
  *
  * Returns S4KitClientWithDynamicAccess which:
  * - Without generated types: allows any entity access (returns EntityHandler<any>)

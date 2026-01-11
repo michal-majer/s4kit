@@ -341,7 +341,7 @@ export interface EntityHandler<T = any> {
    * List entities with optional query options
    * @example
    * ```ts
-   * const items = await client.sap.Products.list({ top: 10 });
+   * const items = await client.Products.list({ top: 10 });
    * ```
    */
   list(options?: QueryOptions<T>): Promise<T[]>;
@@ -350,7 +350,7 @@ export interface EntityHandler<T = any> {
    * List entities with count
    * @example
    * ```ts
-   * const { value, count } = await client.sap.Products.listWithCount({ top: 10 });
+   * const { value, count } = await client.Products.listWithCount({ top: 10 });
    * console.log(`Showing ${value.length} of ${count} total`);
    * ```
    */
@@ -360,8 +360,8 @@ export interface EntityHandler<T = any> {
    * Get single entity by key
    * @example
    * ```ts
-   * const product = await client.sap.Products.get(1);
-   * const partner = await client.sap.A_BusinessPartner.get('BP001');
+   * const product = await client.Products.get(1);
+   * const partner = await client.A_BusinessPartner.get('BP001');
    * ```
    */
   get(id: EntityKey, options?: QueryOptions<T>): Promise<T>;
@@ -370,7 +370,7 @@ export interface EntityHandler<T = any> {
    * Count matching entities
    * @example
    * ```ts
-   * const total = await client.sap.Products.count({ filter: "Price gt 100" });
+   * const total = await client.Products.count({ filter: "Price gt 100" });
    * ```
    */
   count(options?: Omit<QueryOptions<T>, 'top' | 'skip' | 'select'>): Promise<number>;
@@ -381,7 +381,7 @@ export interface EntityHandler<T = any> {
    * Create a new entity (POST)
    * @example
    * ```ts
-   * const created = await client.sap.Products.create({ Name: 'Widget', Price: 9.99 });
+   * const created = await client.Products.create({ Name: 'Widget', Price: 9.99 });
    * ```
    */
   create(data: Partial<T> | T, options?: QueryOptions<T>): Promise<T>;
@@ -402,7 +402,7 @@ export interface EntityHandler<T = any> {
    *
    * @example Composition relationship (works)
    * ```ts
-   * const order = await client.sap.Orders.createDeep({
+   * const order = await client.Orders.createDeep({
    *   OrderID: '001',
    *   Items: [{ Product: 'A', Quantity: 10 }]  // Created with order
    * });
@@ -411,11 +411,11 @@ export interface EntityHandler<T = any> {
    * @example Association relationship (use separate calls instead)
    * ```ts
    * // DON'T: This won't create the books - they'll be ignored
-   * await client.sap.Authors.createDeep({ name: 'Author', books: [{...}] });
+   * await client.Authors.createDeep({ name: 'Author', books: [{...}] });
    *
    * // DO: Create separately with FK reference
-   * const author = await client.sap.Authors.create({ name: 'Author' });
-   * await client.sap.Books.createMany([
+   * const author = await client.Authors.create({ name: 'Author' });
+   * await client.Books.createMany([
    *   { title: 'Book 1', author_ID: author.ID }
    * ]);
    * ```
@@ -428,7 +428,7 @@ export interface EntityHandler<T = any> {
    * Partial update (PATCH) - only updates specified fields
    * @example
    * ```ts
-   * const updated = await client.sap.Products.update(1, { Price: 12.99 });
+   * const updated = await client.Products.update(1, { Price: 12.99 });
    * ```
    */
   update(id: EntityKey, data: Partial<T>, options?: QueryOptions<T>): Promise<T>;
@@ -437,7 +437,7 @@ export interface EntityHandler<T = any> {
    * Full replacement (PUT) - replaces entire entity
    * @example
    * ```ts
-   * const replaced = await client.sap.Products.replace(1, fullProductData);
+   * const replaced = await client.Products.replace(1, fullProductData);
    * ```
    */
   replace(id: EntityKey, data: T, options?: QueryOptions<T>): Promise<T>;
@@ -446,7 +446,7 @@ export interface EntityHandler<T = any> {
    * Upsert - create or update based on key
    * @example
    * ```ts
-   * const result = await client.sap.Products.upsert({ ID: 1, Name: 'Widget', Price: 9.99 });
+   * const result = await client.Products.upsert({ ID: 1, Name: 'Widget', Price: 9.99 });
    * ```
    */
   upsert(data: T, options?: QueryOptions<T>): Promise<T>;
@@ -457,7 +457,7 @@ export interface EntityHandler<T = any> {
    * Delete entity by key
    * @example
    * ```ts
-   * await client.sap.Products.delete(1);
+   * await client.Products.delete(1);
    * ```
    */
   delete(id: EntityKey, options?: QueryOptions<T>): Promise<void>;
@@ -506,7 +506,7 @@ export interface EntityHandler<T = any> {
    * Access navigation property (related entities)
    * @example
    * ```ts
-   * const items = await client.sap.Orders.nav(1, 'Items').list();
+   * const items = await client.Orders.nav(1, 'Items').list();
    * ```
    */
   nav<R = any>(id: EntityKey, property: string): EntityHandler<R>;
@@ -517,7 +517,7 @@ export interface EntityHandler<T = any> {
    * Call an OData function (GET operation)
    * @example
    * ```ts
-   * const result = await client.sap.Products.func('GetTopSelling', { count: 10 });
+   * const result = await client.Products.func('GetTopSelling', { count: 10 });
    * ```
    */
   func<R = any>(name: string, params?: Record<string, any>): Promise<R>;
@@ -526,7 +526,7 @@ export interface EntityHandler<T = any> {
    * Call an OData action (POST operation)
    * @example
    * ```ts
-   * await client.sap.Orders.action('Approve', { orderId: '001' });
+   * await client.Orders.action('Approve', { orderId: '001' });
    * ```
    */
   action<R = any>(name: string, params?: Record<string, any>): Promise<R>;
@@ -535,7 +535,7 @@ export interface EntityHandler<T = any> {
    * Call bound function on specific entity
    * @example
    * ```ts
-   * const total = await client.sap.Orders.boundFunc(1, 'CalculateTotal');
+   * const total = await client.Orders.boundFunc(1, 'CalculateTotal');
    * ```
    */
   boundFunc<R = any>(id: EntityKey, name: string, params?: Record<string, any>): Promise<R>;
@@ -544,7 +544,7 @@ export interface EntityHandler<T = any> {
    * Call bound action on specific entity
    * @example
    * ```ts
-   * await client.sap.Orders.boundAction('001', 'Submit');
+   * await client.Orders.boundAction('001', 'Submit');
    * ```
    */
   boundAction<R = any>(id: EntityKey, name: string, params?: Record<string, any>): Promise<R>;
@@ -556,7 +556,7 @@ export interface EntityHandler<T = any> {
    * @example
    * ```ts
    * // Iterate through all pages
-   * for await (const page of client.sap.Products.paginate({ top: 100 })) {
+   * for await (const page of client.Products.paginate({ top: 100 })) {
    *   console.log(`Processing ${page.value.length} items`);
    *   for (const product of page.value) {
    *     // process product
@@ -564,7 +564,7 @@ export interface EntityHandler<T = any> {
    * }
    *
    * // Or collect all items
-   * const all = await client.sap.Products.all({ filter: "Active eq true" });
+   * const all = await client.Products.all({ filter: "Active eq true" });
    * ```
    */
   paginate(options?: PaginateOptions<T>): AsyncIterable<ListResponse<T>>;
@@ -573,7 +573,7 @@ export interface EntityHandler<T = any> {
    * Get all entities (automatically handles pagination)
    * @example
    * ```ts
-   * const allProducts = await client.sap.Products.all({ filter: "Active eq true" });
+   * const allProducts = await client.Products.all({ filter: "Active eq true" });
    * ```
    */
   all(options?: PaginateOptions<T>): Promise<T[]>;
@@ -598,7 +598,7 @@ export type EntityKey = string | number | CompositeKey;
  * Composite key for entities with multiple key fields
  * @example
  * ```ts
- * const item = await client.sap.OrderItems.get({ OrderID: '001', ItemNo: 10 });
+ * const item = await client.OrderItems.get({ OrderID: '001', ItemNo: 10 });
  * ```
  */
 export type CompositeKey = Record<string, string | number>;
