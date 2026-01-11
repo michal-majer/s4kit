@@ -323,8 +323,9 @@ export function AuthConfigSelector({
         onOpenChange={handleCreateDialogClose}
         onCreated={(newConfig) => {
           setConfigs((prev) => [newConfig, ...prev]);
-          onChange(newConfig.id);
           setCreateDialogOpen(false);
+          // Use setTimeout to ensure state updates are flushed before notifying parent
+          setTimeout(() => onChange(newConfig.id), 0);
         }}
         suggestedNameContext={suggestedNameContext}
       />
@@ -367,6 +368,7 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
   const [showImportSection, setShowImportSection] = useState(false);
   const [bindingJson, setBindingJson] = useState('');
   const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
+  const [parseSuccess, setParseSuccess] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -398,6 +400,7 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
     setBindingJson('');
     setShowImportSection(false);
     setNameManuallyEdited(false);
+    setParseSuccess(false);
   };
 
   useEffect(() => {
@@ -426,7 +429,9 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
       }));
       setBindingJson('');
       setShowImportSection(false);
-      toast.success('Service binding parsed successfully');
+      // Show inline success message instead of toast to avoid button overlap
+      setParseSuccess(true);
+      setTimeout(() => setParseSuccess(false), 3000);
     } else {
       toast.error('Invalid service binding format');
     }
@@ -623,6 +628,12 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
                     </div>
                   )}
                 </div>
+                {parseSuccess && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 animate-in fade-in">
+                    <ShieldCheck className="h-4 w-4" />
+                    Service binding imported successfully
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label htmlFor="sheet-oauth-token-url">
                     Token URL <span className="text-destructive">*</span>
@@ -727,6 +738,7 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
   const [loading, setLoading] = useState(false);
   const [showImportSection, setShowImportSection] = useState(false);
   const [bindingJson, setBindingJson] = useState('');
+  const [parseSuccess, setParseSuccess] = useState(false);
   const [formData, setFormData] = useState({
     name: config.name,
     description: config.description || '',
@@ -758,6 +770,7 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
       });
       setBindingJson('');
       setShowImportSection(false);
+      setParseSuccess(false);
     }
   }, [open, config]);
 
@@ -774,7 +787,9 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
       }));
       setBindingJson('');
       setShowImportSection(false);
-      toast.success('Service binding parsed successfully');
+      // Show inline success message instead of toast to avoid button overlap
+      setParseSuccess(true);
+      setTimeout(() => setParseSuccess(false), 3000);
     } else {
       toast.error('Invalid service binding format');
     }
@@ -944,6 +959,12 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
                     </div>
                   )}
                 </div>
+                {parseSuccess && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 animate-in fade-in">
+                    <ShieldCheck className="h-4 w-4" />
+                    Service binding imported successfully
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-sheet-token-url">
                     Token URL <span className="text-destructive">*</span>
