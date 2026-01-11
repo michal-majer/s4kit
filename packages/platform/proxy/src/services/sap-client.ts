@@ -41,13 +41,6 @@ export interface SapRequestResult {
 }
 
 /**
- * Normalize path for ky - strip leading slashes (ky doesn't allow them with prefixUrl)
- */
-function normalizePath(path: string): string {
-  return path.replace(/^\/+/, '');
-}
-
-/**
  * Build OData-compatible query string
  * OData requires $ in parameter names (like $skip, $select) to NOT be URL-encoded
  * But we still need to encode the values properly
@@ -190,12 +183,11 @@ export const sapClient = {
         return { success: true, __sapResponseTime: sapResponseTime };
       }
 
-      // Check if response has content before parsing JSON
+      // Check if response explicitly has no content
+      // Note: Missing content-length header does NOT mean empty - servers may use chunked encoding
       const contentLength = response.headers.get('content-length');
-      const hasContent = contentLength !== '0' && contentLength !== null;
-
-      if (!hasContent) {
-        // Empty response body - return success
+      if (contentLength === '0') {
+        // Explicitly empty response body - return success
         return { success: true, __sapResponseTime: sapResponseTime };
       }
 
@@ -255,11 +247,9 @@ export const sapClient = {
           return { success: true, __sapResponseTime: retrySapResponseTime };
         }
 
-        // Check if response has content before parsing JSON
+        // Check if response explicitly has no content
         const retryContentLength = response.headers.get('content-length');
-        const retryHasContent = retryContentLength !== '0' && retryContentLength !== null;
-
-        if (!retryHasContent) {
+        if (retryContentLength === '0') {
           return { success: true, __sapResponseTime: retrySapResponseTime };
         }
 
@@ -333,11 +323,9 @@ export const sapClient = {
           return { success: true, __sapResponseTime: retrySapResponseTime };
         }
 
-        // Check if response has content before parsing JSON
+        // Check if response explicitly has no content
         const oauthRetryContentLength = response.headers.get('content-length');
-        const oauthRetryHasContent = oauthRetryContentLength !== '0' && oauthRetryContentLength !== null;
-
-        if (!oauthRetryHasContent) {
+        if (oauthRetryContentLength === '0') {
           return { success: true, __sapResponseTime: retrySapResponseTime };
         }
 
