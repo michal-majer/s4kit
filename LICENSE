@@ -1,84 +1,51 @@
 Business Source License 1.1
 
-License text copyright (c) 2017 MariaDB Corporation Ab.
-
-"Business Source License" is a trademark of MariaDB Corporation Ab.
-
--------------------------------------------------------------------------------
-
-Parameters
-
 Licensor: Michal Majer
+Licensed Work: S4Kit Platform
+Copyright (c) 2025 Michal Majer
 
-Licensed Work: s4kit (including all core runtime, AI logic, orchestration,
-integration planning, execution engine, and related components)
-
-The Licensed Work is (c) 2025 Michal Majer
-
-Change Date: 2025-12-18
-
+Change Date: 2030-01-01
 Change License: Apache License, Version 2.0
 
--------------------------------------------------------------------------------
+---
 
 Additional Use Grant
 
-You may use the Licensed Work for the following purposes without a commercial
-license from the Licensor:
-
+You MAY use the Licensed Work for:
 - Internal business use
-- Development, testing, and evaluation
-- Building integrations and extensions for your own SAP systems
-- Running the software in non-production or internal production environments
+- Development, testing, evaluation
+- Your own SAP integrations (non-commercial)
 
-The following uses are NOT permitted without an explicit commercial license
-from the Licensor:
+You MAY NOT without commercial license:
+- Offer as hosted/managed service to third parties
+- Build competing products or platforms
+- Resell, sublicense, or white-label
+- Circumvent licensing or access controls
 
-- Offering the Licensed Work as a hosted or managed service
-- Using the Licensed Work to build or offer a competing product or platform
-- Reselling, sublicensing, or white-labeling the Licensed Work
-- Making the Licensed Work available to third parties as part of a commercial
-  offering
-- Circumventing licensing, usage restrictions, or access controls
+---
 
--------------------------------------------------------------------------------
+Per-Client Licensing
 
-Conditions
+Each end-client (legal entity) requires a separate license.
+One license = one organization, unlimited SAP systems.
 
-The Licensed Work may be modified, but any modification must remain subject to
-this License. You may not remove or alter this License notice.
+Examples:
+- Your company, 3 SAP systems (dev/qa/prod) → 1 license
+- Consultant deploys for 5 clients → 5 licenses (one per client)
+- Agency manages 10 customers → 10 licenses
 
-This License does not grant permission to use the Licensor's trademarks,
-logos, or product names.
+Sharing a single license across multiple clients is prohibited.
 
--------------------------------------------------------------------------------
+---
 
-Termination
+Terms
 
-If you violate the terms of this License, your rights under this License
-automatically terminate. Upon termination, you must cease all use of the
-Licensed Work.
+Modifications must retain this License. No trademark rights granted.
+Violation terminates your rights immediately.
 
--------------------------------------------------------------------------------
+On Change Date, this work becomes available under Change License.
 
-Change License
+---
 
-On the Change Date specified above, the Licensed Work will automatically
-become available under the Change License.
-
--------------------------------------------------------------------------------
-
-Disclaimer of Warranty
-
-The Licensed Work is provided "AS IS", without warranty of any kind, express or
-implied, including but not limited to warranties of merchantability, fitness
-for a particular purpose, and non-infringement.
-
--------------------------------------------------------------------------------
-
-Limitation of Liability
-
-In no event shall the Licensor be liable for any claim, damages, or other
-liability, whether in an action of contract, tort, or otherwise, arising from,
-out of, or in connection with the Licensed Work or the use or other dealings
-in the Licensed Work.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY DAMAGES.
