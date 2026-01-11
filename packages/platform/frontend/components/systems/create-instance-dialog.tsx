@@ -356,17 +356,16 @@ export function CreateInstanceDialog({
       setView('create');
     } catch (error) {
       console.error('Failed to create auth configuration:', error);
-      if (error instanceof Error) {
-        if (error.message.includes('already exists')) {
-          toast.error('An auth configuration with this name already exists');
-        } else if (error.message.includes('Required authentication fields')) {
-          toast.error('Please fill in all required authentication fields');
-        } else {
-          toast.error('Failed to create auth configuration');
-        }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('already exists')) {
+        toast.error('An auth configuration with this name already exists. Please choose a different name.');
+      } else if (errorMessage.includes('Required authentication fields')) {
+        toast.error('Please fill in all required authentication fields');
       } else {
         toast.error('Failed to create auth configuration');
       }
+      // Stay on createAuth view - don't change view on error
+      return;
     } finally {
       setAuthLoading(false);
     }
@@ -715,10 +714,10 @@ export function CreateInstanceDialog({
                   setView('create');
                 }}
               >
-                Cancel
+                Back
               </Button>
               <Button type="submit" disabled={authLoading || !authFormData.name}>
-                {authLoading ? 'Creating...' : 'Create'}
+                {authLoading ? 'Creating...' : 'Create Auth Config'}
               </Button>
             </DialogFooter>
           </form>
