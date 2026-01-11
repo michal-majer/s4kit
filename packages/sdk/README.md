@@ -64,28 +64,78 @@ The platform handles CSRF tokens, authentication, and connection pooling — you
 
 ---
 
-## Type Generation
+## Type Generation (Recommended)
 
-Generate TypeScript types from your SAP system for full autocomplete and type safety:
+> **This is the key feature of S4Kit.** Generate TypeScript types directly from your SAP system's OData metadata for full autocomplete and compile-time type safety.
+
+### Why Generate Types?
+
+Without types, the SDK works but you lose the main benefit - type safety:
+```typescript
+// Without types - works but no autocomplete, no type checking
+const partners = await client.A_BusinessPartner.list(); // partners is any[]
+```
+
+With generated types:
+```typescript
+// With types - full IDE support and compile-time validation
+const partners = await client.A_BusinessPartner.list({
+  select: ['BusinessPartner', 'BusinessPartnerName'],  // ← Autocomplete!
+});
+partners.forEach(p => console.log(p.BusinessPartnerName));  // ← Type-safe!
+```
+
+### Generating Types
 
 ```bash
-npx s4kit generate-types --api-key sk_live_... --base-url https://staging.proxy.s4kit.com/api/proxy --output ./types
+# Basic usage
+npx s4kit generate-types --api-key sk_live_... --output ./types
+
+# With all options
+npx s4kit generate-types \
+  --api-key sk_live_...                                    # Required
+  --output ./types                                         # Output directory (default: ./s4kit-types)
+  --base-url https://staging.proxy.s4kit.com/api/proxy    # Custom proxy URL
+  --connection my-sap-system                               # Specific connection only
 ```
+
+### Using Generated Types
 
 ```typescript
 import { S4Kit } from 's4kit';
-import './types';  // Enable type inference
+import './types';  // ← This enables type inference
 
 const client = S4Kit({ apiKey: 'sk_live_...' });
 
 // Full autocomplete on entity names and fields
 const partners = await client.A_BusinessPartner.list({
-  select: ['BusinessPartner', 'BusinessPartnerName'],  // ← Type-safe!
+  select: ['BusinessPartner', 'BusinessPartnerName'],
   filter: { BusinessPartnerCategory: '1' }
 });
 
 // partners is A_BusinessPartner[], not any[]
-partners.forEach(p => console.log(p.BusinessPartnerName));  // ← Autocomplete works!
+partners.forEach(p => console.log(p.BusinessPartnerName));
+```
+
+### What You Get
+
+- **Entity autocomplete** - `client.` shows all available entities
+- **Field autocomplete** - `select`, `filter`, `orderBy` show valid fields
+- **Type-safe filters** - operators match field types (string fields get `contains`, number fields get `gt`/`lt`)
+- **Proper return types** - query results are typed, not `any[]`
+- **Navigation properties** - `expand` options show available relations
+- **Compile-time errors** - typos in field names caught before runtime
+
+### Regenerating Types
+
+Regenerate types when:
+- You connect a new SAP service
+- The SAP system's schema changes
+- You add new services to your API key
+
+```bash
+# Regenerate all types
+npx s4kit generate-types --api-key sk_live_... --output ./types
 ```
 
 ---

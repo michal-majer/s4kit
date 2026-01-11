@@ -57,17 +57,20 @@ const partners = await client.A_BusinessPartner.list({
 
 ---
 
-## Type Generation
+## Type Generation (Recommended)
 
-Generate TypeScript types from your SAP system for full autocomplete and type safety:
+> **This is the key feature of S4Kit.** Generate TypeScript types directly from your SAP system's OData metadata for full autocomplete and compile-time type safety.
 
 ```bash
+# Generate types from your connected SAP system
 npx s4kit generate-types --api-key sk_live_... --output ./types
 ```
 
+This creates type definitions based on your actual SAP entities. Then import them:
+
 ```typescript
 import { S4Kit } from 's4kit';
-import './types';  // Enable type inference
+import './types';  // ← Enables type inference for your SAP system
 
 const client = S4Kit({ apiKey: 'sk_live_...' });
 
@@ -79,6 +82,21 @@ const partners = await client.A_BusinessPartner.list({
 
 // partners is A_BusinessPartner[], not any[]
 partners.forEach(p => console.log(p.BusinessPartnerName));  // ← Autocomplete works!
+```
+
+**What you get:**
+- Autocomplete for all entity names (`client.A_BusinessPartner`, `client.A_SalesOrder`, etc.)
+- Type-safe `select`, `filter`, `orderBy`, and `expand` options
+- Proper return types (no more `any[]`)
+- Compile-time validation of field names
+
+**CLI Options:**
+```bash
+npx s4kit generate-types \
+  --api-key sk_live_...     # Your S4Kit API key (required)
+  --output ./types          # Output directory (default: ./s4kit-types)
+  --base-url <url>          # Custom proxy URL (optional)
+  --connection <alias>      # Specific connection (optional, generates for all if omitted)
 ```
 
 ---

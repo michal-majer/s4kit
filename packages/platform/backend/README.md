@@ -83,6 +83,17 @@ Open http://localhost:3000
 
 The proxy service runs on port 3002 and handles SDK requests. See `packages/platform/proxy/` for details.
 
+### Type Generation Endpoint
+
+The proxy exposes a `/metadata` endpoint that the SDK CLI uses to generate TypeScript types:
+
+```bash
+# SDK users run this to generate types from their connected SAP systems
+npx s4kit generate-types --api-key sk_live_... --output ./types
+```
+
+The endpoint returns OData metadata for all services the API key has access to, which is then converted to TypeScript interfaces.
+
 ### Proxy Headers
 
 | Header | Required | Description |
