@@ -24,6 +24,20 @@ You MAY NOT without commercial license:
 
 ---
 
+Per-Tenant Licensing
+
+Each SAP system, tenant, or end-client requires a separate license.
+One license = one SAP system connection.
+
+Examples:
+- Your company connects to 3 SAP systems → 3 licenses required
+- Consultant deploys for 5 clients → 5 licenses required (one per client)
+- Development + Production SAP → 2 licenses required
+
+Sharing a single license across multiple tenants or clients is prohibited.
+
+---
+
 Terms
 
 Modifications must retain this License. No trademark rights granted.

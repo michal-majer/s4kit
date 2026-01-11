@@ -30,6 +30,19 @@ S4Kit uses a dual-license model: **Open Core**.
 ### After Change Date (2030-01-01)
 Platform code becomes Apache 2.0 (fully open source).
 
+## Per-Tenant Licensing
+
+**Each SAP system or end-client requires a separate license.**
+
+| Scenario | Licenses Required |
+|----------|-------------------|
+| 1 company, 1 SAP system | 1 |
+| 1 company, 3 SAP systems (dev/qa/prod) | 3 |
+| Consultant, 5 clients | 5 (one per client) |
+| MSP hosting for 10 customers | 10 |
+
+This prevents a single license from being shared across multiple tenants or clients.
+
 ## Commercial Licensing
 
 Need a commercial license? Contact: hello@s4kit.dev
