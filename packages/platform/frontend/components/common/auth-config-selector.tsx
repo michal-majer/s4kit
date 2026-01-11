@@ -482,7 +482,7 @@ function CreateAuthConfigSheet({ open, onOpenChange, onCreated, suggestedNameCon
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <SheetContent className="flex flex-col">
+      <SheetContent className="flex flex-col" onPointerDownOutside={(e) => e.stopPropagation()} onInteractOutside={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
           <SheetHeader>
             <SheetTitle>Create Auth Configuration</SheetTitle>
@@ -839,7 +839,7 @@ function EditAuthConfigSheet({ config, open, onOpenChange, onUpdated }: EditAuth
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex flex-col">
+      <SheetContent className="flex flex-col" onPointerDownOutside={(e) => e.stopPropagation()} onInteractOutside={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
           <SheetHeader>
             <SheetTitle>Edit Auth Configuration</SheetTitle>
