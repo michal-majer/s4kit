@@ -11,30 +11,40 @@ Change License: Apache License, Version 2.0
 
 Additional Use Grant
 
-You MAY use the Licensed Work for:
-- Internal business use
-- Development, testing, evaluation
-- Your own SAP integrations (non-commercial)
+FREE USE (no license required):
 
-You MAY NOT without commercial license:
+You MAY use the Licensed Work without a commercial license for:
+- Internal business operations (your own company's use)
+- Development, testing, evaluation
+- Self-hosted deployment for your organization
+- Up to ONE (1) SAP system landscape with up to FIVE (5) environments
+  (e.g., sandbox, development, quality, production, training)
+
+This applies regardless of whether your organization is commercial or non-profit.
+
+COMMERCIAL LICENSE REQUIRED:
+
+You MUST obtain a commercial license to:
+- Connect more than one SAP system landscape
 - Offer as hosted/managed service to third parties
 - Build competing products or platforms
 - Resell, sublicense, or white-label
-- Circumvent licensing or access controls
+- Deploy for multiple legal entities (clients, customers)
 
 ---
 
-Per-Client Licensing
+Multi-Client Licensing
 
-Each end-client (legal entity) requires a separate license.
-One license = one organization, unlimited SAP systems.
+Each end-client (legal entity) requires a separate license when YOU deploy
+or manage S4Kit on their behalf.
 
 Examples:
-- Your company, 3 SAP systems (dev/qa/prod) → 1 license
-- Consultant deploys for 5 clients → 5 licenses (one per client)
-- Agency manages 10 customers → 10 licenses
+- Your company, 1 SAP system (5 environments) → FREE (no license)
+- Your company, 3 SAP systems → Commercial license required
+- Consultant deploys for 5 clients → 5 commercial licenses (one per client)
+- MSP/Agency hosts for customers → Commercial license per customer
 
-Sharing a single license across multiple clients is prohibited.
+Sharing a single license across multiple legal entities is prohibited.
 
 ---
 
