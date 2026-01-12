@@ -19,36 +19,42 @@ S4Kit uses a dual-license model: **Open Core**.
 - Commercial use allowed
 
 ### Platform (BSL 1.1)
-- Source code is available
-- Free for internal use, development, testing
-- Free for your own SAP integrations
-- **Requires commercial license** to:
-  - Offer as hosted service to others
-  - Build competing products
-  - Resell or white-label
+
+**Free to self-host** for your own organization:
+- 1 SAP system landscape
+- Up to 5 environments (sandbox/dev/qa/prod/training)
+- Internal business use (commercial or non-profit)
+- No license required
+
+**Requires commercial license** to:
+- Connect more than 1 SAP system
+- Offer as hosted service to others
+- Build competing products
+- Resell or white-label
+- Deploy for clients/customers
 
 ### After Change Date (2030-01-01)
 Platform code becomes Apache 2.0 (fully open source).
 
-## Per-Client Licensing
+## Free vs Commercial
 
-**Each end-client (legal entity) requires a separate license.**
-
-| Scenario | Licenses Required |
+| Scenario | License Required? |
 |----------|-------------------|
-| 1 company, 3 SAP systems (dev/qa/prod) | 1 |
-| Consultant, 5 clients | 5 (one per client) |
-| Agency hosting for 10 customers | 10 |
-
-One license = one organization, unlimited SAP systems.
-Sharing a license across multiple clients is prohibited.
+| Your company, 1 SAP system (5 envs) | **FREE** |
+| Your company, 3 SAP systems | Commercial |
+| Startup, 1 SAP system | **FREE** |
+| Enterprise, 1 SAP system | **FREE** |
+| Consultant, own internal use | **FREE** |
+| Consultant deploys for 5 clients | 5x Commercial |
+| MSP hosting for customers | Commercial per customer |
 
 ## Commercial Licensing
 
-Need a commercial license? Contact: hello@s4kit.dev
+Need a commercial license? Contact: contact@s4kit.com
 
 Commercial licenses include:
-- Self-hosted deployment rights
+- Multiple SAP system support
+- Multi-client deployment rights
 - Priority support
 - Custom SLA options
 
@@ -58,10 +64,21 @@ Commercial licenses include:
 Yes. MIT license allows any use.
 
 **Can I self-host the platform for my company?**
-Yes, for internal use. No license needed.
+Yes, for free! One SAP system with up to 5 environments, no license needed.
+
+**We're a large enterprise - is it still free?**
+Yes. Company size doesn't matter. 1 SAP system = free.
+
+**We have 3 SAP systems (different business units). Is it free?**
+No. More than 1 SAP system requires a commercial license.
 
 **Can I offer S4Kit as a service to my clients?**
-No. This requires a commercial license.
+No. This requires a commercial license per client.
 
 **Can consulting firms use S4Kit for client projects?**
-SDK: Yes (MIT). Platform hosting for clients: Requires commercial license.
+SDK: Yes (MIT). Platform hosting for clients: Requires commercial license per client.
+
+**What counts as "1 SAP system"?**
+One SAP system landscape - typically one S/4HANA instance with its environments
+(sandbox, development, quality, production, training). If you have separate
+SAP systems for different business units or subsidiaries, each counts separately.
