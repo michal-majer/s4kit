@@ -45,51 +45,39 @@ app.get('/', async (c) => {
   const organizationId = c.get('organizationId')!;
   const systemId = c.req.query('systemId');
 
-  // Get all system IDs belonging to this organization
-  const orgSystems = await db.select({ id: systems.id })
-    .from(systems)
-    .where(eq(systems.organizationId, organizationId));
-
-  const orgSystemIds = orgSystems.map(s => s.id);
-
-  // If no systems exist for this org, return empty array
-  if (orgSystemIds.length === 0) {
-    return c.json([]);
-  }
-
-  // Build where conditions
-  const whereConditions = [inArray(systemServices.systemId, orgSystemIds)];
+  // Build where conditions - always filter by organization
+  const whereConditions = [eq(systems.organizationId, organizationId)];
   if (systemId) {
     whereConditions.push(eq(systemServices.systemId, systemId));
   }
 
-  const services = await db.query.systemServices.findMany({
-    where: and(...whereConditions),
-    orderBy: [desc(systemServices.createdAt)]
-  });
+  // Single query with LEFT JOIN to fetch auth config data
+  const results = await db
+    .select({
+      // System service fields
+      id: systemServices.id,
+      systemId: systemServices.systemId,
+      predefinedServiceId: systemServices.predefinedServiceId,
+      name: systemServices.name,
+      alias: systemServices.alias,
+      servicePath: systemServices.servicePath,
+      description: systemServices.description,
+      entities: systemServices.entities,
+      odataVersion: systemServices.odataVersion,
+      authConfigId: systemServices.authConfigId,
+      createdAt: systemServices.createdAt,
+      updatedAt: systemServices.updatedAt,
+      // Auth config fields
+      authConfigName: authConfigurations.name,
+      authType: authConfigurations.authType,
+    })
+    .from(systemServices)
+    .innerJoin(systems, eq(systemServices.systemId, systems.id))
+    .leftJoin(authConfigurations, eq(systemServices.authConfigId, authConfigurations.id))
+    .where(and(...whereConditions))
+    .orderBy(desc(systemServices.createdAt));
 
-  // Include auth config info if linked
-  const result = await Promise.all(services.map(async (service) => {
-    let authConfigName: string | null = null;
-    let authType: string | null = null;
-
-    if (service.authConfigId) {
-      const config = await db.query.authConfigurations.findFirst({
-        where: eq(authConfigurations.id, service.authConfigId),
-        columns: { name: true, authType: true },
-      });
-      authConfigName = config?.name ?? null;
-      authType = config?.authType ?? null;
-    }
-
-    return {
-      ...service,
-      authConfigName,
-      authType,
-    };
-  }));
-
-  return c.json(result);
+  return c.json(results);
 });
 
 // Create system service

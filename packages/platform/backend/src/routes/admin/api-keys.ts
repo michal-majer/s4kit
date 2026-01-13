@@ -388,43 +388,52 @@ app.get('/:id/access', requirePermission('apiKey:read'), async (c) => {
     return c.json({ error: 'API key not found' }, 404);
   }
 
-  const grants = await db.query.apiKeyAccess.findMany({
-    where: eq(apiKeyAccess.apiKeyId, id)
-  });
-  
-  // Enrich with instance, service, and system info
-  const enrichedGrants = await Promise.all(grants.map(async (grant) => {
-    const instService = await db.query.instanceServices.findFirst({
-      where: eq(instanceServices.id, grant.instanceServiceId)
-    });
+  // Single query with JOINs to fetch all related data at once
+  const results = await db
+    .select({
+      // Grant fields
+      grantId: apiKeyAccess.id,
+      grantInstanceServiceId: apiKeyAccess.instanceServiceId,
+      grantPermissions: apiKeyAccess.permissions,
+      grantCreatedAt: apiKeyAccess.createdAt,
+      // Instance service fields
+      isEntities: instanceServices.entities,
+      // Instance fields
+      instId: instances.id,
+      instEnvironment: instances.environment,
+      // System service fields
+      svcId: systemServices.id,
+      svcName: systemServices.name,
+      svcAlias: systemServices.alias,
+      svcEntities: systemServices.entities,
+      // System fields
+      sysId: systems.id,
+      sysName: systems.name,
+    })
+    .from(apiKeyAccess)
+    .innerJoin(instanceServices, eq(apiKeyAccess.instanceServiceId, instanceServices.id))
+    .innerJoin(instances, eq(instanceServices.instanceId, instances.id))
+    .innerJoin(systems, eq(instances.systemId, systems.id))
+    .innerJoin(systemServices, eq(instanceServices.systemServiceId, systemServices.id))
+    .where(eq(apiKeyAccess.apiKeyId, id));
 
-    if (!instService) return { ...grant, instance: null, systemService: null, system: null };
-
-    const [inst, svc] = await Promise.all([
-      db.query.instances.findFirst({ where: eq(instances.id, instService.instanceId) }),
-      db.query.systemServices.findFirst({ where: eq(systemServices.id, instService.systemServiceId) })
-    ]);
-
-    // Get system info
-    let system = null;
-    if (inst) {
-      const sys = await db.query.systems.findFirst({ where: eq(systems.id, inst.systemId) });
-      if (sys) {
-        system = { id: sys.id, name: sys.name };
-      }
-    }
-
+  // Transform results to match expected format
+  const enrichedGrants = results.map((row) => {
     // Resolve entities: instance service override > system service fallback
-    const resolvedEntities = instService.entities !== null ? instService.entities : (svc?.entities || []);
+    const resolvedEntities = row.isEntities !== null ? row.isEntities : (row.svcEntities || []);
 
     return {
-      ...grant,
-      instance: inst ? { id: inst.id, environment: inst.environment } : null,
-      systemService: svc ? { id: svc.id, name: svc.name, alias: svc.alias, entities: resolvedEntities } : null,
-      system
+      id: row.grantId,
+      apiKeyId: id,
+      instanceServiceId: row.grantInstanceServiceId,
+      permissions: row.grantPermissions,
+      createdAt: row.grantCreatedAt,
+      instance: { id: row.instId, environment: row.instEnvironment },
+      systemService: { id: row.svcId, name: row.svcName, alias: row.svcAlias, entities: resolvedEntities },
+      system: { id: row.sysId, name: row.sysName },
     };
-  }));
-  
+  });
+
   return c.json(enrichedGrants);
 });
 
