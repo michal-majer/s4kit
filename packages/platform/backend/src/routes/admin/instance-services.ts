@@ -174,21 +174,8 @@ app.get('/', async (c) => {
   const instanceId = c.req.query('instanceId');
   const systemServiceId = c.req.query('systemServiceId');
 
-  // Get all instance IDs belonging to this organization's systems
-  const orgInstances = await db.select({ id: instances.id })
-    .from(instances)
-    .innerJoin(systems, eq(instances.systemId, systems.id))
-    .where(eq(systems.organizationId, organizationId));
-
-  const orgInstanceIds = orgInstances.map(i => i.id);
-
-  // If no instances exist for this org, return empty array
-  if (orgInstanceIds.length === 0) {
-    return c.json([]);
-  }
-
-  // Build where clause based on provided filters (always include org filter)
-  const whereConditions = [inArray(instanceServices.instanceId, orgInstanceIds)];
+  // Build where conditions for filtering
+  const whereConditions = [eq(systems.organizationId, organizationId)];
   if (instanceId) {
     whereConditions.push(eq(instanceServices.instanceId, instanceId));
   }
@@ -196,56 +183,74 @@ app.get('/', async (c) => {
     whereConditions.push(eq(instanceServices.systemServiceId, systemServiceId));
   }
 
-  const services = await db.query.instanceServices.findMany({
-    where: and(...whereConditions),
-  });
+  // Single query with JOINs to fetch all related data at once
+  const results = await db
+    .select({
+      // Instance service fields
+      id: instanceServices.id,
+      instanceId: instanceServices.instanceId,
+      systemServiceId: instanceServices.systemServiceId,
+      servicePathOverride: instanceServices.servicePathOverride,
+      entities: instanceServices.entities,
+      authConfigId: instanceServices.authConfigId,
+      verificationStatus: instanceServices.verificationStatus,
+      lastVerifiedAt: instanceServices.lastVerifiedAt,
+      verificationError: instanceServices.verificationError,
+      createdAt: instanceServices.createdAt,
+      // System service fields
+      ssId: systemServices.id,
+      ssName: systemServices.name,
+      ssAlias: systemServices.alias,
+      ssEntities: systemServices.entities,
+      ssOdataVersion: systemServices.odataVersion,
+      // Instance fields
+      instId: instances.id,
+      instEnvironment: instances.environment,
+      // Auth config fields (for instance service auth override)
+      authName: authConfigurations.name,
+      authType: authConfigurations.authType,
+    })
+    .from(instanceServices)
+    .innerJoin(instances, eq(instanceServices.instanceId, instances.id))
+    .innerJoin(systems, eq(instances.systemId, systems.id))
+    .innerJoin(systemServices, eq(instanceServices.systemServiceId, systemServices.id))
+    .leftJoin(authConfigurations, eq(instanceServices.authConfigId, authConfigurations.id))
+    .where(and(...whereConditions));
 
-  // Fetch related data
-  const enrichedServices = await Promise.all(services.map(async (is) => {
-    const systemService = await db.query.systemServices.findFirst({
-      where: eq(systemServices.id, is.systemServiceId)
-    });
-    const instance = await db.query.instances.findFirst({
-      where: eq(instances.id, is.instanceId)
-    });
-
+  // Transform results to match expected format
+  const enrichedServices = results.map((row) => {
     // Resolve entities: use instanceService.entities if set, otherwise inherit from systemService
-    const resolvedEntities = is.entities !== null ? is.entities : (systemService?.entities || []);
-
-    // Get auth config info if linked
-    let authConfigName: string | null = null;
-    let authType: string | null = null;
-
-    if (is.authConfigId) {
-      const config = await db.query.authConfigurations.findFirst({
-        where: eq(authConfigurations.id, is.authConfigId),
-        columns: { name: true, authType: true },
-      });
-      authConfigName = config?.name ?? null;
-      authType = config?.authType ?? null;
-    }
+    const resolvedEntities = row.entities !== null ? row.entities : (row.ssEntities || []);
 
     return {
-      ...is,
+      id: row.id,
+      instanceId: row.instanceId,
+      systemServiceId: row.systemServiceId,
+      servicePathOverride: row.servicePathOverride,
       entities: resolvedEntities,
+      authConfigId: row.authConfigId,
+      verificationStatus: row.verificationStatus,
+      lastVerifiedAt: row.lastVerifiedAt,
+      verificationError: row.verificationError,
+      createdAt: row.createdAt,
       entityCount: resolvedEntities.length,
-      hasAuthOverride: !!is.authConfigId,
-      hasEntityOverride: is.entities !== null,
-      authConfigName,
-      authType,
-      systemService: systemService ? {
-        id: systemService.id,
-        name: systemService.name,
-        alias: systemService.alias,
-        entities: systemService.entities,
-        odataVersion: systemService.odataVersion,
-      } : null,
-      instance: instance ? {
-        id: instance.id,
-        environment: instance.environment,
-      } : null,
+      hasAuthOverride: !!row.authConfigId,
+      hasEntityOverride: row.entities !== null,
+      authConfigName: row.authName,
+      authType: row.authType,
+      systemService: {
+        id: row.ssId,
+        name: row.ssName,
+        alias: row.ssAlias,
+        entities: row.ssEntities,
+        odataVersion: row.ssOdataVersion,
+      },
+      instance: {
+        id: row.instId,
+        environment: row.instEnvironment,
+      },
     };
-  }));
+  });
 
   // Sort by service name (case-insensitive)
   enrichedServices.sort((a, b) => {
