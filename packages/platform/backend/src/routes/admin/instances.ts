@@ -63,55 +63,34 @@ app.get('/', requirePermission('instance:read'), async (c) => {
   const organizationId = c.get('organizationId')!;
   const systemId = c.req.query('systemId');
 
-  // Get all systems for this organization
-  const orgSystems = await db.query.systems.findMany({
-    where: eq(systems.organizationId, organizationId),
-    columns: { id: true },
-  });
-  const orgSystemIds = orgSystems.map((s) => s.id);
-
-  if (orgSystemIds.length === 0) {
-    return c.json([]);
-  }
-
-  let whereCondition;
+  // Build where conditions - always filter by organization
+  const whereConditions = [eq(systems.organizationId, organizationId)];
   if (systemId) {
-    // Verify systemId belongs to org
-    if (!orgSystemIds.includes(systemId)) {
-      return c.json({ error: 'System not found' }, 404);
-    }
-    whereCondition = eq(instances.systemId, systemId);
-  } else {
-    whereCondition = inArray(instances.systemId, orgSystemIds);
+    whereConditions.push(eq(instances.systemId, systemId));
   }
 
-  const allInstances = await db.query.instances.findMany({
-    where: whereCondition,
-    orderBy: [desc(instances.createdAt)],
-  });
+  // Single query with LEFT JOIN to fetch auth config data
+  const results = await db
+    .select({
+      // Instance fields
+      id: instances.id,
+      systemId: instances.systemId,
+      environment: instances.environment,
+      baseUrl: instances.baseUrl,
+      authConfigId: instances.authConfigId,
+      createdAt: instances.createdAt,
+      updatedAt: instances.updatedAt,
+      // Auth config fields
+      authConfigName: authConfigurations.name,
+      authType: authConfigurations.authType,
+    })
+    .from(instances)
+    .innerJoin(systems, eq(instances.systemId, systems.id))
+    .leftJoin(authConfigurations, eq(instances.authConfigId, authConfigurations.id))
+    .where(and(...whereConditions))
+    .orderBy(desc(instances.createdAt));
 
-  // Include auth config name if linked
-  const result = await Promise.all(allInstances.map(async (instance) => {
-    let authConfigName: string | null = null;
-    let authType: string | null = null;
-
-    if (instance.authConfigId) {
-      const config = await db.query.authConfigurations.findFirst({
-        where: eq(authConfigurations.id, instance.authConfigId),
-        columns: { name: true, authType: true },
-      });
-      authConfigName = config?.name ?? null;
-      authType = config?.authType ?? null;
-    }
-
-    return {
-      ...instance,
-      authConfigName,
-      authType,
-    };
-  }));
-
-  return c.json(result);
+  return c.json(results);
 });
 
 // Create instance
