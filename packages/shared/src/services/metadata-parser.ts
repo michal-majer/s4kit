@@ -23,7 +23,7 @@ async function fetchOAuthToken(config: {
     formData.append('scope', config.scope);
   }
 
-  const basicAuth = btoa(`${config.clientId}:${config.clientSecret}`);
+  const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`, 'utf-8').toString('base64');
 
   const response = await fetch(config.tokenUrl, {
     method: 'POST',
@@ -59,15 +59,29 @@ export function buildServiceUrl(rawBaseUrl: string, rawServicePath: string, suff
   let baseUrl = rawBaseUrl.replace(/\/$/, '');
   const servicePath = rawServicePath.replace(/^\//, '').replace(/\/$/, '');
 
-  // Check if baseUrl ends with a prefix of servicePath (overlap detection)
-  // This handles cases where users include "/sap/opu/odata/sap/" in their base URL
-  const servicePathSegments = servicePath.split('/');
-  for (let i = servicePathSegments.length - 1; i > 0; i--) {
-    const prefix = servicePathSegments.slice(0, i).join('/');
-    if (prefix && (baseUrl.endsWith('/' + prefix) || baseUrl.endsWith(prefix))) {
-      // Remove overlapping prefix from baseUrl
-      baseUrl = baseUrl.slice(0, baseUrl.length - prefix.length).replace(/\/$/, '');
-      break;
+  // Parse baseUrl to get just the path portion for overlap detection
+  // This prevents matching hostname parts (e.g., ".sap" TLD) as path segments
+  let baseUrlPath = '';
+  try {
+    const parsed = new URL(baseUrl);
+    baseUrlPath = parsed.pathname;
+  } catch {
+    // If URL parsing fails, skip overlap detection
+    return `${baseUrl}/${servicePath}${suffix}`;
+  }
+
+  // Only do overlap detection if baseUrl has a path (not just hostname)
+  if (baseUrlPath && baseUrlPath !== '/') {
+    // Check if baseUrl path ends with a prefix of servicePath (overlap detection)
+    // This handles cases where users include "/sap/opu/odata/sap/" in their base URL
+    const servicePathSegments = servicePath.split('/');
+    for (let i = servicePathSegments.length - 1; i > 0; i--) {
+      const prefix = servicePathSegments.slice(0, i).join('/');
+      if (prefix && (baseUrlPath.endsWith('/' + prefix) || baseUrlPath === '/' + prefix)) {
+        // Remove overlapping prefix from baseUrl
+        baseUrl = baseUrl.slice(0, baseUrl.length - prefix.length).replace(/\/$/, '');
+        break;
+      }
     }
   }
 
@@ -339,7 +353,9 @@ async function buildAuthHeaders(
   if (authType === 'basic') {
     const username = auth.username ? encryption.decrypt(auth.username) : '';
     const password = auth.password ? encryption.decrypt(auth.password) : '';
-    headers['Authorization'] = `Basic ${btoa(`${username}:${password}`)}`;
+    // Use Buffer for base64 encoding to handle special characters properly
+    const base64Credentials = Buffer.from(`${username}:${password}`, 'utf-8').toString('base64');
+    headers['Authorization'] = `Basic ${base64Credentials}`;
   } else if (authType === 'custom') {
     const authConfig = auth.config as any;
     const credentials = auth.credentials as any;

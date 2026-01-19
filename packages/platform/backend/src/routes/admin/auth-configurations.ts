@@ -76,35 +76,36 @@ function buildAuthData(data: z.infer<typeof authConfigSchema>) {
   };
 
   if (authType === 'basic' && username && password) {
-    result.username = encryption.encrypt(username);
-    result.password = encryption.encrypt(password);
+    result.username = encryption.encrypt(username.trim());
+    result.password = encryption.encrypt(password.trim());
   } else if (authType === 'oauth2') {
     result.authConfig = {
-      tokenUrl: oauth2TokenUrl,
-      scope: oauth2Scope,
-      authorizationUrl: oauth2AuthorizationUrl,
-      clientId: oauth2ClientId,
+      tokenUrl: oauth2TokenUrl?.trim(),
+      scope: oauth2Scope?.trim(),
+      authorizationUrl: oauth2AuthorizationUrl?.trim(),
+      clientId: oauth2ClientId?.trim(),
     };
     result.credentials = {
-      clientSecret: oauth2ClientSecret ? encryption.encrypt(oauth2ClientSecret) : undefined,
+      clientSecret: oauth2ClientSecret ? encryption.encrypt(oauth2ClientSecret.trim()) : undefined,
     };
   } else if (authType === 'custom') {
     if (customHeaderName && customHeaderValue) {
       result.authConfig = {
-        headerName: customHeaderName,
+        headerName: customHeaderName.trim(),
       };
       result.credentials = {
-        headerValue: encryption.encrypt(customHeaderValue),
+        headerValue: encryption.encrypt(customHeaderValue.trim()),
       };
     } else if (authConfig) {
       result.authConfig = authConfig;
       if (credentials) {
         const encryptedCredentials: any = {};
         for (const [key, value] of Object.entries(credentials)) {
-          if (typeof value === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
-            encryptedCredentials[key] = encryption.encrypt(value);
+          const trimmedValue = typeof value === 'string' ? value.trim() : value;
+          if (typeof trimmedValue === 'string' && (key.toLowerCase().includes('secret') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password'))) {
+            encryptedCredentials[key] = encryption.encrypt(trimmedValue);
           } else {
-            encryptedCredentials[key] = value;
+            encryptedCredentials[key] = trimmedValue;
           }
         }
         result.credentials = encryptedCredentials;
@@ -143,11 +144,11 @@ function buildAuthDataForUpdate(
   } else if (authType === 'basic') {
     // Only update username if provided
     if (data.username) {
-      updateFields.username = encryption.encrypt(data.username);
+      updateFields.username = encryption.encrypt(data.username.trim());
     }
     // Only update password if provided
     if (data.password) {
-      updateFields.password = encryption.encrypt(data.password);
+      updateFields.password = encryption.encrypt(data.password.trim());
     }
     // Clear other auth types' data when changing to basic
     if (data.authType && data.authType !== existing.authType) {
@@ -158,15 +159,15 @@ function buildAuthDataForUpdate(
     // Build authConfig with updates, preserving existing values
     const existingAuthConfig = (existing.authConfig as any) || {};
     updateFields.authConfig = {
-      tokenUrl: data.oauth2TokenUrl ?? existingAuthConfig.tokenUrl,
-      scope: data.oauth2Scope !== undefined ? data.oauth2Scope : existingAuthConfig.scope,
-      authorizationUrl: data.oauth2AuthorizationUrl ?? existingAuthConfig.authorizationUrl,
-      clientId: data.oauth2ClientId ?? existingAuthConfig.clientId,
+      tokenUrl: data.oauth2TokenUrl?.trim() ?? existingAuthConfig.tokenUrl,
+      scope: data.oauth2Scope !== undefined ? data.oauth2Scope?.trim() : existingAuthConfig.scope,
+      authorizationUrl: data.oauth2AuthorizationUrl?.trim() ?? existingAuthConfig.authorizationUrl,
+      clientId: data.oauth2ClientId?.trim() ?? existingAuthConfig.clientId,
     };
     // Only update clientSecret if provided
     if (data.oauth2ClientSecret) {
       updateFields.credentials = {
-        clientSecret: encryption.encrypt(data.oauth2ClientSecret),
+        clientSecret: encryption.encrypt(data.oauth2ClientSecret.trim()),
       };
     }
     // Clear basic auth data when changing to oauth2
@@ -179,13 +180,13 @@ function buildAuthDataForUpdate(
     const existingAuthConfig = (existing.authConfig as any) || {};
     if (data.customHeaderName || existingAuthConfig.headerName) {
       updateFields.authConfig = {
-        headerName: data.customHeaderName ?? existingAuthConfig.headerName,
+        headerName: data.customHeaderName?.trim() ?? existingAuthConfig.headerName,
       };
     }
     // Only update headerValue if provided
     if (data.customHeaderValue) {
       updateFields.credentials = {
-        headerValue: encryption.encrypt(data.customHeaderValue),
+        headerValue: encryption.encrypt(data.customHeaderValue.trim()),
       };
     }
     // Clear other auth data when changing to custom
