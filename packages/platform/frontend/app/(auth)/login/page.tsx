@@ -293,18 +293,9 @@ function LoginContent() {
           />
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-medium">
-              Password
-            </Label>
-            <Link
-              href="/forgot-password"
-              tabIndex={-1}
-              className="text-sm font-medium text-accent hover:text-accent/80 transition-colors"
-            >
-              Forgot password?
-            </Link>
-          </div>
+          <Label htmlFor="password" className="text-sm font-medium">
+            Password
+          </Label>
           <Input
             id="password"
             type="password"
@@ -314,6 +305,13 @@ function LoginContent() {
             disabled={loading}
             autoComplete="current-password"
           />
+          <Link
+            href="/forgot-password"
+            tabIndex={-1}
+            className="block text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Forgot password?
+          </Link>
         </div>
         <Button type="submit" className="w-full h-11" disabled={loading}>
           {loading ? (

@@ -6,7 +6,6 @@ import { api, type OnboardingData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   Loader2,
@@ -32,7 +31,6 @@ const STEPS = [
 interface FormData {
   organizationName: string;
   apiHubApiKey: string;
-  skipApiHubAuth: boolean;
 }
 
 export default function OnboardingPage() {
@@ -44,7 +42,6 @@ export default function OnboardingPage() {
   const [formData, setFormData] = useState<FormData>({
     organizationName: '',
     apiHubApiKey: '',
-    skipApiHubAuth: false,
   });
 
   useEffect(() => {
@@ -101,8 +98,7 @@ export default function OnboardingPage() {
     try {
       const data: OnboardingData = {
         organizationName: formData.organizationName.trim(),
-        apiHubApiKey: formData.skipApiHubAuth ? undefined : formData.apiHubApiKey || undefined,
-        skipApiHubAuth: formData.skipApiHubAuth,
+        apiHubApiKey: formData.apiHubApiKey || undefined,
       };
 
       await api.onboarding.complete(data);
@@ -274,7 +270,7 @@ export default function OnboardingPage() {
                   placeholder="Enter your SAP API Hub API key"
                   value={formData.apiHubApiKey}
                   onChange={(e) => setFormData((prev) => ({ ...prev, apiHubApiKey: e.target.value }))}
-                  disabled={submitting || formData.skipApiHubAuth}
+                  disabled={submitting}
                   className="pr-10"
                 />
                 <button
@@ -298,20 +294,6 @@ export default function OnboardingPage() {
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </p>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="skipApiHubAuth"
-                checked={formData.skipApiHubAuth}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({ ...prev, skipApiHubAuth: checked === true }))
-                }
-                disabled={submitting}
-              />
-              <Label htmlFor="skipApiHubAuth" className="text-sm text-muted-foreground cursor-pointer">
-                Configure authentication later
-              </Label>
             </div>
 
             <div className="flex flex-col gap-3">

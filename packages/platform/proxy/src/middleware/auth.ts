@@ -46,9 +46,15 @@ export const authMiddleware = createMiddleware<{ Variables: Variables }>(async (
   const apiKey = validationResult.apiKey;
 
   // 2. Get service from header OR resolve from entity name
-  let serviceAlias = c.req.header('X-S4Kit-Service');
+  const serviceAliasHeader = c.req.header('X-S4Kit-Service');
+  let serviceIdOrAlias: string;
+  let resolvedServiceAlias: string;
 
-  if (!serviceAlias) {
+  if (serviceAliasHeader) {
+    // Use explicit service alias from header
+    serviceIdOrAlias = serviceAliasHeader;
+    resolvedServiceAlias = serviceAliasHeader;
+  } else {
     // Extract entity name from path and resolve service
     const entityName = extractEntityFromPath(c.req.path);
 
@@ -61,7 +67,9 @@ export const authMiddleware = createMiddleware<{ Variables: Variables }>(async (
     if (!service) {
       return c.json({ error: `Unknown entity '${entityName}' - not registered in any service you have access to` }, 404);
     }
-    serviceAlias = service.alias;
+    // Use the service ID to ensure we resolve the correct service (not another with same alias)
+    serviceIdOrAlias = service.id;
+    resolvedServiceAlias = service.alias;
   }
 
   // 3. Get instance environment from header (optional - used as override if API key has multiple instances)
@@ -71,39 +79,18 @@ export const authMiddleware = createMiddleware<{ Variables: Variables }>(async (
   const accessGrant = await accessResolver.resolveAccessGrantByService(
     apiKey.id,
     apiKey.organizationId,
-    serviceAlias,
+    serviceIdOrAlias,
     instanceEnvironment
   );
 
   if (!accessGrant) {
     if (instanceEnvironment) {
       return c.json({
-        error: `No access to instance '${instanceEnvironment}' + service '${serviceAlias}'`
+        error: `No access to instance '${instanceEnvironment}' + service '${resolvedServiceAlias}'`
       }, 403);
     } else {
-      // Get all instances for this API key and service to provide a helpful error
-      const service = await accessResolver.findServiceByAlias(apiKey.organizationId, serviceAlias);
-      if (service) {
-        const instances = await accessResolver.getInstancesForApiKey(
-          apiKey.id,
-          apiKey.organizationId,
-          service.id
-        );
-
-        if (instances.length === 0) {
-          return c.json({
-            error: `No access to service '${serviceAlias}' for this API key`
-          }, 403);
-        } else if (instances.length > 1) {
-          const envs = instances.map(i => i.instance.environment).join(', ');
-          return c.json({
-            error: `Multiple instances available for service '${serviceAlias}'. Please specify X-S4Kit-Instance header. Available: ${envs}`
-          }, 400);
-        }
-      }
-
       return c.json({
-        error: `No access to service '${serviceAlias}'`
+        error: `No access to service '${resolvedServiceAlias}' for this API key`
       }, 403);
     }
   }

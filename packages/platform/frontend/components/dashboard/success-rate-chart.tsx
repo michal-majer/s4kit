@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -71,6 +71,12 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const chartData = useMemo(() => {
     return data.map((d) => ({
       ...d,
@@ -103,84 +109,88 @@ export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
       className={className}
     >
       <div className="h-[280px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={chartData}
-            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient id="successRateGradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#10b981" />
-                <stop offset="50%" stopColor="#22c55e" />
-                <stop offset="100%" stopColor="#10b981" />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="hsl(var(--border))"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="dateFormatted"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-              dy={8}
-            />
-            <YAxis
-              domain={[
-                (dataMin: number) => Math.max(0, Math.floor(dataMin - 5)),
-                100
-              ]}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-              tickFormatter={(value) => `${value}%`}
-              width={50}
-            />
-            <Tooltip
-              content={<CustomTooltip />}
-              cursor={{
-                stroke: 'hsl(var(--muted-foreground))',
-                strokeWidth: 1,
-                strokeDasharray: '4 4',
-              }}
-            />
-            {/* Target line at 99% */}
-            <ReferenceLine
-              y={99}
-              stroke="hsl(var(--muted-foreground))"
-              strokeDasharray="4 4"
-              strokeOpacity={0.5}
-              label={{
-                value: 'Target 99%',
-                position: 'insideTopRight',
-                fill: 'hsl(var(--muted-foreground))',
-                fontSize: 10,
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="successRate"
-              stroke="url(#successRateGradient)"
-              strokeWidth={2.5}
-              dot={{
-                fill: 'hsl(var(--background))',
-                stroke: '#10b981',
-                strokeWidth: 2,
-                r: 4,
-              }}
-              activeDot={{
-                fill: '#10b981',
-                stroke: 'hsl(var(--background))',
-                strokeWidth: 2,
-                r: 6,
-              }}
-              animationDuration={1000}
-              animationEasing="ease-out"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        {isMounted ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="successRateGradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#10b981" />
+                  <stop offset="50%" stopColor="#22c55e" />
+                  <stop offset="100%" stopColor="#10b981" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="dateFormatted"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                dy={8}
+              />
+              <YAxis
+                domain={[
+                  (dataMin: number) => Math.max(0, Math.floor(dataMin - 5)),
+                  100
+                ]}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tickFormatter={(value) => `${value}%`}
+                width={50}
+              />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{
+                  stroke: 'hsl(var(--muted-foreground))',
+                  strokeWidth: 1,
+                  strokeDasharray: '4 4',
+                }}
+              />
+              {/* Target line at 99% */}
+              <ReferenceLine
+                y={99}
+                stroke="hsl(var(--muted-foreground))"
+                strokeDasharray="4 4"
+                strokeOpacity={0.5}
+                label={{
+                  value: 'Target 99%',
+                  position: 'insideTopRight',
+                  fill: 'hsl(var(--muted-foreground))',
+                  fontSize: 10,
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="successRate"
+                stroke="url(#successRateGradient)"
+                strokeWidth={2.5}
+                dot={{
+                  fill: 'hsl(var(--background))',
+                  stroke: '#10b981',
+                  strokeWidth: 2,
+                  r: 4,
+                }}
+                activeDot={{
+                  fill: '#10b981',
+                  stroke: 'hsl(var(--background))',
+                  strokeWidth: 2,
+                  r: 6,
+                }}
+                animationDuration={1000}
+                animationEasing="ease-out"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full w-full animate-pulse rounded bg-muted/50" />
+        )}
       </div>
     </ChartCard>
   );

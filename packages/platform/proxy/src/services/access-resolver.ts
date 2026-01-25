@@ -207,15 +207,17 @@ export const accessResolver = {
   /**
    * Resolve full access grant for an API key + service combination
    * If multiple instances exist, returns null unless instanceId is specified
+   *
+   * @param serviceIdOrAlias - Either a service ID (UUID) or service alias
    */
   resolveAccessGrantByService: async (
     apiKeyId: string,
     organizationId: string,
-    serviceAlias: string,
+    serviceIdOrAlias: string,
     instanceEnvironment?: string
   ): Promise<ResolvedAccess | null> => {
     // Check cache first
-    const cacheKey = `access:${apiKeyId}:${serviceAlias}:${instanceEnvironment || 'default'}`;
+    const cacheKey = `access:${apiKeyId}:${serviceIdOrAlias}:${instanceEnvironment || 'default'}`;
     const cached = await redis.get(cacheKey);
 
     if (cached) {
@@ -226,8 +228,24 @@ export const accessResolver = {
       }
     }
 
-    // Find the service by alias
-    const sysService = await accessResolver.findServiceByAlias(organizationId, serviceAlias);
+    // Determine if we have a service ID (UUID format) or alias
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceIdOrAlias);
+
+    let sysService: SystemService | null = null;
+    if (isUuid) {
+      // Direct lookup by ID
+      sysService = await db.query.systemServices.findFirst({
+        where: eq(systemServices.id, serviceIdOrAlias)
+      }) ?? null;
+    } else {
+      // Lookup by alias - but prefer services the API key has access to
+      sysService = await accessResolver.findServiceByAliasForApiKey(apiKeyId, organizationId, serviceIdOrAlias);
+      // Fall back to org-wide lookup if not found (for explicit X-S4Kit-Service header)
+      if (!sysService) {
+        sysService = await accessResolver.findServiceByAlias(organizationId, serviceIdOrAlias);
+      }
+    }
+
     if (!sysService) {
       return null;
     }
@@ -273,6 +291,62 @@ export const accessResolver = {
     }
 
     return result;
+  },
+
+  /**
+   * Find a service by alias - but only among services the API key has access to
+   */
+  findServiceByAliasForApiKey: async (
+    apiKeyId: string,
+    organizationId: string,
+    alias: string
+  ): Promise<SystemService | null> => {
+    // Get all access grants for this API key
+    const accessGrants = await db.query.apiKeyAccess.findMany({
+      where: eq(apiKeyAccess.apiKeyId, apiKeyId)
+    });
+
+    if (accessGrants.length === 0) {
+      return null;
+    }
+
+    // Get all instance-service records for these grants
+    const instanceServiceIds = accessGrants.map(g => g.instanceServiceId);
+    const instServices = await db.query.instanceServices.findMany({
+      where: inArray(instanceServices.id, instanceServiceIds)
+    });
+
+    // Get unique system service IDs
+    const systemServiceIds = [...new Set(instServices.map(is => is.systemServiceId))];
+
+    if (systemServiceIds.length === 0) {
+      return null;
+    }
+
+    // Get the system services matching the alias
+    const sysServices = await db.query.systemServices.findMany({
+      where: and(
+        inArray(systemServices.id, systemServiceIds),
+        eq(systemServices.alias, alias)
+      )
+    });
+
+    if (sysServices.length === 0) {
+      return null;
+    }
+
+    // Filter to only services belonging to systems in this organization
+    const systemIds = [...new Set(sysServices.map(ss => ss.systemId))];
+    const syss = await db.query.systems.findMany({
+      where: and(
+        inArray(systems.id, systemIds),
+        eq(systems.organizationId, organizationId)
+      )
+    });
+    const validSystemIds = new Set(syss.map(s => s.id));
+
+    // Return the first valid service
+    return sysServices.find(ss => validSystemIds.has(ss.systemId)) ?? null;
   },
 
   /**
