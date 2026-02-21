@@ -9,7 +9,11 @@ import { eq, and } from 'drizzle-orm';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email';
 import { getXsuaaOAuthConfig, mapXsuaaScopesToRole } from './xsuaa-provider';
 
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+const frontendUrlRaw = process.env.FRONTEND_URL || 'http://localhost:3001';
+// Support comma-separated origins (e.g., "https://www.s4kit.com,https://s4kit.com")
+const allowedOrigins = frontendUrlRaw.split(',').map(u => u.trim()).filter(Boolean);
+// Primary frontend URL used for callback URLs
+const frontendUrl = allowedOrigins[0]!;
 
 // Auto-detect backend URL from CF, Railway, or explicit config
 const getBackendUrl = () => {
@@ -98,7 +102,7 @@ export const auth = betterAuth({
   baseURL: getBackendUrl(),
   secret: process.env.BETTER_AUTH_SECRET,
 
-  trustedOrigins: [frontendUrl],
+  trustedOrigins: allowedOrigins,
 
   advanced: {
     defaultCookieAttributes: {
