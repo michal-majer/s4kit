@@ -58,7 +58,14 @@ app.use('*', securityHeaders)
 const frontendUrlRaw = process.env.FRONTEND_URL || 'http://localhost:3001'
 
 // Support comma-separated origins (e.g., "https://www.s4kit.com,https://s4kit.com")
-const allowedOrigins = frontendUrlRaw.split(',').map(u => u.trim()).filter(Boolean)
+const frontendOrigins = frontendUrlRaw.split(',').map(u => u.trim()).filter(Boolean)
+
+// Marketing site origins (allowed to check auth status via /admin/me)
+const marketingOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://s4kit.com', 'https://www.s4kit.com']
+  : []
+
+const allowedOrigins = [...frontendOrigins, ...marketingOrigins]
 
 // Validate CORS origins in production
 if (process.env.NODE_ENV === 'production') {
