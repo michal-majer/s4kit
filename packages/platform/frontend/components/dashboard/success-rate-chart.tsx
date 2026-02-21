@@ -14,6 +14,7 @@ import {
 import { ChartCard } from './chart-card';
 import { CheckCircle2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useTheme } from 'next-themes';
 import type { DailyStats } from './request-volume-chart';
 
 interface SuccessRateChartProps {
@@ -72,6 +73,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
 export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
     setIsMounted(true);
@@ -96,6 +99,11 @@ export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
   const rateColor = averageRate >= 99 ? 'text-emerald-600 dark:text-emerald-400' :
     averageRate >= 95 ? 'text-amber-600 dark:text-amber-400' :
     'text-red-600 dark:text-red-400';
+
+  // Theme-aware colors
+  const axisColor = isDark ? '#94a3b8' : '#64748b';
+  const gridColor = isDark ? '#334155' : '#e2e8f0';
+  const bgColor = isDark ? '#1e293b' : '#ffffff';
 
   return (
     <ChartCard
@@ -124,14 +132,14 @@ export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
               </defs>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
+                stroke={gridColor}
                 vertical={false}
               />
               <XAxis
                 dataKey="dateFormatted"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tick={{ fill: axisColor, fontSize: 12 }}
                 dy={8}
               />
               <YAxis
@@ -141,14 +149,14 @@ export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
                 ]}
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tick={{ fill: axisColor, fontSize: 12 }}
                 tickFormatter={(value) => `${value}%`}
                 width={50}
               />
               <Tooltip
                 content={<CustomTooltip />}
                 cursor={{
-                  stroke: 'hsl(var(--muted-foreground))',
+                  stroke: axisColor,
                   strokeWidth: 1,
                   strokeDasharray: '4 4',
                 }}
@@ -156,13 +164,13 @@ export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
               {/* Target line at 99% */}
               <ReferenceLine
                 y={99}
-                stroke="hsl(var(--muted-foreground))"
+                stroke={axisColor}
                 strokeDasharray="4 4"
                 strokeOpacity={0.5}
                 label={{
                   value: 'Target 99%',
                   position: 'insideTopRight',
-                  fill: 'hsl(var(--muted-foreground))',
+                  fill: axisColor,
                   fontSize: 10,
                 }}
               />
@@ -172,14 +180,14 @@ export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
                 stroke="url(#successRateGradient)"
                 strokeWidth={2.5}
                 dot={{
-                  fill: 'hsl(var(--background))',
+                  fill: bgColor,
                   stroke: '#10b981',
                   strokeWidth: 2,
                   r: 4,
                 }}
                 activeDot={{
                   fill: '#10b981',
-                  stroke: 'hsl(var(--background))',
+                  stroke: bgColor,
                   strokeWidth: 2,
                   r: 6,
                 }}

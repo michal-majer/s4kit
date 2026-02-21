@@ -14,6 +14,7 @@ import {
 import { ChartCard } from './chart-card';
 import { Timer } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useTheme } from 'next-themes';
 import type { DailyStats } from './request-volume-chart';
 
 interface LatencyChartProps {
@@ -106,6 +107,8 @@ function CustomLegend({ payload }: CustomLegendProps) {
 
 export function LatencyChart({ data, className }: LatencyChartProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
     setIsMounted(true);
@@ -123,6 +126,10 @@ export function LatencyChart({ data, className }: LatencyChartProps) {
     const total = data.reduce((sum, d) => sum + d.avgResponseTime, 0);
     return total / data.length;
   }, [data]);
+
+  // Theme-aware colors
+  const axisColor = isDark ? '#94a3b8' : '#64748b';
+  const gridColor = isDark ? '#334155' : '#e2e8f0';
 
   return (
     <ChartCard
@@ -150,27 +157,27 @@ export function LatencyChart({ data, className }: LatencyChartProps) {
               </defs>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
+                stroke={gridColor}
                 vertical={false}
               />
               <XAxis
                 dataKey="dateFormatted"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tick={{ fill: axisColor, fontSize: 12 }}
                 dy={8}
               />
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tick={{ fill: axisColor, fontSize: 12 }}
                 tickFormatter={(value) => formatMs(value)}
                 width={55}
               />
               <Tooltip
                 content={<CustomTooltip />}
                 cursor={{
-                  stroke: 'hsl(var(--muted-foreground))',
+                  stroke: axisColor,
                   strokeWidth: 1,
                   strokeDasharray: '4 4',
                 }}

@@ -13,6 +13,7 @@ import {
 import { ChartCard } from './chart-card';
 import { Activity } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useTheme } from 'next-themes';
 
 export interface DailyStats {
   date: string;
@@ -82,6 +83,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
 export function RequestVolumeChart({ data, className }: RequestVolumeChartProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
     setIsMounted(true);
@@ -97,6 +100,10 @@ export function RequestVolumeChart({ data, className }: RequestVolumeChartProps)
   const totalRequests = useMemo(() => {
     return data.reduce((sum, d) => sum + d.totalRequests, 0);
   }, [data]);
+
+  // Theme-aware colors
+  const axisColor = isDark ? '#94a3b8' : '#64748b';
+  const gridColor = isDark ? '#334155' : '#e2e8f0';
 
   return (
     <ChartCard
@@ -124,27 +131,27 @@ export function RequestVolumeChart({ data, className }: RequestVolumeChartProps)
               </defs>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
+                stroke={gridColor}
                 vertical={false}
               />
               <XAxis
                 dataKey="dateFormatted"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tick={{ fill: axisColor, fontSize: 12 }}
                 dy={8}
               />
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                tick={{ fill: axisColor, fontSize: 12 }}
                 tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
                 width={50}
               />
               <Tooltip
                 content={<CustomTooltip />}
                 cursor={{
-                  stroke: 'hsl(var(--muted-foreground))',
+                  stroke: axisColor,
                   strokeWidth: 1,
                   strokeDasharray: '4 4',
                 }}
