@@ -8,3 +8,5 @@ startCommand = "bun run src/index.ts"
 numReplicas = 1
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+healthcheckPath = "/health"
+healthcheckTimeout = 120
