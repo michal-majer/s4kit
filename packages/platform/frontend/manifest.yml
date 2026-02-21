@@ -11,7 +11,7 @@ applications:
       - https://github.com/michal-majer/cloudfoundry-buildpack-bun.git
 
     # Build and start commands
-    command: cd packages/platform/frontend && NEXT_PUBLIC_API_URL=https://s4kit-backend.cfapps.us10-001.hana.ondemand.com bun run build && bun run start
+    command: cd packages/platform/frontend && NEXT_PUBLIC_API_URL=https://api.s4kit.com bun run build && bun run start
 
     health-check-type: http
     health-check-http-endpoint: /
@@ -20,7 +20,7 @@ applications:
     env:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
-      NEXT_PUBLIC_API_URL: https://s4kit-backend.cfapps.us10-001.hana.ondemand.com
+      NEXT_PUBLIC_API_URL: https://api.s4kit.com
 
     routes:
-      - route: s4kit-frontend.cfapps.us10-001.hana.ondemand.com
+      - route: app.s4kit.com
