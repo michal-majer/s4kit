@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import {
   AreaChart,
   Area,
@@ -82,13 +82,9 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function RequestVolumeChart({ data, className }: RequestVolumeChartProps) {
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const chartData = useMemo(() => {
     return data.map((d) => ({
