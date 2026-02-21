@@ -381,13 +381,13 @@ function SignUpContent() {
       {/* Terms */}
       <p className="text-center text-xs text-muted-foreground">
         By creating an account, you agree to our{' '}
-        <Link href="/terms" className="underline underline-offset-4 hover:text-foreground">
+        <a href="https://s4kit.com/terms" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-foreground">
           Terms of Service
-        </Link>{' '}
+        </a>{' '}
         and{' '}
-        <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
+        <a href="https://s4kit.com/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-foreground">
           Privacy Policy
-        </Link>
+        </a>
       </p>
 
       {/* Footer */}
