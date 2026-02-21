@@ -4,7 +4,7 @@ dockerfilePath = "packages/platform/backend/Dockerfile"
 watchPatterns = ["packages/platform/backend/**", "packages/shared/**"]
 
 [deploy]
-startCommand = "bun run src/db/seed.ts && bun run src/index.ts"
+startCommand = "bun run src/index.ts"
 numReplicas = 1
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
