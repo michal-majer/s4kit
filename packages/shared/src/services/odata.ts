@@ -176,7 +176,7 @@ export function parseODataError(errorResponse: any): ODataError {
 export function stripODataMetadata<T extends Record<string, any>>(entity: T): T {
   if (!entity || typeof entity !== 'object') return entity;
   if (Array.isArray(entity)) {
-    return entity.map(item => stripODataMetadata(item)) as T;
+    return entity.map(item => stripODataMetadata(item)) as unknown as T;
   }
 
   const cleaned: Record<string, any> = {};
