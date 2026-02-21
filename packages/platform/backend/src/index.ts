@@ -192,4 +192,9 @@ async function warmupConnections() {
 // Run warmup in background (don't block server start)
 warmupConnections()
 
-export default app
+const port = Number(process.env.PORT) || 3000
+
+export default {
+  fetch: app.fetch,
+  port,
+}
