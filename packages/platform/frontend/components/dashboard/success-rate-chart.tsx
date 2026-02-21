@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import {
   LineChart,
   Line,
@@ -72,13 +72,9 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function SuccessRateChart({ data, className }: SuccessRateChartProps) {
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const chartData = useMemo(() => {
     return data.map((d) => ({
