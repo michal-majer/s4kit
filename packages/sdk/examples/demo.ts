@@ -14,7 +14,7 @@ import { S4Kit, NotFoundError, ValidationError, S4KitError } from '../src';
 
 const client = S4Kit({
   apiKey: process.env.S4KIT_API_KEY || 's4k_live_xxx',
-  baseUrl: process.env.S4KIT_BASE_URL || 'https://staging.proxy.s4kit.com/api/proxy',
+  baseUrl: process.env.S4KIT_BASE_URL || 'https://api.s4kit.com/api/proxy',
 });
 
 console.log('S4Kit Demo\n');

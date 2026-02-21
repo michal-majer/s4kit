@@ -8,7 +8,7 @@ Type-safe SDK for consuming SAP APIs. Build Clean Core applications faster.
 
 Works with Next.js, Express, Hono, Fastify, NestJS, Remix, and any Node.js framework.
 
-[Documentation](https://docs.s4kit.com) · [Get API Key](https://staging.app.s4kit.com) · [Examples](./examples/)
+[Documentation](https://docs.s4kit.com) · [Get API Key](https://app.s4kit.com) · [Examples](./examples/)
 
 ```bash
 npm install s4kit    # or yarn add s4kit / pnpm add s4kit / bun add s4kit
@@ -34,7 +34,7 @@ const partners = await client.A_BusinessPartner.list({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | required | Your S4Kit API key |
-| `baseUrl` | `string` | `https://staging.proxy.s4kit.com/api/proxy` | API endpoint |
+| `baseUrl` | `string` | `https://api.s4kit.com/api/proxy` | API endpoint |
 | `connection` | `string` | - | Default SAP connection alias |
 | `timeout` | `number` | `30000` | Request timeout (ms) |
 | `retries` | `number` | `0` | Retry failed requests |
@@ -55,7 +55,7 @@ Your App  →  S4Kit SDK  →  S4Kit Platform  →  Your SAP System
 ```
 
 **Getting started:**
-1. Create an account at [staging.app.s4kit.com](https://staging.app.s4kit.com)
+1. Create an account at [app.s4kit.com](https://app.s4kit.com)
 2. Connect your SAP system (S/4HANA, BTP, or CAP service)
 3. Generate an API key
 4. Use the API key in your SDK configuration
@@ -95,7 +95,7 @@ npx s4kit generate-types --api-key sk_live_... --output ./types
 npx s4kit generate-types \
   --api-key sk_live_...                                    # Required
   --output ./types                                         # Output directory (default: ./s4kit-types)
-  --base-url https://staging.proxy.s4kit.com/api/proxy    # Custom proxy URL
+  --base-url https://api.s4kit.com/api/proxy    # Custom proxy URL
   --connection my-sap-system                               # Specific connection only
 ```
 
