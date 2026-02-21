@@ -55,23 +55,33 @@ const app = new Hono()
 // Apply security headers to all responses
 app.use('*', securityHeaders)
 
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001'
+const frontendUrlRaw = process.env.FRONTEND_URL || 'http://localhost:3001'
 
-// Validate CORS origin in production
+// Support comma-separated origins (e.g., "https://www.s4kit.com,https://s4kit.com")
+const allowedOrigins = frontendUrlRaw.split(',').map(u => u.trim()).filter(Boolean)
+
+// Validate CORS origins in production
 if (process.env.NODE_ENV === 'production') {
-  try {
-    const url = new URL(frontendUrl);
-    if (url.protocol !== 'https:') {
-      console.warn(`[Security] FRONTEND_URL should use HTTPS in production: ${frontendUrl}`);
+  for (const origin of allowedOrigins) {
+    try {
+      const url = new URL(origin);
+      if (url.protocol !== 'https:') {
+        console.warn(`[Security] FRONTEND_URL origin should use HTTPS in production: ${origin}`);
+      }
+    } catch {
+      throw new Error(`Invalid FRONTEND_URL origin: ${origin}`);
     }
-  } catch {
-    throw new Error(`Invalid FRONTEND_URL: ${frontendUrl}`);
   }
+}
+
+// Origin checker for CORS middleware
+function checkOrigin(origin: string): string | undefined {
+  return allowedOrigins.includes(origin) ? origin : undefined
 }
 
 // CORS for auth routes (requires credentials)
 app.use('/api/auth/*', cors({
-  origin: frontendUrl,
+  origin: checkOrigin,
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -79,7 +89,7 @@ app.use('/api/auth/*', cors({
 
 // CORS for admin routes (requires credentials for session auth)
 app.use('/admin/*', cors({
-  origin: frontendUrl,
+  origin: checkOrigin,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Organization-Id'],
   credentials: true,
@@ -108,7 +118,7 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => {
 
 // CORS for public platform info (no credentials needed)
 app.use('/api/platform-info', cors({
-  origin: frontendUrl,
+  origin: checkOrigin,
   allowMethods: ['GET', 'OPTIONS'],
   allowHeaders: ['Content-Type'],
   credentials: false,
@@ -119,7 +129,7 @@ app.route('/api/platform-info', platformInfoRoute)
 
 // CORS for resend verification (public, no credentials)
 app.use('/api/resend-verification', cors({
-  origin: frontendUrl,
+  origin: checkOrigin,
   allowMethods: ['POST', 'OPTIONS'],
   allowHeaders: ['Content-Type'],
   credentials: false,
@@ -130,7 +140,7 @@ app.route('/api/resend-verification', resendVerificationRoute)
 
 // CORS for invitations (public GET, auth required for POST)
 app.use('/api/invitations/*', cors({
-  origin: frontendUrl,
+  origin: checkOrigin,
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type'],
   credentials: true,
