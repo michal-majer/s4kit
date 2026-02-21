@@ -1,10 +1,44 @@
 import Image from 'next/image';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-export default function AuthLayout({
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+async function getSession() {
+  try {
+    const cookieStore = await cookies();
+    const cookieHeader = cookieStore.getAll()
+      .map(c => `${c.name}=${c.value}`)
+      .join('; ');
+
+    const res = await fetch(`${API_URL}/api/auth/get-session`, {
+      headers: {
+        Cookie: cookieHeader,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await getSession();
+
+  if (session?.user) {
+    redirect('/');
+  }
   return (
     <div className="min-h-screen flex">
       {/* Left side - Brand panel */}
