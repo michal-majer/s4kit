@@ -6,7 +6,7 @@ watchPatterns = ["packages/platform/backend/**", "packages/shared/**"]
 [deploy]
 startCommand = "bun run src/db/migrate.ts && bun run src/index.ts"
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 numReplicas = 1
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
