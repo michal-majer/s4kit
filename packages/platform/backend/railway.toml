@@ -4,9 +4,7 @@ dockerfilePath = "packages/platform/backend/Dockerfile"
 watchPatterns = ["packages/platform/backend/**", "packages/shared/**"]
 
 [deploy]
-startCommand = "echo '[Debug] pwd:' && pwd && echo '[Debug] PORT:' $PORT && bun run src/db/migrate.ts && echo '[Debug] Migration done, starting server...' && bun run src/index.ts"
-healthcheckPath = "/health"
-healthcheckTimeout = 120
+startCommand = "bun run src/db/migrate.ts && bun run src/index.ts"
 numReplicas = 1
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
