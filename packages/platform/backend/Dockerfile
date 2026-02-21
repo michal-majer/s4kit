@@ -24,9 +24,6 @@ FROM oven/bun:1.3-slim
 
 WORKDIR /app
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 # Copy built application
 COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/packages/platform/backend ./packages/platform/backend
@@ -42,10 +39,6 @@ ENV PORT=8080
 
 # Expose port (CF uses 8080)
 EXPOSE 8080
-
-# Health check using PORT variable for CF compatibility
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Start the application
 CMD ["bun", "run", "src/index.ts"]
