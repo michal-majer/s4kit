@@ -1,5 +1,3 @@
-console.log('[Boot] Starting server module...')
-
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { sql } from 'drizzle-orm'
@@ -195,7 +193,6 @@ async function warmupConnections() {
 warmupConnections()
 
 const port = Number(process.env.PORT) || 3000
-console.log(`[Boot] Starting server on port ${port}`)
 
 export default {
   fetch: app.fetch,

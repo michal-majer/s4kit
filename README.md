@@ -16,7 +16,7 @@ Type-safe access to S/4HANA and CAP services. Zero boilerplate.
 
 **Works with:** Next.js · Express · Hono · Fastify · NestJS · Remix · any Node.js framework
 
-[Get Started](#quick-start) &nbsp;&bull;&nbsp; [Docs](https://docs.s4kit.com) &nbsp;&bull;&nbsp; [Try S4Kit](https://staging.app.s4kit.com)
+[Get Started](#quick-start) &nbsp;&bull;&nbsp; [Docs](https://docs.s4kit.com) &nbsp;&bull;&nbsp; [Try S4Kit](https://app.s4kit.com)
 
 </div>
 
@@ -37,7 +37,7 @@ Type-safe access to S/4HANA and CAP services. Zero boilerplate.
 
 ## Quick Start
 
-> **Get your API key:** Create a free account at [staging.app.s4kit.com](https://staging.app.s4kit.com)
+> **Get your API key:** Create a free account at [app.s4kit.com](https://app.s4kit.com)
 
 ```bash
 npm install s4kit
@@ -188,11 +188,11 @@ Your Application
 
 ### Get started in minutes
 
-1. Create a free account on [**staging.app.s4kit.com**](https://staging.app.s4kit.com)
+1. Create a free account on [**app.s4kit.com**](https://app.s4kit.com)
 2. Connect your SAP system (S/4HANA, BTP, or CAP service)
 3. Generate an API key and start building
 
-[**Create Free Account**](https://staging.app.s4kit.com) &nbsp; &nbsp; [Documentation](https://docs.s4kit.com)
+[**Create Free Account**](https://app.s4kit.com) &nbsp; &nbsp; [Documentation](https://docs.s4kit.com)
 
 </div>
 

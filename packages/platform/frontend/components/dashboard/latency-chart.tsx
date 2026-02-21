@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import {
   AreaChart,
   Area,
@@ -106,13 +106,9 @@ function CustomLegend({ payload }: CustomLegendProps) {
 }
 
 export function LatencyChart({ data, className }: LatencyChartProps) {
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const chartData = useMemo(() => {
     return data.map((d) => ({

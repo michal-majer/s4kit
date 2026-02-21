@@ -11,8 +11,8 @@ DEPLOY_DIR="$SCRIPT_DIR/.cf-deploy"
 
 # Configuration
 APP_NAME="s4kit-frontend"
-API_URL="${NEXT_PUBLIC_API_URL:-https://s4kit-backend.cfapps.us10-001.hana.ondemand.com}"
-ROUTE="s4kit-frontend.cfapps.us10-001.hana.ondemand.com"
+API_URL="${NEXT_PUBLIC_API_URL:-https://api.s4kit.com}"
+ROUTE="app.s4kit.com"
 
 echo "==> Setting up isolated build environment"
 BUILD_TMP="/tmp/s4kit-frontend-build-$$"

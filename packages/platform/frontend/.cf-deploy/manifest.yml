@@ -18,4 +18,4 @@ applications:
       HOSTNAME: 0.0.0.0
 
     routes:
-      - route: s4kit-frontend.cfapps.us10-001.hana.ondemand.com
+      - route: app.s4kit.com
