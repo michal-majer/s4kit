@@ -1,6 +1,6 @@
 {
   "name": "s4kit",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "The lightweight, type-safe SDK for SAP S/4HANA",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
