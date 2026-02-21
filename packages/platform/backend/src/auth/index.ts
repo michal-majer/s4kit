@@ -13,7 +13,7 @@ const frontendUrlRaw = process.env.FRONTEND_URL || 'http://localhost:3001';
 // Support comma-separated origins (e.g., "https://www.s4kit.com,https://s4kit.com")
 const allowedOrigins = frontendUrlRaw.split(',').map(u => u.trim()).filter(Boolean);
 // Primary frontend URL used for callback URLs
-const frontendUrl = allowedOrigins[0];
+const frontendUrl = allowedOrigins[0]!;
 
 // Auto-detect backend URL from CF, Railway, or explicit config
 const getBackendUrl = () => {

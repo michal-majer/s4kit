@@ -12,7 +12,7 @@ const resendSchema = z.object({
 });
 
 // Primary frontend URL (first value from comma-separated FRONTEND_URL)
-const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3001').split(',')[0].trim();
+const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3001').split(',')[0]!.trim();
 
 // POST /api/resend-verification
 app.post('/', async (c) => {
